@@ -1,0 +1,486 @@
+{
+  "entities": {
+    "UserAccount": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserAccount",
+      "type": "object",
+      "description": "Represents a user's account, which can be either personal or business.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the UserAccount entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User entity. (Relationship: User 1:N UserAccount)"
+        },
+        "accountType": {
+          "type": "string",
+          "description": "Type of account (e.g., 'personal', 'business')."
+        },
+        "accountName": {
+          "type": "string",
+          "description": "Name of the account (personal name or business name)."
+        },
+        "createdDate": {
+          "type": "string",
+          "description": "Date and time when the account was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "accountType",
+        "accountName",
+        "createdDate"
+      ]
+    },
+    "Invoice": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Invoice",
+      "type": "object",
+      "description": "Represents an invoice created by a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Invoice entity."
+        },
+        "userAccountId": {
+          "type": "string",
+          "description": "Reference to the UserAccount that created the invoice. (Relationship: UserAccount 1:N Invoice)"
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Reference to the Client the invoice was sent to. (Relationship: Client 1:N Invoice)"
+        },
+        "invoiceNumber": {
+          "type": "string",
+          "description": "Unique invoice number."
+        },
+        "issueDate": {
+          "type": "string",
+          "description": "Date when the invoice was issued.",
+          "format": "date-time"
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "Date when the invoice is due.",
+          "format": "date-time"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Total amount of the invoice."
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the invoice (e.g., 'draft', 'sent', 'paid', 'unpaid')."
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency of the invoice (e.g., 'USD')."
+        }
+      },
+      "required": [
+        "id",
+        "userAccountId",
+        "clientId",
+        "invoiceNumber",
+        "issueDate",
+        "dueDate",
+        "amount",
+        "status",
+        "currency"
+      ]
+    },
+    "PaymentLink": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PaymentLink",
+      "type": "object",
+      "description": "Represents a payment link created by a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the PaymentLink entity."
+        },
+        "userAccountId": {
+          "type": "string",
+          "description": "Reference to the UserAccount that created the payment link. (Relationship: UserAccount 1:N PaymentLink)"
+        },
+        "link": {
+          "type": "string",
+          "description": "The generated payment link URL.",
+          "format": "uri"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Amount to be paid through the link."
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency of the payment link (e.g., 'USD')."
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the payment link (e.g., 'active', 'inactive', 'paid')."
+        },
+        "createdDate": {
+          "type": "string",
+          "description": "Date and time when the payment link was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userAccountId",
+        "link",
+        "amount",
+        "currency",
+        "status",
+        "createdDate"
+      ]
+    },
+    "Transaction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Transaction",
+      "type": "object",
+      "description": "Represents a transaction made by a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Transaction entity."
+        },
+        "userAccountId": {
+          "type": "string",
+          "description": "Reference to the UserAccount involved in the transaction. (Relationship: UserAccount 1:N Transaction)"
+        },
+        "transactionDate": {
+          "type": "string",
+          "description": "Date and time of the transaction.",
+          "format": "date-time"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Amount of the transaction."
+        },
+        "type": {
+          "type": "string",
+          "description": "Type of transaction (e.g., 'debit', 'credit')."
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the transaction (e.g., 'pending', 'completed', 'failed')."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the transaction."
+        },
+        "invoiceId": {
+          "type": "string",
+          "description": "Reference to the Invoice associated with the transaction (if applicable). (Relationship: Invoice 1:N Transaction)"
+        },
+        "paymentLinkId": {
+          "type": "string",
+          "description": "Reference to the PaymentLink associated with the transaction (if applicable). (Relationship: PaymentLink 1:N Transaction)"
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency of the transaction (e.g., 'USD')."
+        }
+      },
+      "required": [
+        "id",
+        "userAccountId",
+        "transactionDate",
+        "amount",
+        "type",
+        "status",
+        "description",
+        "currency"
+      ]
+    },
+    "Client": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Client",
+      "type": "object",
+      "description": "Represents a client associated with a user's account.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Client entity."
+        },
+        "userAccountId": {
+          "type": "string",
+          "description": "Reference to the UserAccount that the client is associated with. (Relationship: UserAccount 1:N Client)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the client."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the client.",
+          "format": "email"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Phone number of the client."
+        },
+        "address": {
+          "type": "string",
+          "description": "Address of the client."
+        }
+      },
+      "required": [
+        "id",
+        "userAccountId",
+        "name",
+        "email"
+      ]
+    },
+    "Wallet": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Wallet",
+      "type": "object",
+      "description": "Represents a wallet associated with a user account, storing balance information.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Wallet entity."
+        },
+        "userAccountId": {
+          "type": "string",
+          "description": "Reference to the UserAccount that owns the wallet. (Relationship: UserAccount 1:1 Wallet)"
+        },
+        "balanceTotal": {
+          "type": "number",
+          "description": "Total balance ever received for the account."
+        },
+        "balanceAvailable": {
+          "type": "number",
+          "description": "Available balance that can be withdrawn."
+        },
+        "balancePending": {
+          "type": "number",
+          "description": "Pending balance that is not yet available for withdrawal."
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency of the wallet (e.g., 'USD')."
+        }
+      },
+      "required": [
+        "id",
+        "userAccountId",
+        "balanceTotal",
+        "balanceAvailable",
+        "balancePending",
+        "currency"
+      ]
+    },
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the TabEdge platform.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "First name of the user."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Last name of the user."
+        },
+        "signUpDate": {
+          "type": "string",
+          "description": "Date and time when the user signed up.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "firstName",
+        "lastName",
+        "signUpDate"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles. Contains basic information like email, name, and sign-up date.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/accounts/{userAccountId}",
+        "definition": {
+          "entityName": "UserAccount",
+          "schema": {
+            "$ref": "#/backend/entities/UserAccount"
+          },
+          "description": "Stores user accounts (personal or business).",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "userAccountId",
+              "description": "The unique identifier for the user's account."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/accounts/{userAccountId}/wallet/{walletId}",
+        "definition": {
+          "entityName": "Wallet",
+          "schema": {
+            "$ref": "#/backend/entities/Wallet"
+          },
+          "description": "Stores wallet information associated with a user account.  This includes balances and currency.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "userAccountId",
+              "description": "The unique identifier for the user's account."
+            },
+            {
+              "name": "walletId",
+              "description": "The unique identifier for the user's wallet."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/accounts/{userAccountId}/invoices/{invoiceId}",
+        "definition": {
+          "entityName": "Invoice",
+          "schema": {
+            "$ref": "#/backend/entities/Invoice"
+          },
+          "description": "Stores invoices created by the user for a specific account.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "userAccountId",
+              "description": "The unique identifier for the user's account."
+            },
+            {
+              "name": "invoiceId",
+              "description": "The unique identifier for the invoice."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/accounts/{userAccountId}/paymentLinks/{paymentLinkId}",
+        "definition": {
+          "entityName": "PaymentLink",
+          "schema": {
+            "$ref": "#/backend/entities/PaymentLink"
+          },
+          "description": "Stores payment links created by the user for a specific account.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "userAccountId",
+              "description": "The unique identifier for the user's account."
+            },
+            {
+              "name": "paymentLinkId",
+              "description": "The unique identifier for the payment link."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/accounts/{userAccountId}/transactions/{transactionId}",
+        "definition": {
+          "entityName": "Transaction",
+          "schema": {
+            "$ref": "#/backend/entities/Transaction"
+          },
+          "description": "Stores transaction history for a specific user account.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "userAccountId",
+              "description": "The unique identifier for the user's account."
+            },
+            {
+              "name": "transactionId",
+              "description": "The unique identifier for the transaction."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/accounts/{userAccountId}/clients/{clientId}",
+        "definition": {
+          "entityName": "Client",
+          "schema": {
+            "$ref": "#/backend/entities/Client"
+          },
+          "description": "Stores clients associated with a user's account.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "userAccountId",
+              "description": "The unique identifier for the user's account."
+            },
+            {
+              "name": "clientId",
+              "description": "The unique identifier for the client."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to provide a secure and scalable solution for TabEdge Pay, focusing on authorization independence and clear data ownership. The structure uses path-based ownership for user-specific data and denormalization to avoid complex security rules that rely on `get()` calls. This approach ensures atomic operations and easier debugging.\n\n**Authorization Independence:** The core strategy is to embed authorization data directly within the documents where it's needed, avoiding hierarchical lookups. For example, data related to a user account (invoices, payment links, transactions) is stored under the `/users/{userId}/accounts/{accountId}` path. This ensures that access control can be determined directly from the document being accessed without needing to query parent documents.\n\n**QAPs (Rules Are Not Filters):** To support secure list operations, the structure avoids mixing data with different access requirements in the same collection. Private user account data is stored under the user's document, while potentially public data (if any) would be stored separately with appropriate security rules.  The membership map model is not required here, as the user ID in the path establishes ownership.\n\n**Structure Highlights:**\n*   **Users:** The base collection for user profiles.\n*   **UserAccounts:** Each user can have multiple accounts (personal/business), stored as subcollections under the user.\n*   **Wallet:** The wallet is a subcollection of accounts, ensuring that only the user can access it.\n*   **Invoices, PaymentLinks, Transactions, Clients:** These are all stored as subcollections under the specific user account, clearly associating them with the account.\n\nThis structure allows for straightforward security rules based on `request.auth.uid` and the document path, eliminating the need for complex `get()` calls and ensuring a robust and debuggable authorization system."
+  }
+}

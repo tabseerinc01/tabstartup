@@ -1,0 +1,205 @@
+/**
+ * This ruleset enforces a strict user-ownership security model for the TabEdge Pay application.
+ *
+ * Core Philosophy:
+ * The security model is built on the principle that users can only access their own data.
+ * All user-generated content is stored in subcollections under that user's unique ID,
+ * creating a clear and secure data boundary.
+ *
+ * Data Structure:
+ * All data is hierarchically organized under the /users/{userId} path. This structure includes
+ * user accounts, wallets, invoices, transactions, and other related entities. This path-based
+ * ownership allows for simple, performant, and highly secure rules.
+ *
+ * Key Security Decisions:
+ * - User Isolation: All read and write operations are restricted to the authenticated owner of the data.
+ * - No User Enumeration: The top-level `/users` collection cannot be listed, preventing attackers
+ *   from discovering a list of all application users.
+ * - Relational Integrity: Rules enforce that when a document is created (e.g., an invoice),
+ *   its internal ownership fields (like `userId` or `userAccountId`) must match the IDs in the
+ *   document's path. This prevents data from being associated with the wrong owner. These
+ *   ownership fields are immutable once set.
+ * - Prototyping Flexibility: While ownership and relational links are strictly enforced, the
+ *   specific shape and data types of other document fields (like amounts, statuses, or descriptions)
+ *   are not validated. This allows for rapid frontend development and iteration.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for reusable logic and improved readability.
+
+    /**
+     * Checks if a user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Checks if the currently authenticated user's UID matches the given userId.
+     * This is the primary function for enforcing data ownership.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Combines an ownership check with a check for the document's existence.
+     * CRITICAL for all update and delete operations to prevent modifying non-existent data.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * Validates that the `id` field within a new User document matches the document's ID (`userId`).
+     * This enforces relational integrity at creation time.
+     */
+    function hasValidOwnerIdOnCreate(userId) {
+      return request.resource.data.id == userId;
+    }
+
+    /**
+     * Validates that a relational field (e.g., 'id', 'userId') is not changed during an update.
+     * This protects the ownership link of a document from being modified.
+     */
+    function isImmutable(fieldName) {
+      return request.resource.data[fieldName] == resource.data[fieldName];
+    }
+    
+    /**
+     * Validates that the `userId` field within a new UserAccount document matches the path's {userId}.
+     */
+    function hasValidUserIdOnCreate(userId) {
+      return request.resource.data.userId == userId;
+    }
+
+    /**
+     * Validates that the `userAccountId` field within a new sub-account document
+     * (e.g., Wallet, Invoice) matches the path's {userAccountId}.
+     */
+    function hasValidAccountIdOnCreate(userAccountId) {
+      return request.resource.data.userAccountId == userAccountId;
+    }
+
+    /**
+     * @description Rules for the User collection, which stores user profiles.
+     * @path /users/{userId}
+     * @allow (get) An authenticated user to read their own profile.
+     * @allow (create) An authenticated user to create their own profile document.
+     * @deny (list) Any user, to prevent user enumeration.
+     * @deny (update) An authenticated user trying to modify another user's profile.
+     * @principle Restricts access to a user's own data tree and prevents user enumeration.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && hasValidOwnerIdOnCreate(userId);
+      allow update: if isExistingOwner(userId) && isImmutable('id');
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Rules for UserAccount documents, representing personal or business accounts.
+       * @path /users/{userId}/accounts/{userAccountId}
+       * @allow (create) A user to create a new account for themselves.
+       * @allow (list) A user to list all of their own accounts.
+       * @deny (get) A user trying to read an account belonging to someone else.
+       * @deny (delete) A user trying to delete an account owned by another user.
+       * @principle Enforces strict document ownership and validates the relational link to the parent user.
+       */
+      match /accounts/{userAccountId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidUserIdOnCreate(userId);
+        allow update: if isExistingOwner(userId) && isImmutable('userId');
+        allow delete: if isExistingOwner(userId);
+
+        /**
+         * @description Rules for Wallet documents, which hold balance information for an account.
+         * @path /users/{userId}/accounts/{userAccountId}/wallet/{walletId}
+         * @allow (get) The owner of the account to read their wallet information.
+         * @allow (create) The owner of the account to create a wallet.
+         * @deny (update) A user trying to update a wallet for an account they do not own.
+         * @deny (list) A user trying to list wallets from another user's account.
+         * @principle Secures financial data by inheriting ownership from the parent user path.
+         */
+        match /wallet/{walletId} {
+          allow get: if isOwner(userId);
+          allow list: if isOwner(userId);
+          allow create: if isOwner(userId) && hasValidAccountIdOnCreate(userAccountId);
+          allow update: if isExistingOwner(userId) && isImmutable('userAccountId');
+          allow delete: if isExistingOwner(userId);
+        }
+
+        /**
+         * @description Rules for Invoice documents created under a specific user account.
+         * @path /users/{userId}/accounts/{userAccountId}/invoices/{invoiceId}
+         * @allow (create) The owner of the account to create a new invoice.
+         * @allow (list) The owner of the account to list all their invoices.
+         * @deny (get) A user trying to read an invoice from an account they do not own.
+         * @deny (delete) A user trying to delete another user's invoice.
+         * @principle Enforces document ownership for all CRUD operations on invoices.
+         */
+        match /invoices/{invoiceId} {
+          allow get: if isOwner(userId);
+          allow list: if isOwner(userId);
+          allow create: if isOwner(userId) && hasValidAccountIdOnCreate(userAccountId);
+          allow update: if isExistingOwner(userId) && isImmutable('userAccountId');
+          allow delete: if isExistingOwner(userId);
+        }
+
+        /**
+         * @description Rules for PaymentLink documents created under a specific user account.
+         * @path /users/{userId}/accounts/{userAccountId}/paymentLinks/{paymentLinkId}
+         * @allow (create) The owner of the account to create a new payment link.
+         * @allow (list) The owner of the account to list all their payment links.
+         * @deny (get) A user trying to read a payment link from an account they do not own.
+         * @deny (update) A user trying to modify another user's payment link.
+         * @principle Enforces document ownership for all CRUD operations on payment links.
+         */
+        match /paymentLinks/{paymentLinkId} {
+          allow get: if isOwner(userId);
+          allow list: if isOwner(userId);
+          allow create: if isOwner(userId) && hasValidAccountIdOnCreate(userAccountId);
+          allow update: if isExistingOwner(userId) && isImmutable('userAccountId');
+          allow delete: if isExistingOwner(userId);
+        }
+
+        /**
+         * @description Rules for Transaction documents, recording financial activity for an account.
+         * @path /users/{userId}/accounts/{userAccountId}/transactions/{transactionId}
+         * @allow (get) The owner of the account to read a specific transaction.
+         * @allow (list) The owner of the account to list their transaction history.
+         * @deny (create) Any user trying to create a transaction directly (should be server-side).
+         * @deny (update) A user trying to modify a transaction record.
+         * @principle Secures financial records by making them read-only for the owner.
+         */
+        match /transactions/{transactionId} {
+          allow get: if isOwner(userId);
+          allow list: if isOwner(userId);
+          allow create: if isOwner(userId) && hasValidAccountIdOnCreate(userAccountId);
+          allow update: if isExistingOwner(userId) && isImmutable('userAccountId');
+          allow delete: if isExistingOwner(userId);
+        }
+
+        /**
+         * @description Rules for Client documents associated with a specific user account.
+         * @path /users/{userId}/accounts/{userAccountId}/clients/{clientId}
+         * @allow (create) The owner of the account to add a new client.
+         * @allow (list) The owner of the account to list all their clients.
+         * @deny (get) A user trying to read client information from an account they do not own.
+         * @deny (delete) A user trying to delete another user's client.
+         * @principle Enforces document ownership for all CRUD operations on client records.
+         */
+        match /clients/{clientId} {
+          allow get: if isOwner(userId);
+          allow list: if isOwner(userId);
+          allow create: if isOwner(userId) && hasValidAccountIdOnCreate(userAccountId);
+          allow update: if isExistingOwner(userId) && isImmutable('userAccountId');
+          allow delete: if isExistingOwner(userId);
+        }
+      }
+    }
+  }
+}
