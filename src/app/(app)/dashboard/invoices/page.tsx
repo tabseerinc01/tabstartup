@@ -26,13 +26,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -64,15 +57,11 @@ import {
 } from '@/components/ui/select';
 import type { Invoice, UserAccount } from '@/lib/types';
 import { format } from 'date-fns';
-import { CreateInvoiceForm } from '@/components/dashboard/create-invoice-form';
-import { useToast } from '@/hooks/use-toast';
 
 export default function InvoicesPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [isCreateModalOpen, setCreateModalOpen] = useState(false);
-  const { toast } = useToast();
 
   const accountsQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -115,14 +104,6 @@ export default function InvoicesPage() {
     }
   };
   
-  const handleInvoiceCreated = () => {
-    setCreateModalOpen(false);
-    toast({
-      title: 'Invoice created',
-      description: 'Your new invoice has been created successfully.',
-    });
-  };
-
   const renderContent = () => {
     if (isUserLoading || isLoadingAccounts) {
       return (
@@ -281,28 +262,12 @@ export default function InvoicesPage() {
               Export
             </span>
           </Button>
-          <Dialog open={isCreateModalOpen} onOpenChange={setCreateModalOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="h-8 gap-1" disabled={!selectedAccountId}>
-                <PlusCircle className="h-3.5 w-3.5" />
-                <span className="sr-only sm:not-sr-only sm:whitespace-rap">
-                  Create Invoice
-                </span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-4xl">
-              <DialogHeader>
-                <DialogTitle>Create New Invoice</DialogTitle>
-              </DialogHeader>
-              {user && selectedAccountId && (
-                <CreateInvoiceForm
-                  user={user}
-                  accountId={selectedAccountId}
-                  onSuccess={handleInvoiceCreated}
-                />
-              )}
-            </DialogContent>
-          </Dialog>
+          <Button size="sm" className="h-8 gap-1" disabled={!selectedAccountId}>
+            <PlusCircle className="h-3.5 w-3.5" />
+            <span className="sr-only sm:not-sr-only sm:whitespace-rap">
+              Create Invoice
+            </span>
+          </Button>
         </div>
       </div>
       <TabsContent value="all">
