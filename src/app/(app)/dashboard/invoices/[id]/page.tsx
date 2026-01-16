@@ -55,7 +55,7 @@ export default function InvoiceDetailsPage() {
   }
 
   if (!invoice) {
-    if (!isLoadingInvoice) notFound();
+    notFound();
     return null;
   }
   
