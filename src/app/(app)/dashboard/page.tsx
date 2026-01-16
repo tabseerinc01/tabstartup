@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,8 +8,19 @@ import {
   useFirestore,
   useCollection,
   useMemoFirebase,
+  errorEmitter,
+  FirestorePermissionError,
 } from "@/firebase";
-import { collection, query, orderBy, limit } from "firebase/firestore";
+import {
+  collection,
+  query,
+  orderBy,
+  limit,
+  doc,
+  updateDoc,
+  increment,
+  setDoc,
+} from "firebase/firestore";
 import {
   Card,
   CardContent,
@@ -53,11 +65,15 @@ import type {
   Transaction,
 } from "@/lib/types";
 import { format } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
+    null
+  );
+  const { toast } = useToast();
 
   const accountsQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -121,7 +137,76 @@ export default function DashboardPage() {
     new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency,
-    }).format(amount);
+    }).format(amount / 100);
+
+  const handleAddTestMoney = () => {
+    if (!user || !selectedAccountId || !wallet || !firestore) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Please select an account first.",
+      });
+      return;
+    }
+
+    const walletRef = doc(
+      firestore,
+      `users/${user.uid}/accounts/${selectedAccountId}/wallet/${wallet.id}`
+    );
+    updateDoc(walletRef, {
+      balanceTotal: increment(1000),
+      balanceAvailable: increment(1000),
+    }).catch((error) => {
+      const permissionError = new FirestorePermissionError({
+        path: walletRef.path,
+        operation: "update",
+        requestResourceData: {
+          balanceTotal: "increment(1000)",
+          balanceAvailable: "increment(1000)",
+        },
+      });
+      errorEmitter.emit("permission-error", permissionError);
+      toast({
+        variant: "destructive",
+        title: "Uh oh! Something went wrong.",
+        description: "Could not update wallet.",
+      });
+    });
+
+    const txCollectionRef = collection(
+      firestore,
+      `users/${user.uid}/accounts/${selectedAccountId}/transactions`
+    );
+    const newTxRef = doc(txCollectionRef);
+    const txData = {
+      id: newTxRef.id,
+      userAccountId: selectedAccountId,
+      transactionDate: new Date().toISOString(),
+      amount: 1000,
+      type: "credit" as const,
+      status: "completed" as const,
+      description: "Test Credit",
+      currency: wallet.currency,
+    };
+    setDoc(newTxRef, txData).catch((error) => {
+      const permissionError = new FirestorePermissionError({
+        path: newTxRef.path,
+        operation: "create",
+        requestResourceData: txData,
+      });
+      errorEmitter.emit("permission-error", permissionError);
+      toast({
+        variant: "destructive",
+        title: "Uh oh! Something went wrong.",
+        description: "Could not create transaction.",
+      });
+    });
+
+    toast({
+      title: "Success",
+      description: "Added $10 test money.",
+    });
+  };
 
   if (isUserLoading || isLoadingAccounts) {
     return (
@@ -148,23 +233,30 @@ export default function DashboardPage() {
     <>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Overview</h1>
-        {selectedAccountId && (
-          <Select
-            value={selectedAccountId}
-            onValueChange={setSelectedAccountId}
-          >
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select an account" />
-            </SelectTrigger>
-            <SelectContent>
-              {accountsData.map((account) => (
-                <SelectItem key={account.id} value={account.id}>
-                  {account.accountName} ({account.accountType})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        <div className="flex items-center gap-2">
+          {selectedAccountId && (
+            <Select
+              value={selectedAccountId}
+              onValueChange={setSelectedAccountId}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Select an account" />
+              </SelectTrigger>
+              <SelectContent>
+                {accountsData.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    {account.accountName} ({account.accountType})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {process.env.NODE_ENV !== "production" && (
+            <Button onClick={handleAddTestMoney} size="sm">
+              Add Test $10
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -174,20 +266,20 @@ export default function DashboardPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {isLoadingWallet ? <Loader2 className="h-6 w-6 animate-spin"/> :
-              wallet ? (
-                <>
-                  <div className="text-2xl font-bold">
-                    {formatCurrency(wallet.balanceTotal, wallet.currency)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Total money ever received
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">No wallet data.</p>
-              )
-            }
+            {isLoadingWallet ? (
+              <Loader2 className="h-6 w-6 animate-spin" />
+            ) : wallet ? (
+              <>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(wallet.balanceTotal, wallet.currency)}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Total money ever received
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No wallet data.</p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -198,20 +290,20 @@ export default function DashboardPage() {
             <Landmark className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {isLoadingWallet ? <Loader2 className="h-6 w-6 animate-spin"/> :
-              wallet ? (
-                <>
-                  <div className="text-2xl font-bold">
-                    {formatCurrency(wallet.balanceAvailable, wallet.currency)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Ready for withdrawal
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">No wallet data.</p>
-              )
-            }
+            {isLoadingWallet ? (
+              <Loader2 className="h-6 w-6 animate-spin" />
+            ) : wallet ? (
+              <>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(wallet.balanceAvailable, wallet.currency)}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Ready for withdrawal
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No wallet data.</p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -222,46 +314,58 @@ export default function DashboardPage() {
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-           {isLoadingWallet ? <Loader2 className="h-6 w-6 animate-spin"/> :
-              wallet ? (
-                <>
-                  <div className="text-2xl font-bold">
-                    {formatCurrency(wallet.balancePending, wallet.currency)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Processing / on hold
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">No wallet data.</p>
-              )
-            }
+            {isLoadingWallet ? (
+              <Loader2 className="h-6 w-6 animate-spin" />
+            ) : wallet ? (
+              <>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(wallet.balancePending, wallet.currency)}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Processing / on hold
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No wallet data.</p>
+            )}
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <div className="grid gap-4 lg:col-span-2">
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Total Invoices</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {isLoadingInvoices ? <Loader2 className="h-6 w-6 animate-spin" /> :
-                        <div className="text-2xl font-bold">{invoicesData?.length ?? 0}</div>
-                    }
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Payment Links</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {isLoadingPaymentLinks ? <Loader2 className="h-6 w-6 animate-spin" /> :
-                        <div className="text-2xl font-bold">{paymentLinksData?.length ?? 0}</div>
-                    }
-                </CardContent>
-            </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">
+                Total Invoices
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoadingInvoices ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                <div className="text-2xl font-bold">
+                  {invoicesData?.length ?? 0}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">
+                Payment Links
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoadingPaymentLinks ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                <div className="text-2xl font-bold">
+                  {paymentLinksData?.length ?? 0}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <Card className="lg:col-span-5">
@@ -281,9 +385,9 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             {isLoadingTransactions ? (
-                <div className="flex items-center justify-center p-8">
-                    <Loader2 className="h-8 w-8 animate-spin" />
-                </div>
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
             ) : transactionsData && transactionsData.length > 0 ? (
               <Table>
                 <TableHeader>
@@ -302,7 +406,7 @@ export default function DashboardPage() {
                           {transaction.description}
                         </div>
                       </TableCell>
-                       <TableCell>
+                      <TableCell>
                         {format(new Date(transaction.transactionDate), "PPP")}
                       </TableCell>
                       <TableCell>
@@ -335,9 +439,9 @@ export default function DashboardPage() {
                 </TableBody>
               </Table>
             ) : (
-                <div className="text-center p-8 text-muted-foreground">
-                    <p>No transactions found for this account.</p>
-                </div>
+              <div className="text-center p-8 text-muted-foreground">
+                <p>No transactions found for this account.</p>
+              </div>
             )}
           </CardContent>
         </Card>

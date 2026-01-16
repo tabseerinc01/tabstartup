@@ -87,7 +87,7 @@ export default function InvoicesPage() {
     new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
-    }).format(amount);
+    }).format(amount / 100);
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
