@@ -28,7 +28,7 @@ import { Loader2, Share2, Download, Send } from 'lucide-react';
 export default function InvoiceDetailsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   
   const invoiceId = params.id as string;
