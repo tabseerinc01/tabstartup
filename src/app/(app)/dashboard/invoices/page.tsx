@@ -26,6 +26,14 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -57,11 +65,15 @@ import {
 } from '@/components/ui/select';
 import type { Invoice, UserAccount } from '@/lib/types';
 import { format } from 'date-fns';
+import { CreateInvoiceForm } from '@/components/dashboard/create-invoice-form';
+import { useToast } from '@/hooks/use-toast';
 
 export default function InvoicesPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [isCreateInvoiceOpen, setCreateInvoiceOpen] = useState(false);
+  const { toast } = useToast();
 
   const accountsQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -103,6 +115,14 @@ export default function InvoicesPage() {
         return 'outline';
     }
   };
+
+  const handleInvoiceCreated = () => {
+    setCreateInvoiceOpen(false);
+    toast({
+        title: 'Success!',
+        description: 'Your invoice has been created as a draft.'
+    })
+  }
   
   const renderContent = () => {
     if (isUserLoading || isLoadingAccounts) {
@@ -211,6 +231,7 @@ export default function InvoicesPage() {
   }
 
   return (
+    <Dialog open={isCreateInvoiceOpen} onOpenChange={setCreateInvoiceOpen}>
     <Tabs defaultValue="all">
       <div className="flex items-center">
         <TabsList>
@@ -262,12 +283,14 @@ export default function InvoicesPage() {
               Export
             </span>
           </Button>
-          <Button size="sm" className="h-8 gap-1" disabled={!selectedAccountId}>
-            <PlusCircle className="h-3.5 w-3.5" />
-            <span className="sr-only sm:not-sr-only sm:whitespace-rap">
-              Create Invoice
-            </span>
-          </Button>
+          <DialogTrigger asChild>
+            <Button size="sm" className="h-8 gap-1" disabled={!selectedAccountId || !user}>
+                <PlusCircle className="h-3.5 w-3.5" />
+                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                Create Invoice
+                </span>
+            </Button>
+          </DialogTrigger>
         </div>
       </div>
       <TabsContent value="all">
@@ -291,5 +314,17 @@ export default function InvoicesPage() {
         </Card>
       </TabsContent>
     </Tabs>
+    <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Create New Invoice</DialogTitle>
+          <DialogDescription>
+            Fill out the form below to create a new invoice. The invoice will be saved as a draft.
+          </DialogDescription>
+        </DialogHeader>
+        {user && selectedAccountId && (
+          <CreateInvoiceForm user={user} accountId={selectedAccountId} onSuccess={handleInvoiceCreated} />
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

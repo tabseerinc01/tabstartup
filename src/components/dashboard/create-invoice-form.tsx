@@ -103,17 +103,19 @@ export function CreateInvoiceForm({
       firestore,
       `users/${user.uid}/accounts/${accountId}/clients`
     );
+    const clientRef = doc(clientCollectionRef);
     const clientData = {
+      id: clientRef.id,
       userAccountId: accountId,
       name: values.clientName,
       email: values.clientEmail,
-      createdAt: serverTimestamp(),
+      createdAt: new Date().toISOString(),
     };
     
-    addDoc(clientCollectionRef, clientData)
-        .then((clientRef) => {
+    setDoc(clientRef, clientData)
+        .then(() => {
             const subtotalCents = values.lineItems.reduce(
-                (acc, item) => acc + item.quantity * item.unitPrice * 100,
+                (acc, item) => acc + item.quantity * (item.unitPrice * 100),
                 0
             );
 
@@ -351,4 +353,3 @@ export function CreateInvoiceForm({
     </Form>
   );
 }
-

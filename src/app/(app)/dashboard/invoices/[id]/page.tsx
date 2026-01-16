@@ -60,11 +60,11 @@ export default function InvoiceDetailsPage() {
     return null;
   }
   
-  const formatCurrency = (amount: number, currency: string = 'USD') =>
+  const formatCurrency = (amountInCents: number, currency: string = 'USD') =>
     new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
-    }).format(amount / 100);
+    }).format(amountInCents / 100);
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {

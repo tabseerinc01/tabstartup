@@ -23,6 +23,7 @@ export interface Client {
   email: string;
   phone?: string;
   address?: string;
+  createdAt: string;
 }
 
 export interface Invoice {
