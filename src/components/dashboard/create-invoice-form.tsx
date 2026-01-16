@@ -43,6 +43,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { Separator } from '@/components/ui/separator';
 import { CalendarIcon, Loader2, PlusCircle, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -95,6 +96,25 @@ export function CreateInvoiceForm({
     control: form.control,
     name: 'lineItems',
   });
+
+  const watchedLineItems = form.watch('lineItems');
+  const watchedCurrency = form.watch('currency');
+
+  const subtotal = watchedLineItems.reduce((acc, item) => {
+    const quantity = Number(item.quantity) || 0;
+    const unitPrice = Number(item.unitPrice) || 0;
+    return acc + quantity * unitPrice;
+  }, 0);
+
+  const total = subtotal; // Assuming no tax/discounts for now
+
+  const formatCurrency = (amount: number, currency: string) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency,
+    }).format(amount);
+  };
+
 
   const onSubmit = (values: InvoiceFormValues) => {
     setIsLoading(true);
@@ -271,58 +291,102 @@ export function CreateInvoiceForm({
         </div>
 
         <div>
-          <FormLabel>Line Items</FormLabel>
-          <div className="space-y-4 mt-2">
-            {fields.map((field, index) => (
-              <div key={field.id} className="flex gap-4 items-end">
-                <FormField
-                  control={form.control}
-                  name={`lineItems.${index}.description`}
-                  render={({ field }) => (
-                    <FormItem className="flex-grow">
-                      <FormControl>
-                        <Input placeholder="Item description" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name={`lineItems.${index}.quantity`}
-                  render={({ field }) => (
-                    <FormItem className="w-24">
-                      <FormControl>
-                        <Input type="number" placeholder="Qty" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name={`lineItems.${index}.unitPrice`}
-                  render={({ field }) => (
-                    <FormItem className="w-32">
-                      <FormControl>
-                        <Input type="number" step="0.01" placeholder="Price" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <Button type="button" variant="destructive" size="icon" onClick={() => remove(index)}>
-                  <Trash2 className="h-4 w-4" />
+            <FormLabel>Line Items</FormLabel>
+            <div className="mt-2 space-y-4">
+                <div className="hidden md:grid md:grid-cols-12 gap-4">
+                    <div className="md:col-span-5"><FormLabel>Description</FormLabel></div>
+                    <div className="md:col-span-2"><FormLabel>Quantity</FormLabel></div>
+                    <div className="md:col-span-2"><FormLabel>Unit Price</FormLabel></div>
+                    <div className="md:col-span-2 text-right"><FormLabel>Total</FormLabel></div>
+                </div>
+                {fields.map((field, index) => (
+                <div key={field.id} className="grid grid-cols-12 gap-2 items-start md:gap-4">
+                    <div className="col-span-12 md:col-span-5">
+                    <FormField
+                        control={form.control}
+                        name={`lineItems.${index}.description`}
+                        render={({ field }) => (
+                            <FormItem>
+                            {index === 0 && <FormLabel className="md:hidden">Description</FormLabel>}
+                            <FormControl>
+                                <Input placeholder="Item description" {...field} />
+                            </FormControl>
+                             <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                    </div>
+
+                    <div className="col-span-3 md:col-span-2">
+                        <FormField
+                        control={form.control}
+                        name={`lineItems.${index}.quantity`}
+                        render={({ field }) => (
+                            <FormItem>
+                            {index === 0 && <FormLabel className="md:hidden">Quantity</FormLabel>}
+                            <FormControl>
+                                <Input type="number" placeholder="Qty" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                    </div>
+                     <div className="col-span-4 md:col-span-2">
+                        <FormField
+                        control={form.control}
+                        name={`lineItems.${index}.unitPrice`}
+                        render={({ field }) => (
+                            <FormItem>
+                             {index === 0 && <FormLabel className="md:hidden">Unit Price</FormLabel>}
+                            <FormControl>
+                                <Input type="number" step="0.01" placeholder="Price" {...field} />
+                            </FormControl>
+                             <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                    </div>
+                    
+                    <div className="col-span-4 md:col-span-2 text-right">
+                        {index === 0 && <FormLabel className="md:hidden">Total</FormLabel>}
+                        <p className="font-medium mt-2.5">
+                            {formatCurrency((watchedLineItems[index]?.quantity || 0) * (watchedLineItems[index]?.unitPrice || 0), watchedCurrency)}
+                        </p>
+                    </div>
+
+                    <div className="col-span-1 flex items-center pt-2">
+                        <Button type="button" variant="destructive" size="icon" onClick={() => remove(index)}>
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+                ))}
+                <FormMessage>{form.formState.errors.lineItems?.root?.message}</FormMessage>
+                <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => append({ description: '', quantity: 1, unitPrice: 0 })}
+                >
+                <PlusCircle className="mr-2 h-4 w-4" /> Add Line Item
                 </Button>
-              </div>
-            ))}
-             <FormMessage>{form.formState.errors.lineItems?.message}</FormMessage>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => append({ description: '', quantity: 1, unitPrice: 0 })}
-            >
-              <PlusCircle className="mr-2 h-4 w-4" /> Add Line Item
-            </Button>
-          </div>
+            </div>
+        </div>
+
+        <div className="flex justify-end mt-6">
+            <div className="w-full md:w-2/5 lg:w-1/3 space-y-2">
+                <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span>{formatCurrency(subtotal, watchedCurrency)}</span>
+                </div>
+                {/* Add tax/discounts here if needed in the future */}
+                <Separator />
+                <div className="flex justify-between font-bold text-lg">
+                    <span>Total</span>
+                    <span>{formatCurrency(total, watchedCurrency)}</span>
+                </div>
+            </div>
         </div>
         
         <FormField
@@ -353,3 +417,4 @@ export function CreateInvoiceForm({
     </Form>
   );
 }
+
