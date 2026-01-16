@@ -34,7 +34,7 @@ import { Badge } from "../ui/badge";
 
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
-  { href: "/dashboard/invoices", icon: FileText, label: "Invoices", badge: "3" },
+  { href: "/dashboard/invoices", icon: FileText, label: "Invoices" },
   { href: "/dashboard/payment-links", icon: Link2, label: "Payment Links" },
   { href: "/dashboard/transactions", icon: ArrowLeftRight, label: "Transactions" },
   { href: "/dashboard/treasury", icon: Bot, label: "Treasury AI" },
