@@ -1,16 +1,28 @@
-import {
-  ArrowUpRight,
-} from "lucide-react";
+"use client";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import {
+  useUser,
+  useFirestore,
+  useCollection,
+  useMemoFirebase,
+} from "@/firebase";
+import { collection, query, orderBy, limit } from "firebase/firestore";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -19,143 +31,245 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
-  dashboardStats,
-  transactions,
-} from "@/lib/placeholder-data";
-import { OverviewChart } from "@/components/dashboard/overview-chart";
-import Link from "next/link";
-import { format } from 'date-fns';
+  ArrowUpRight,
+  DollarSign,
+  Landmark,
+  Wallet,
+  Activity,
+  FileText,
+  Link2,
+  CircleOff,
+  Loader2,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import type {
+  UserAccount,
+  Wallet as WalletType,
+  Invoice,
+  PaymentLink,
+  Transaction,
+} from "@/lib/types";
+import { format } from "date-fns";
 
 export default function DashboardPage() {
-  const formatCurrency = (amount: number) =>
+  const { user, isUserLoading } = useUser();
+  const firestore = useFirestore();
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+
+  const accountsQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return collection(firestore, `users/${user.uid}/accounts`);
+  }, [firestore, user]);
+  const { data: accountsData, isLoading: isLoadingAccounts } =
+    useCollection<UserAccount>(accountsQuery);
+
+  useEffect(() => {
+    if (accountsData && accountsData.length > 0 && !selectedAccountId) {
+      setSelectedAccountId(accountsData[0].id);
+    }
+  }, [accountsData, selectedAccountId]);
+
+  const walletQuery = useMemoFirebase(() => {
+    if (!user || !selectedAccountId) return null;
+    return collection(
+      firestore,
+      `users/${user.uid}/accounts/${selectedAccountId}/wallet`
+    );
+  }, [firestore, user, selectedAccountId]);
+  const { data: walletData, isLoading: isLoadingWallet } =
+    useCollection<WalletType>(walletQuery);
+  const wallet = walletData?.[0];
+
+  const invoicesQuery = useMemoFirebase(() => {
+    if (!user || !selectedAccountId) return null;
+    return collection(
+      firestore,
+      `users/${user.uid}/accounts/${selectedAccountId}/invoices`
+    );
+  }, [firestore, user, selectedAccountId]);
+  const { data: invoicesData, isLoading: isLoadingInvoices } =
+    useCollection<Invoice>(invoicesQuery);
+
+  const paymentLinksQuery = useMemoFirebase(() => {
+    if (!user || !selectedAccountId) return null;
+    return collection(
+      firestore,
+      `users/${user.uid}/accounts/${selectedAccountId}/paymentLinks`
+    );
+  }, [firestore, user, selectedAccountId]);
+  const { data: paymentLinksData, isLoading: isLoadingPaymentLinks } =
+    useCollection<PaymentLink>(paymentLinksQuery);
+
+  const transactionsQuery = useMemoFirebase(() => {
+    if (!user || !selectedAccountId) return null;
+    return query(
+      collection(
+        firestore,
+        `users/${user.uid}/accounts/${selectedAccountId}/transactions`
+      ),
+      orderBy("transactionDate", "desc"),
+      limit(5)
+    );
+  }, [firestore, user, selectedAccountId]);
+  const { data: transactionsData, isLoading: isLoadingTransactions } =
+    useCollection<Transaction>(transactionsQuery);
+
+  const formatCurrency = (amount: number, currency: string = "USD") =>
     new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: "USD",
+      currency: currency,
     }).format(amount);
+
+  if (isUserLoading || isLoadingAccounts) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!accountsData || accountsData.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center">
+        <CircleOff className="h-12 w-12 text-muted-foreground" />
+        <h2 className="mt-4 text-xl font-semibold">No accounts found</h2>
+        <p className="mt-2 text-muted-foreground">
+          Get started by creating a new account.
+        </p>
+        {/* TODO: Add a link/button to create an account */}
+      </div>
+    );
+  }
 
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Overview</h1>
+        {selectedAccountId && (
+          <Select
+            value={selectedAccountId}
+            onValueChange={setSelectedAccountId}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select an account" />
+            </SelectTrigger>
+            <SelectContent>
+              {accountsData.map((account) => (
+                <SelectItem key={account.id} value={account.id}>
+                  {account.accountName} ({account.accountType})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Balance</CardTitle>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              className="h-4 w-4 text-muted-foreground"
-            >
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-            </svg>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(dashboardStats.balance)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              +20.1% from last month
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Income</CardTitle>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              className="h-4 w-4 text-muted-foreground"
-            >
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(dashboardStats.monthlyIncome)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              +180.1% from last month
-            </p>
+            {isLoadingWallet ? <Loader2 className="h-6 w-6 animate-spin"/> :
+              wallet ? (
+                <>
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(wallet.balanceTotal, wallet.currency)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Total money ever received
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No wallet data.</p>
+              )
+            }
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Monthly Expenses
+              Available Balance
             </CardTitle>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              className="h-4 w-4 text-muted-foreground"
-            >
-              <rect width="20" height="14" x="2" y="5" rx="2" />
-              <path d="M2 10h20" />
-            </svg>
+            <Landmark className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(dashboardStats.monthlyExpenses)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              +19% from last month
-            </p>
+            {isLoadingWallet ? <Loader2 className="h-6 w-6 animate-spin"/> :
+              wallet ? (
+                <>
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(wallet.balanceAvailable, wallet.currency)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Ready for withdrawal
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No wallet data.</p>
+              )
+            }
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Now</CardTitle>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              className="h-4 w-4 text-muted-foreground"
-            >
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-            </svg>
+            <CardTitle className="text-sm font-medium">
+              Pending Balance
+            </CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">+573</div>
-            <p className="text-xs text-muted-foreground">
-              +201 since last hour
-            </p>
+           {isLoadingWallet ? <Loader2 className="h-6 w-6 animate-spin"/> :
+              wallet ? (
+                <>
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(wallet.balancePending, wallet.currency)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Processing / on hold
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No wallet data.</p>
+              )
+            }
           </CardContent>
         </Card>
       </div>
-      <div className="grid gap-4 md:gap-8 lg:grid-cols-2 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>Overview</CardTitle>
-          </CardHeader>
-          <CardContent className="pl-2">
-            <OverviewChart />
-          </CardContent>
-        </Card>
-        <Card>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        <div className="grid gap-4 lg:col-span-2">
+            <Card>
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Total Invoices</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {isLoadingInvoices ? <Loader2 className="h-6 w-6 animate-spin" /> :
+                        <div className="text-2xl font-bold">{invoicesData?.length ?? 0}</div>
+                    }
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Payment Links</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {isLoadingPaymentLinks ? <Loader2 className="h-6 w-6 animate-spin" /> :
+                        <div className="text-2xl font-bold">{paymentLinksData?.length ?? 0}</div>
+                    }
+                </CardContent>
+            </Card>
+        </div>
+
+        <Card className="lg:col-span-5">
           <CardHeader className="flex flex-row items-center">
             <div className="grid gap-2">
               <CardTitle>Recent Transactions</CardTitle>
               <CardDescription>
-                You made {transactions.length} transactions this month.
+                Your last 5 transactions for this account.
               </CardDescription>
             </div>
             <Button asChild size="sm" className="ml-auto gap-1">
@@ -166,32 +280,65 @@ export default function DashboardPage() {
             </Button>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transactions.slice(0, 5).map((transaction) => (
-                  <TableRow key={transaction.id}>
-                    <TableCell>
-                      <div className="font-medium">
-                        {transaction.client.name}
-                      </div>
-                      <div className="hidden text-sm text-muted-foreground md:inline">
-                        {transaction.client.email}
-                      </div>
-                    </TableCell>
-                    <TableCell className={`text-right ${transaction.type === 'Credit' ? 'text-green-600' : 'text-red-600'}`}>
-                      {transaction.type === 'Credit' ? '+' : '-'}
-                      {formatCurrency(transaction.amount)}
-                    </TableCell>
+            {isLoadingTransactions ? (
+                <div className="flex items-center justify-center p-8">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+            ) : transactionsData && transactionsData.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {transactionsData.map((transaction) => (
+                    <TableRow key={transaction.id}>
+                      <TableCell>
+                        <div className="font-medium">
+                          {transaction.description}
+                        </div>
+                      </TableCell>
+                       <TableCell>
+                        {format(new Date(transaction.transactionDate), "PPP")}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            transaction.status === "completed"
+                              ? "default"
+                              : "secondary"
+                          }
+                        >
+                          {transaction.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right",
+                          transaction.type === "credit"
+                            ? "text-green-600"
+                            : "text-red-600"
+                        )}
+                      >
+                        {transaction.type === "credit" ? "+" : "-"}
+                        {formatCurrency(
+                          transaction.amount,
+                          transaction.currency
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+                <div className="text-center p-8 text-muted-foreground">
+                    <p>No transactions found for this account.</p>
+                </div>
+            )}
           </CardContent>
         </Card>
       </div>
