@@ -8,18 +8,12 @@ import {
   useFirestore,
   useCollection,
   useMemoFirebase,
-  errorEmitter,
-  FirestorePermissionError,
 } from "@/firebase";
 import {
   collection,
   query,
   orderBy,
   limit,
-  doc,
-  updateDoc,
-  increment,
-  setDoc,
 } from "firebase/firestore";
 import {
   Card,
@@ -49,10 +43,7 @@ import {
   ArrowUpRight,
   DollarSign,
   Landmark,
-  Wallet,
   Activity,
-  FileText,
-  Link2,
   CircleOff,
   Loader2,
 } from "lucide-react";
@@ -65,7 +56,6 @@ import type {
   Transaction,
 } from "@/lib/types";
 import { format } from "date-fns";
-import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
@@ -73,7 +63,6 @@ export default function DashboardPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
     null
   );
-  const { toast } = useToast();
 
   const accountsQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -139,75 +128,6 @@ export default function DashboardPage() {
       currency: currency,
     }).format(amount / 100);
 
-  const handleAddTestMoney = () => {
-    if (!user || !selectedAccountId || !wallet || !firestore) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please select an account first.",
-      });
-      return;
-    }
-
-    const walletRef = doc(
-      firestore,
-      `users/${user.uid}/accounts/${selectedAccountId}/wallet/${wallet.id}`
-    );
-    updateDoc(walletRef, {
-      balanceTotal: increment(1000),
-      balanceAvailable: increment(1000),
-    }).catch((error) => {
-      const permissionError = new FirestorePermissionError({
-        path: walletRef.path,
-        operation: "update",
-        requestResourceData: {
-          balanceTotal: "increment(1000)",
-          balanceAvailable: "increment(1000)",
-        },
-      });
-      errorEmitter.emit("permission-error", permissionError);
-      toast({
-        variant: "destructive",
-        title: "Uh oh! Something went wrong.",
-        description: "Could not update wallet.",
-      });
-    });
-
-    const txCollectionRef = collection(
-      firestore,
-      `users/${user.uid}/accounts/${selectedAccountId}/transactions`
-    );
-    const newTxRef = doc(txCollectionRef);
-    const txData = {
-      id: newTxRef.id,
-      userAccountId: selectedAccountId,
-      transactionDate: new Date().toISOString(),
-      amount: 1000,
-      type: "credit" as const,
-      status: "completed" as const,
-      description: "Test Credit",
-      currency: wallet.currency,
-    };
-    setDoc(newTxRef, txData).catch((error) => {
-      const permissionError = new FirestorePermissionError({
-        path: newTxRef.path,
-        operation: "create",
-        requestResourceData: txData,
-      });
-      errorEmitter.emit("permission-error", permissionError);
-      toast({
-        variant: "destructive",
-        title: "Uh oh! Something went wrong.",
-        description: "Could not create transaction.",
-      });
-    });
-
-    toast({
-      title: "Success",
-      description: "Added $10 test money.",
-    });
-  };
-
   if (isUserLoading || isLoadingAccounts) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -250,11 +170,6 @@ export default function DashboardPage() {
                 ))}
               </SelectContent>
             </Select>
-          )}
-          {process.env.NODE_ENV !== "production" && (
-            <Button onClick={handleAddTestMoney} size="sm">
-              Add Test $10
-            </Button>
           )}
         </div>
       </div>
