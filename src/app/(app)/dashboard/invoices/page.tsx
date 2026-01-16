@@ -34,7 +34,6 @@ import {
 } from '@/components/ui/dialog';
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -94,11 +93,11 @@ export default function InvoicesPage() {
   const { data: invoicesData, isLoading: isLoadingInvoices } =
     useCollection<Invoice>(invoicesQuery);
 
-  const formatCurrency = (amount: number, currency: string = 'USD') =>
+    const formatCurrency = (amountInCents: number, currency: string = 'USD') =>
     new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
-    }).format(amount / 100);
+    }).format(amountInCents / 100);
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
@@ -177,7 +176,11 @@ export default function InvoicesPage() {
           <TableBody>
             {invoicesData.map((invoice) => (
               <TableRow key={invoice.id}>
-                <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
+                <TableCell className="font-medium">
+                  <Link href={`/dashboard/invoices/${invoice.id}?accountId=${selectedAccountId}`} className="hover:underline">
+                    {invoice.invoiceNumber}
+                  </Link>
+                </TableCell>
                 <TableCell>{invoice.clientName}</TableCell>
                 <TableCell>
                   <Badge variant={getStatusBadgeVariant(invoice.status)}>
@@ -204,7 +207,9 @@ export default function InvoicesPage() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuItem>View</DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href={`/dashboard/invoices/${invoice.id}?accountId=${selectedAccountId}`}>View</Link>
+                      </DropdownMenuItem>
                       <DropdownMenuItem>
                         <Share2 className="mr-2 h-4 w-4" />
                         Share
@@ -265,13 +270,12 @@ export default function InvoicesPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Filter by</DropdownMenuLabel>
+              <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem checked>
-                Paid
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem>Unpaid</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem>Sent</DropdownMenuCheckboxItem>
+              <DropdownMenuItem>Paid</DropdownMenuItem>
+              <DropdownMenuItem>Unpaid</DropdownMenuItem>
+              <DropdownMenuItem>Sent</DropdownMenuItem>
+              <DropdownMenuItem>Draft</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button size="sm" variant="outline" className="h-8 gap-1">

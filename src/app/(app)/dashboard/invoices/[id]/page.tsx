@@ -46,7 +46,7 @@ export default function InvoiceDetailsPage() {
   }, [firestore, user, accountId, invoice?.clientId]);
   const { data: client, isLoading: isLoadingClient } = useDoc<Client>(clientRef);
 
-  if (isLoadingInvoice) {
+  if (isLoadingInvoice || isUserLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-16 w-16 animate-spin" />
