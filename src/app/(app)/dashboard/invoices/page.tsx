@@ -205,7 +205,7 @@ export default function InvoicesPage() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Actions</DropdownMenuLabel>
                       <DropdownMenuItem asChild>
-                        <Link href={`/dashboard/invoice/${invoice.id}?accountId=${selectedAccountId}`}>View</Link>
+                        <Link href={`/dashboard/invoices/${invoice.id}?accountId=${selectedAccountId}`}>View</Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem>
                         <Share2 className="mr-2 h-4 w-4" />
