@@ -1,3 +1,4 @@
+
 export interface UserAccount {
   id: string;
   userId: string;
@@ -15,16 +16,37 @@ export interface Wallet {
   currency: string;
 }
 
-export interface Invoice {
+export interface Client {
   id: string;
   userAccountId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  address?: string;
+}
+
+export interface Invoice {
+  id: string;
+  ownerUid: string;
+  userAccountId: string;
   clientId: string;
+  clientName: string;
+  clientEmail: string;
   invoiceNumber: string;
   issueDate: string;
   dueDate: string;
-  amount: number;
-  status: "draft" | "sent" | "paid" | "unpaid";
+  subtotalCents: number;
+  totalCents: number;
   currency: string;
+  status: 'draft' | 'sent' | 'paid' | 'unpaid';
+  lineItems: {
+    description: string;
+    quantity: number;
+    unitPrice: number; // in cents
+  }[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PaymentLink {

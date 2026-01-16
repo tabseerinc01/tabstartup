@@ -22,16 +22,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Logo } from '@/components/logo';
-import type { Invoice } from '@/lib/types';
+import type { Invoice, Client } from '@/lib/types';
 import { format } from 'date-fns';
 import { Loader2 } from 'lucide-react';
-
-// Assuming a Client type exists
-type Client = {
-    id: string;
-    name: string;
-    email: string;
-}
 
 export default function InvoiceDetailsPage() {
   const params = useParams();
@@ -46,7 +39,7 @@ export default function InvoiceDetailsPage() {
     if (!user || !accountId || !invoiceId) return null;
     return doc(firestore, `users/${user.uid}/accounts/${accountId}/invoices/${invoiceId}`);
   }, [firestore, user, accountId, invoiceId]);
-  const { data: invoice, isLoading: isLoadingInvoice, error: invoiceError } = useDoc<Invoice>(invoiceRef);
+  const { data: invoice, isLoading: isLoadingInvoice } = useDoc<Invoice>(invoiceRef);
 
   const clientRef = useMemoFirebase(() => {
     if (!user || !accountId || !invoice?.clientId) return null;
@@ -54,7 +47,7 @@ export default function InvoiceDetailsPage() {
   }, [firestore, user, accountId, invoice?.clientId]);
   const { data: client, isLoading: isLoadingClient } = useDoc<Client>(clientRef);
 
-  if (isLoadingInvoice || isLoadingClient) {
+  if (isLoadingInvoice) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-16 w-16 animate-spin" />
@@ -63,7 +56,6 @@ export default function InvoiceDetailsPage() {
   }
 
   if (!invoice) {
-    // This will be caught by Next.js's not-found mechanism
     if (!isLoadingInvoice) notFound();
     return null;
   }
@@ -89,11 +81,6 @@ export default function InvoiceDetailsPage() {
     }
   };
 
-  // Mock items as it's not in the current Invoice model
-  const items = [
-      { description: "Service or Product", quantity: 1, price: invoice.amount }
-  ]
-
   return (
     <div className="container mx-auto max-w-4xl py-12">
     <Card className="p-4 sm:p-8 md:p-12">
@@ -117,13 +104,11 @@ export default function InvoiceDetailsPage() {
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <h3 className="font-semibold mb-2">Bill To:</h3>
-            {isLoadingClient ? <Loader2 className='h-4 w-4 animate-spin' /> : client ? (
-                <>
-                    <p className="font-bold">{client.name}</p>
-                    <p className="text-muted-foreground">{client.email}</p>
-                </>
-            ) : (
-                <p className="text-muted-foreground">Client information not available.</p>
+            {isLoadingClient ? <Loader2 className='h-4 w-4 animate-spin' /> : (
+              <>
+                <p className="font-bold">{client?.name || invoice.clientName}</p>
+                <p className="text-muted-foreground">{client?.email || invoice.clientEmail}</p>
+              </>
             )}
           </div>
           <div className="text-left md:text-right">
@@ -149,13 +134,13 @@ export default function InvoiceDetailsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item, index) => (
+            {invoice.lineItems.map((item, index) => (
               <TableRow key={index}>
                 <TableCell className="font-medium">{item.description}</TableCell>
                 <TableCell className="text-center">{item.quantity}</TableCell>
-                <TableCell className="text-right">{formatCurrency(item.price, invoice.currency)}</TableCell>
+                <TableCell className="text-right">{formatCurrency(item.unitPrice, invoice.currency)}</TableCell>
                 <TableCell className="text-right">
-                  {formatCurrency(item.price * item.quantity, invoice.currency)}
+                  {formatCurrency(item.unitPrice * item.quantity, invoice.currency)}
                 </TableCell>
               </TableRow>
             ))}
@@ -166,7 +151,7 @@ export default function InvoiceDetailsPage() {
           <div className="w-full md:w-1/2 lg:w-1/3 space-y-2">
             <div className="flex justify-between">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span>{formatCurrency(invoice.amount, invoice.currency)}</span>
+                <span>{formatCurrency(invoice.subtotalCents, invoice.currency)}</span>
             </div>
             <div className="flex justify-between">
                 <span className="text-muted-foreground">Tax (0%)</span>
@@ -175,16 +160,25 @@ export default function InvoiceDetailsPage() {
             <Separator />
              <div className="flex justify-between font-bold text-lg">
                 <span>Total</span>
-                <span>{formatCurrency(invoice.amount, invoice.currency)}</span>
+                <span>{formatCurrency(invoice.totalCents, invoice.currency)}</span>
             </div>
           </div>
         </div>
+        {invoice.notes && (
+          <>
+            <Separator className="my-8" />
+            <div>
+              <h3 className="font-semibold mb-2">Notes</h3>
+              <p className="text-muted-foreground text-sm">{invoice.notes}</p>
+            </div>
+          </>
+        )}
       </CardContent>
       <CardFooter className="p-0 mt-8 flex-col gap-4 items-start">
          <p className="text-sm text-muted-foreground">Thank you for your business!</p>
          {invoice.status !== "paid" && (
             <Button size="lg" className="w-full md:w-auto">
-                Pay Now - {formatCurrency(invoice.amount, invoice.currency)}
+                Pay Now - {formatCurrency(invoice.totalCents, invoice.currency)}
             </Button>
          )}
       </CardFooter>
