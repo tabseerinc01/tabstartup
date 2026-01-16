@@ -1,3 +1,34 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "hero-image",
+      "description": "Abstract background for hero section",
+      "imageUrl": "https://images.unsplash.com/photo-1621947081720-86970823b77a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxhYnN0cmFjdCUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzY4NDkzMTQ0fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "abstract background"
+    },
+    {
+      "id": "feature-invoice",
+      "description": "Man creating an invoice on a laptop",
+      "imageUrl": "https://images.unsplash.com/photo-1654119895136-6aad918f412c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxpbnZvaWNlJTIwbGFwdG9wfGVufDB8fHx8MTc2ODU3NDc4MHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "invoice laptop"
+    },
+    {
+      "id": "feature-payment-link",
+      "description": "Sharing a payment link from a phone",
+      "imageUrl": "https://images.unsplash.com/photo-1758874573904-159a4616ebcf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxwYXltZW50JTIwcGhvbmV8ZW58MHx8fHwxNzY4NTc0Nzc5fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "payment phone"
+    },
+    {
+      "id": "feature-treasury",
+      "description": "Digital illustration of a modern bank",
+      "imageUrl": "https://images.unsplash.com/photo-1423784346385-c1d4dac9893a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxkaWdpdGFsJTIwYmFua3xlbnwwfHx8fDE3Njg1NzQ3ODF8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "digital bank"
+    },
+    {
+      "id": "about-team",
+      "description": "A diverse team collaborating in an office",
+      "imageUrl": "https://images.unsplash.com/photo-1624555130296-e551faf8969b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxkaXZlcnNlJTIwdGVhbXxlbnwwfHx8fDE3Njg1NzQ3ODB8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "diverse team"
+    }
+  ]
 }
