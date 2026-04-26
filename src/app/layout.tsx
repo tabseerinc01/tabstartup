@@ -1,3 +1,4 @@
+
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,8 +8,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "TabEdge",
-  description: "Your modern payment gateway.",
+  title: "TabStartup",
+  description: "Build and fund your startup with TabStartup.",
 };
 
 export default function RootLayout({
