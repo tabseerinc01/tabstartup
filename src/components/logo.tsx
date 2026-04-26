@@ -1,4 +1,6 @@
 
+'use client';
+
 import Link from "next/link";
 import { Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";

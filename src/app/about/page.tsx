@@ -1,4 +1,6 @@
 
+'use client';
+
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 
@@ -9,7 +11,7 @@ export default function AboutPage() {
       <main className="flex-1 container mx-auto px-4 py-20">
         <div className="max-w-3xl mx-auto">
           <h1 className="text-4xl font-bold mb-8">About TabStartup</h1>
-          <div className="prose prose-lg dark:prose-invert">
+          <div className="prose prose-lg">
             <p>
               TabStartup was born from a simple observation: founders in emerging markets, 
               particularly Bangladesh, have immense talent but often lack the structured 

@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { mockFounders } from '@/lib/mock-data';
+import { PublicHeader } from '@/components/public/header';
+import { PublicFooter } from '@/components/public/footer';
 import { 
   Rocket, 
   Users, 
@@ -15,8 +17,6 @@ import {
   MapPin
 } from 'lucide-react';
 import Image from 'next/image';
-import { PublicHeader } from '@/components/public/header';
-import { PublicFooter } from '@/components/public/footer';
 
 export default function HomePage() {
   return (
@@ -145,6 +145,11 @@ export default function HomePage() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+          <div className="mt-8 flex md:hidden">
+            <Button variant="outline" className="w-full" asChild>
+              <Link href="/founders">View all founders</Link>
+            </Button>
           </div>
         </section>
 

@@ -38,8 +38,12 @@ export default function LoginPage() {
           </form>
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
-          <p className="text-sm text-muted-foreground">Don't have an account? <Link href="/signup" className="text-primary hover:underline">Sign up</Link></p>
-          <Button variant="ghost" asChild size="sm"><Link href="/dashboard">Preview Dashboard (Demo)</Link></Button>
+          <p className="text-sm text-muted-foreground w-full text-center">
+            Don't have an account? <Link href="/signup" className="text-primary hover:underline">Sign up</Link>
+          </p>
+          <Button variant="ghost" asChild size="sm" className="w-full">
+            <Link href="/dashboard">Preview Dashboard (Demo)</Link>
+          </Button>
         </CardFooter>
       </Card>
     </div>

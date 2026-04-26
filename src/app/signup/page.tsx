@@ -57,7 +57,9 @@ export default function SignupPage() {
           </form>
         </CardContent>
         <CardFooter>
-          <p className="text-sm text-muted-foreground w-full text-center">Already have an account? <Link href="/login" className="text-primary hover:underline">Log in</Link></p>
+          <p className="text-sm text-muted-foreground w-full text-center">
+            Already have an account? <Link href="/login" className="text-primary hover:underline">Log in</Link>
+          </p>
         </CardFooter>
       </Card>
     </div>

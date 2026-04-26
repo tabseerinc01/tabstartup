@@ -13,7 +13,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Logo } from '../logo';
+import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
 
 const menuItems = [
