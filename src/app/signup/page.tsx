@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useSearchParams } from 'next/navigation';
@@ -18,23 +17,16 @@ export default function SignupPage() {
 
   const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: "Registration process started",
-      description: "Full Firebase integration will be available in the next phase.",
-    });
+    toast({ title: "Signup Preview", description: "Account creation will be enabled in the next step." });
   };
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/20">
-      <div className="mb-8">
-        <Logo />
-      </div>
+      <Logo className="mb-8" />
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
-          <CardDescription>
-            Join the ecosystem as a founder, mentor, or investor
-          </CardDescription>
+        <CardHeader>
+          <CardTitle className="text-2xl">Join TabStartup</CardTitle>
+          <CardDescription>Join our ecosystem of founders and investors.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-4">
@@ -44,7 +36,7 @@ export default function SignupPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="m@example.com" required />
+              <Input id="email" type="email" required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
@@ -53,9 +45,7 @@ export default function SignupPage() {
             <div className="space-y-2">
               <Label htmlFor="role">Your Role</Label>
               <Select defaultValue={roleParam || undefined}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="founder">Founder</SelectItem>
                   <SelectItem value="mentor">Mentor</SelectItem>
@@ -63,21 +53,11 @@ export default function SignupPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" className="w-full">
-              Create account
-            </Button>
+            <Button type="submit" className="w-full">Create account</Button>
           </form>
         </CardContent>
-        <CardFooter className="flex flex-col space-y-4">
-          <div className="text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link href="/login" className="text-primary hover:underline font-medium">
-              Log in
-            </Link>
-          </div>
-          <Button variant="ghost" asChild className="text-xs">
-            <Link href="/dashboard">Skip to Dashboard Preview (Demo)</Link>
-          </Button>
+        <CardFooter>
+          <p className="text-sm text-muted-foreground w-full text-center">Already have an account? <Link href="/login" className="text-primary hover:underline">Log in</Link></p>
         </CardFooter>
       </Card>
     </div>

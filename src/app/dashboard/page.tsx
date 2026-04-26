@@ -1,4 +1,3 @@
-
 'use client';
 
 import { mockFounders } from '@/lib/mock-data';

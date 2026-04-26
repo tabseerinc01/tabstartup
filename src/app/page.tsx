@@ -1,4 +1,3 @@
-
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,7 +23,6 @@ export default function HomePage() {
     <div className="flex min-h-screen flex-col">
       <PublicHeader />
       <main className="flex-1 flex flex-col gap-20 pb-20">
-        {/* Hero Section */}
         <section className="relative overflow-hidden pt-20 md:pt-32">
           <div className="container mx-auto px-4 relative z-10 text-center">
             <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6">
@@ -48,31 +46,14 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* How it works */}
         <section className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-12">How it works</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { 
-                icon: <Users className="h-8 w-8 text-primary" />, 
-                title: "Create your profile", 
-                desc: "Build a professional founder profile and showcase your journey." 
-              },
-              { 
-                icon: <Lightbulb className="h-8 w-8 text-primary" />, 
-                title: "List your startup", 
-                desc: "Pitch what you are building and share your vision with the world." 
-              },
-              { 
-                icon: <Handshake className="h-8 w-8 text-primary" />, 
-                title: "Connect with mentors", 
-                desc: "Get guidance from experienced builders and industry experts." 
-              },
-              { 
-                icon: <Target className="h-8 w-8 text-primary" />, 
-                title: "Access resources", 
-                desc: "Get funding, courses, and a supportive community of founders." 
-              },
+              { icon: <Users className="h-8 w-8 text-primary" />, title: "Create your profile", desc: "Build a professional founder profile and showcase your journey." },
+              { icon: <Lightbulb className="h-8 w-8 text-primary" />, title: "List your startup", desc: "Pitch what you are building and share your vision with the world." },
+              { icon: <Handshake className="h-8 w-8 text-primary" />, title: "Connect with mentors", desc: "Get guidance from experienced builders and industry experts." },
+              { icon: <Target className="h-8 w-8 text-primary" />, title: "Access resources", desc: "Get funding, courses, and a supportive community of founders." },
             ].map((item, i) => (
               <Card key={i} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
@@ -87,43 +68,41 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Who is it for */}
         <section className="bg-muted/30 py-20">
-          <div className="container mx-auto px-4">
-            <h2 className="text-3xl font-bold text-center mb-12">Who is TabStartup for?</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <Card className="bg-background">
+          <div className="container mx-auto px-4 text-center">
+            <h2 className="text-3xl font-bold mb-12">Who is TabStartup for?</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
+              <Card>
                 <CardHeader className="text-center">
                   <Rocket className="h-12 w-12 mx-auto mb-4 text-primary" />
                   <CardTitle>Founders</CardTitle>
                 </CardHeader>
-                <CardContent className="text-center">
-                  <p className="text-muted-foreground">Showcase your startup, find mentors, and secure funding for your vision.</p>
+                <CardContent className="text-center text-muted-foreground">
+                  Showcase your startup, find mentors, and secure funding for your vision.
                 </CardContent>
               </Card>
-              <Card className="bg-background">
+              <Card>
                 <CardHeader className="text-center">
                   <Globe className="h-12 w-12 mx-auto mb-4 text-primary" />
                   <CardTitle>Mentors</CardTitle>
                 </CardHeader>
-                <CardContent className="text-center">
-                  <p className="text-muted-foreground">Share your experience and guide new founders through their challenges.</p>
+                <CardContent className="text-center text-muted-foreground">
+                  Share your experience and guide new founders through their challenges.
                 </CardContent>
               </Card>
-              <Card className="bg-background">
+              <Card>
                 <CardHeader className="text-center">
                   <TrendingUp className="h-12 w-12 mx-auto mb-4 text-primary" />
                   <CardTitle>Investors</CardTitle>
                 </CardHeader>
-                <CardContent className="text-center">
-                  <p className="text-muted-foreground">Discover high-potential early-stage startups and invest in the future.</p>
+                <CardContent className="text-center text-muted-foreground">
+                  Discover high-potential early-stage startups and invest in the future.
                 </CardContent>
               </Card>
             </div>
           </div>
         </section>
 
-        {/* Community highlight */}
         <section className="container mx-auto px-4">
           <div className="flex justify-between items-end mb-12">
             <div>
@@ -167,14 +146,8 @@ export default function HomePage() {
               </Card>
             ))}
           </div>
-          <div className="mt-8 flex md:hidden">
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="/founders">View all founders</Link>
-            </Button>
-          </div>
         </section>
 
-        {/* Bottom CTA */}
         <section className="container mx-auto px-4">
           <div className="bg-primary text-primary-foreground rounded-3xl p-12 text-center">
             <h2 className="text-3xl font-bold mb-4">Ready to grow your startup?</h2>

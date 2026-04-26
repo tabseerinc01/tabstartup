@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -41,7 +40,6 @@ export default function ProfilePage() {
         <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-muted/40">
           <div className="max-w-2xl mx-auto w-full space-y-6">
             <h1 className="text-3xl font-bold">Edit Profile</h1>
-            
             <Card>
               <form onSubmit={handleSave}>
                 <CardHeader>
@@ -51,35 +49,21 @@ export default function ProfilePage() {
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
-                    <Input 
-                      id="name" 
-                      value={formData.name} 
-                      onChange={e => setFormData({...formData, name: e.target.value})}
-                    />
+                    <Input id="name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="headline">Headline</Label>
-                    <Input 
-                      id="headline" 
-                      value={formData.headline}
-                      onChange={e => setFormData({...formData, headline: e.target.value})}
-                    />
+                    <Input id="headline" value={formData.headline} onChange={e => setFormData({...formData, headline: e.target.value})} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="location">Location</Label>
-                      <Input 
-                        id="location" 
-                        value={formData.location}
-                        onChange={e => setFormData({...formData, location: e.target.value})}
-                      />
+                      <Input id="location" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="stage">Current Stage</Label>
                       <Select value={formData.stage} onValueChange={v => setFormData({...formData, stage: v as any})}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Idea">Idea</SelectItem>
                           <SelectItem value="Early">Early</SelectItem>
@@ -91,20 +75,11 @@ export default function ProfilePage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="skills">Skills (comma-separated)</Label>
-                    <Input 
-                      id="skills" 
-                      value={formData.skills}
-                      onChange={e => setFormData({...formData, skills: e.target.value})}
-                    />
+                    <Input id="skills" value={formData.skills} onChange={e => setFormData({...formData, skills: e.target.value})} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lookingFor">What are you looking for?</Label>
-                    <Textarea 
-                      id="lookingFor" 
-                      rows={4} 
-                      value={formData.lookingFor}
-                      onChange={e => setFormData({...formData, lookingFor: e.target.value})}
-                    />
+                    <Textarea id="lookingFor" rows={4} value={formData.lookingFor} onChange={e => setFormData({...formData, lookingFor: e.target.value})} />
                   </div>
                 </CardContent>
                 <CardFooter>
