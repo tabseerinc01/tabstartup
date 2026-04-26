@@ -1,89 +1,69 @@
-"use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import {
-  Bell,
-  Home,
-  LineChart,
-  Package,
-  ShoppingCart,
-  Users,
-  FileText,
-  Link2,
-  ArrowLeftRight,
-  Landmark,
-  Bot,
-} from "lucide-react";
+'use client';
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { cn } from "@/lib/utils";
-import { Logo } from "../logo";
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { 
+  Home, 
+  User, 
+  Rocket, 
+  Users, 
+  Settings,
+  LogOut,
+  ChevronRight
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Logo } from '../logo';
+import { Button } from '@/components/ui/button';
 
-const navItems = [
-  { href: "/dashboard", icon: Home, label: "Dashboard" },
-  { href: "/dashboard/invoices", icon: FileText, label: "Invoices" },
-  { href: "/dashboard/payment-links", icon: Link2, label: "Payment Links" },
-  { href: "/dashboard/transactions", icon: ArrowLeftRight, label: "Transactions" },
-  { href: "/dashboard/treasury", icon: Bot, label: "Treasury AI" },
+const menuItems = [
+  { href: '/dashboard', label: 'Overview', icon: Home },
+  { href: '/dashboard/profile', label: 'My Profile', icon: User },
+  { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
+  { href: '#', label: 'Connections', icon: Users, disabled: true },
+  { href: '#', label: 'Settings', icon: Settings, disabled: true },
 ];
 
 export function DashboardSidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="hidden border-r bg-background md:block">
-      <div className="flex h-full max-h-screen flex-col gap-2">
-        <div className="flex h-16 items-center border-b px-4 lg:h-[60px] lg:px-6">
-          <Logo />
-        </div>
-        <div className="flex-1">
-          <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
-            {navItems.map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary",
-                  pathname === item.href && "bg-muted text-primary"
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-                {item.badge && (
-                  <Badge className="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
-                    {item.badge}
-                  </Badge>
-                )}
-              </Link>
-            ))}
-          </nav>
-        </div>
-        <div className="mt-auto p-4">
-          <Card>
-            <CardHeader className="p-2 pt-0 md:p-4">
-              <CardTitle>Upgrade to Pro</CardTitle>
-              <CardDescription>
-                Unlock all features and get unlimited access to our support
-                team.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-2 pt-0 md:p-4 md:pt-0">
-              <Button size="sm" className="w-full">
-                Upgrade
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+    <aside className="hidden md:flex flex-col w-64 border-r bg-background h-screen sticky top-0">
+      <div className="p-6">
+        <Logo />
       </div>
-    </div>
+      
+      <nav className="flex-1 px-4 py-2 space-y-1">
+        {menuItems.map((item) => (
+          <Link
+            key={item.label}
+            href={item.disabled ? '#' : item.href}
+            className={cn(
+              "flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all group",
+              pathname === item.href 
+                ? "bg-primary text-primary-foreground" 
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              item.disabled && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </div>
+            {item.disabled && <span className="text-[10px] bg-muted px-1.5 rounded-full text-muted-foreground">Soon</span>}
+            {!item.disabled && pathname === item.href && <ChevronRight className="h-3 w-3" />}
+          </Link>
+        ))}
+      </nav>
+
+      <div className="p-4 border-t">
+        <Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground" asChild>
+          <Link href="/login">
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Link>
+        </Button>
+      </div>
+    </aside>
   );
 }
