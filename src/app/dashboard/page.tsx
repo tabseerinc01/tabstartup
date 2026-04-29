@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { User as UserIcon, Rocket, Target, ArrowRight, Loader2 } from 'lucide-react';
+import { User as UserIcon, Rocket, Target, ArrowRight, Loader2, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
@@ -39,129 +39,210 @@ export default function DashboardOverviewPage() {
   const displayName = profile?.fullName || user?.email?.split('@')[0] || "Founder";
   const roleDisplay = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : "Founder";
 
-  // Simple completeness calculation
-  const fields = ['headline', 'location', 'stage', 'skills', 'lookingFor'];
-  const filledFields = fields.filter(f => profile && profile[f] && (Array.isArray(profile[f]) ? profile[f].length > 0 : profile[f] !== ''));
-  const completeness = Math.round((filledFields.length / fields.length) * 100);
+  // Detailed completeness calculation
+  const getCompleteness = () => {
+    if (!profile) return 0;
+    const coreFields = ['headline', 'location', 'stage', 'skills', 'bio', 'whyBuilding', 'lookingFor'];
+    let score = 0;
+    
+    // Core fields: 70%
+    const filledCore = coreFields.filter(f => profile[f] && (Array.isArray(profile[f]) ? profile[f].length > 0 : profile[f] !== ''));
+    score += (filledCore.length / coreFields.length) * 70;
+    
+    // Experience: 15%
+    if (profile.experience && profile.experience.length > 0 && profile.experience[0].company) score += 15;
+    
+    // Social Links: 15%
+    if (profile.socialLinks && (profile.socialLinks.linkedin || profile.socialLinks.website)) score += 15;
+    
+    return Math.min(Math.round(score), 100);
+  };
+
+  const completeness = getCompleteness();
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome, {displayName}</h1>
-        <p className="text-muted-foreground">
-          {roleDisplay} • {user?.email}
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            Welcome, {displayName} {profile?.isVerified && <CheckCircle2 className="h-6 w-6 text-primary fill-primary/10" />}
+          </h1>
+          <p className="text-muted-foreground">
+            {roleDisplay} • {user?.email}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/founders">View as Public</Link>
+          </Button>
+          <Button size="sm" asChild>
+            <Link href="/dashboard/profile">Edit Profile</Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
+        <Card className="border-primary/10 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Profile Completeness</CardTitle>
-            <UserIcon className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Profile Score</CardTitle>
+            <Target className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{completeness}%</div>
-            <Progress value={completeness} className="mt-2" />
+            <Progress value={completeness} className="mt-2 h-2" />
             <p className="text-xs text-muted-foreground mt-2">
-              {completeness < 100 ? "Complete your profile to stand out." : "Your profile is fully complete!"}
+              {completeness < 100 ? "Add experience and vision to attract investors." : "Your profile is investor-ready!"}
             </p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="border-primary/10 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Startup Status</CardTitle>
-            <Rocket className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Startup Listing</CardTitle>
+            <Rocket className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{startup ? startup.name : "Not Created Yet"}</div>
+            <div className="text-2xl font-bold truncate">{startup ? startup.name : "Unlisted"}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {startup 
-                ? `Stage: ${startup.stage} • Goal: $${startup.fundingNeed || '0'}` 
-                : "Pitch your startup to investors."}
+                ? `${startup.industry} • ${startup.stage}` 
+                : "Pitch your venture to the community."}
             </p>
-            <Button size="sm" variant="outline" asChild className="mt-4 w-full">
+            <Button size="sm" variant="ghost" asChild className="mt-4 w-full border border-dashed border-primary/20 hover:bg-primary/5">
               <Link href="/dashboard/startup">
-                {startup ? "Manage Startup" : "Create Startup Listing"}
+                {startup ? "Update Venture" : "Create Startup Listing"}
               </Link>
             </Button>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-primary/10 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Community Interaction</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Public Visibility</CardTitle>
+            <UserIcon className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0 Connections</div>
+            <div className="text-2xl font-bold">Active</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Start connecting with investors.
+              Your profile is visible to investors.
             </p>
-            <Button size="sm" variant="link" asChild className="mt-4 px-0">
-              <Link href="/investors">Explore Investors <ArrowRight className="ml-1 h-3 w-3" /></Link>
-            </Button>
+            <div className="mt-4 flex flex-wrap gap-1">
+              {profile?.availability?.openToInvestment && <Badge variant="outline" className="text-[9px] bg-green-50 text-green-700 border-green-200">Investing</Badge>}
+              {profile?.availability?.hiring && <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200">Hiring</Badge>}
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="col-span-1">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Next Steps</CardTitle>
-            <CardDescription>Actionable items to grow your startup presence.</CardDescription>
+            <CardTitle>Next Milestones</CardTitle>
+            <CardDescription>Actions to strengthen your presence.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
-              <div className="bg-primary/10 p-2 rounded-full">
-                <UserIcon className="h-4 w-4 text-primary" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold">Update your headline</p>
-                <p className="text-xs text-muted-foreground">Summarize what you do in one sentence.</p>
-              </div>
-              <Button size="sm" variant="ghost" asChild>
-                <Link href="/dashboard/profile">Edit</Link>
-              </Button>
-            </div>
-            {!startup && (
-              <div className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
-                <div className="bg-primary/10 p-2 rounded-full">
-                  <Rocket className="h-4 w-4 text-primary" />
+            {!profile?.whyBuilding && (
+              <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group">
+                <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
+                  <Target className="h-5 w-5 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold">List your startup</p>
-                  <p className="text-xs text-muted-foreground">Make your venture discoverable by investors.</p>
+                  <p className="text-sm font-semibold">Share your "Why"</p>
+                  <p className="text-xs text-muted-foreground">Explain the passion behind your startup.</p>
+                </div>
+                <Button size="sm" variant="ghost" asChild>
+                  <Link href="/dashboard/profile">Start</Link>
+                </Button>
+              </div>
+            )}
+            {!profile?.experience?.[0]?.company && (
+              <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group">
+                <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
+                  <UserIcon className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold">Add Professional Experience</p>
+                  <p className="text-xs text-muted-foreground">Build trust by sharing your background.</p>
+                </div>
+                <Button size="sm" variant="ghost" asChild>
+                  <Link href="/dashboard/profile">Add</Link>
+                </Button>
+              </div>
+            )}
+            {!startup && (
+              <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group">
+                <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
+                  <Rocket className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold">Launch your startup card</p>
+                  <p className="text-xs text-muted-foreground">Get discovered by early-stage investors.</p>
                 </div>
                 <Button size="sm" variant="ghost" asChild>
                   <Link href="/dashboard/startup">Create</Link>
                 </Button>
               </div>
             )}
+            <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group opacity-60">
+              <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
+                <Target className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold">Verified Founder Badge</p>
+                <p className="text-xs text-muted-foreground">Submit documents for official verification.</p>
+              </div>
+              <Badge variant="secondary">Upcoming</Badge>
+            </div>
           </CardContent>
         </Card>
         
-        <Card className="col-span-1">
+        <Card>
           <CardHeader>
-            <CardTitle>My Public View</CardTitle>
-            <CardDescription>How you appear to others.</CardDescription>
+            <CardTitle>Investor View</CardTitle>
+            <CardDescription>Your current public appearance.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4 mb-4">
-              <div className="relative h-16 w-16 rounded-full overflow-hidden bg-muted">
+          <CardContent className="space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="relative h-16 w-16 rounded-2xl overflow-hidden bg-muted shadow-sm">
                 <Image src={`https://picsum.photos/seed/${user?.uid || 'user'}/128/128`} alt={displayName} fill className="object-cover" />
               </div>
               <div>
-                <p className="font-bold">{displayName}</p>
-                <Badge variant="secondary">{profile?.stage || "Early"} Stage</Badge>
+                <p className="font-bold flex items-center gap-1">
+                  {displayName} 
+                  {profile?.isVerified && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                </p>
+                <Badge variant="secondary" className="text-[10px]">{profile?.stage || "Early"} Stage</Badge>
               </div>
             </div>
-            <p className="text-sm italic text-muted-foreground mb-4">
-              &quot;{profile?.headline || "Building amazing things."}&quot;
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {profile?.skills?.map((s: string) => <Badge key={s} variant="outline" className="text-[10px]">{s}</Badge>)}
+            
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Headline</p>
+                <p className="text-sm font-medium text-primary">"{profile?.headline || "Building amazing things."}"</p>
+              </div>
+              
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Availability</p>
+                <div className="flex flex-wrap gap-1">
+                  {profile?.availability?.openToInvestment ? (
+                    <Badge variant="outline" className="text-[9px] bg-green-50 text-green-700">Open to Investment</Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground italic">None specified</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Top Skills</p>
+                <div className="flex flex-wrap gap-1">
+                  {profile?.skills?.slice(0, 3).map((s: string) => <Badge key={s} variant="outline" className="text-[9px]">{s}</Badge>)}
+                </div>
+              </div>
             </div>
+
+            <Button variant="outline" size="sm" className="w-full mt-4" asChild>
+              <Link href="/founders">View in Marketplace</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>

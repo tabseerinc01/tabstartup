@@ -28,6 +28,10 @@
         "bio": {
           "type": "string"
         },
+        "whyBuilding": {
+          "type": "string",
+          "description": "Long-form text explaining the motivation behind the startup."
+        },
         "location": {
           "type": "string"
         },
@@ -41,6 +45,53 @@
         },
         "lookingFor": {
           "type": "string"
+        },
+        "experience": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "company": { "type": "string" },
+              "role": { "type": "string" },
+              "duration": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        },
+        "education": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "school": { "type": "string" },
+              "degree": { "type": "string" },
+              "year": { "type": "string" }
+            }
+          }
+        },
+        "achievements": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "socialLinks": {
+          "type": "object",
+          "properties": {
+            "linkedin": { "type": "string" },
+            "website": { "type": "string" },
+            "twitter": { "type": "string" }
+          }
+        },
+        "availability": {
+          "type": "object",
+          "properties": {
+            "openToInvestment": { "type": "boolean" },
+            "hiring": { "type": "boolean" },
+            "coFounder": { "type": "boolean" }
+          }
+        },
+        "isVerified": {
+          "type": "boolean",
+          "default": false
         },
         "preferredStage": {
           "type": "string"
