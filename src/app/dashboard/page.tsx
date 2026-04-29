@@ -28,7 +28,7 @@ export default function DashboardOverviewPage() {
   const { data: profile, isLoading: isProfileLoading } = useDoc(userRef);
   const { data: startup, isLoading: isStartupLoading } = useDoc(startupRef);
 
-  if (isUserLoading || isProfileLoading) {
+  if (isUserLoading || isProfileLoading || isStartupLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -67,15 +67,18 @@ export default function DashboardOverviewPage() {
             </p>
           </CardContent>
         </Card>
+        
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Startup Status</CardTitle>
             <Rocket className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{startup ? "Created" : "Not Listed"}</div>
+            <div className="text-2xl font-bold">{startup ? startup.name : "Not Created Yet"}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {startup ? startup.name : "Pitch your startup to investors."}
+              {startup 
+                ? `Stage: ${startup.stage} • Goal: $${startup.fundingNeed || '0'}` 
+                : "Pitch your startup to investors."}
             </p>
             <Button size="sm" variant="outline" asChild className="mt-4 w-full">
               <Link href="/dashboard/startup">
@@ -84,6 +87,7 @@ export default function DashboardOverviewPage() {
             </Button>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Community Interaction</CardTitle>

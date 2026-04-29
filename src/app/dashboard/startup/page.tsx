@@ -25,7 +25,9 @@ export default function StartupPage() {
   }, [firestore, user]);
 
   const { data: startupData, isLoading } = useDoc(startupRef);
+  
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [startup, setStartup] = useState({
     name: '',
@@ -51,25 +53,29 @@ export default function StartupPage() {
         tags: Array.isArray(startupData.tags) ? startupData.tags.join(', ') : '',
       });
       setIsEditing(false);
-    } else {
+    } else if (!isLoading) {
       setIsEditing(true);
     }
-  }, [startupData]);
+  }, [startupData, isLoading]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !firestore) return;
 
+    setIsSaving(true);
     try {
       const tagsArray = startup.tags.split(',').map(t => t.trim()).filter(t => t !== '');
       
-      await setDoc(doc(firestore, 'startups', user.uid), {
+      const updateData = {
         ...startup,
         tags: tagsArray,
         ownerUid: user.uid,
         updatedAt: serverTimestamp(),
-        createdAt: startupData ? startupData.createdAt : serverTimestamp(),
-      });
+        // Only set createdAt if it doesn't exist
+        ...(startupData ? {} : { createdAt: serverTimestamp() })
+      };
+
+      await setDoc(doc(firestore, 'startups', user.uid), updateData, { merge: true });
 
       toast({
         title: "Startup Saved",
@@ -82,6 +88,8 @@ export default function StartupPage() {
         title: "Error",
         description: "Failed to save startup data.",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -95,13 +103,20 @@ export default function StartupPage() {
 
   return (
     <div className="max-w-4xl mx-auto w-full space-y-8">
-      <h1 className="text-3xl font-bold">Startup Listing</h1>
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold">Startup Listing</h1>
+        {!isEditing && startupData && (
+          <Button variant="outline" onClick={() => setIsEditing(true)}>
+            Edit Listing
+          </Button>
+        )}
+      </div>
       
       {isEditing ? (
         <Card>
           <form onSubmit={handleSave}>
             <CardHeader>
-              <CardTitle>Register Your Startup</CardTitle>
+              <CardTitle>{startupData ? 'Update Startup' : 'Register Your Startup'}</CardTitle>
               <CardDescription>Fill in the details to list your venture on the platform.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -147,6 +162,8 @@ export default function StartupPage() {
                       <SelectItem value="Pre-Seed">Pre-Seed</SelectItem>
                       <SelectItem value="Seed">Seed</SelectItem>
                       <SelectItem value="Series A">Series A</SelectItem>
+                      <SelectItem value="Growth">Growth</SelectItem>
+                      <SelectItem value="Scaling">Scaling</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -190,8 +207,15 @@ export default function StartupPage() {
               </div>
             </CardContent>
             <CardFooter className="flex gap-2">
-              <Button type="submit" className="w-full">Save Listing</Button>
-              {startupData && <Button variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>}
+              <Button type="submit" className="flex-1" disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                {startupData ? 'Update Startup' : 'Save Listing'}
+              </Button>
+              {startupData && (
+                <Button variant="ghost" onClick={() => setIsEditing(false)}>
+                  Cancel
+                </Button>
+              )}
             </CardFooter>
           </form>
         </Card>
@@ -201,48 +225,51 @@ export default function StartupPage() {
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-2xl">{startupData?.name}</CardTitle>
-                  <p className="text-primary font-medium">{startupData?.industry}</p>
+                  <CardTitle className="text-2xl">{startupData?.name || startup.name}</CardTitle>
+                  <p className="text-primary font-medium">{startupData?.industry || startup.industry}</p>
                 </div>
-                <Badge>{startupData?.stage}</Badge>
+                <Badge>{startupData?.stage || startup.stage}</Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <p className="text-lg">{startupData?.shortDescription}</p>
+              <p className="text-lg">{startupData?.shortDescription || startup.shortDescription}</p>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <MapPin className="h-4 w-4" />
-                  {startupData?.location}
+                  {startupData?.location || startup.location || 'Remote'}
                 </div>
-                {startupData?.website && (
+                {(startupData?.website || startup.website) && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Globe className="h-4 w-4" />
-                    <a href={startupData.website} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                      {startupData.website.replace(/^https?:\/\//, '')}
+                    <a href={startupData?.website || startup.website} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                      {(startupData?.website || startup.website)?.replace(/^https?:\/\//, '')}
                     </a>
                   </div>
                 )}
                 <div className="flex items-center gap-2 text-sm text-muted-foreground font-semibold">
-                  Goal: ${startupData?.fundingNeed}
+                  Goal: ${startupData?.fundingNeed || startup.fundingNeed || '0'}
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {startupData?.tags?.map((tag: string) => (
+                {(startupData?.tags || (startup.tags ? startup.tags.split(',') : []))?.map((tag: string) => (
                   <Badge key={tag} variant="secondary" className="flex items-center gap-1">
                     <Tag className="h-3 w-3" />
-                    {tag}
+                    {tag.trim()}
                   </Badge>
                 ))}
+                {(!startupData?.tags && !startup.tags) && <span className="text-xs text-muted-foreground italic">No tags added</span>}
               </div>
             </CardContent>
-            <CardFooter className="bg-muted/30 p-4 border-t">
-              <Button variant="outline" onClick={() => setIsEditing(true)} className="text-xs">
-                Edit Listing
-              </Button>
-            </CardFooter>
           </Card>
+          
+          <div className="bg-muted/30 rounded-lg p-6 border text-center">
+            <Rocket className="h-8 w-8 text-primary mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Your startup listing is now visible to investors in the ecosystem.
+            </p>
+          </div>
         </div>
       )}
     </div>
