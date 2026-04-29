@@ -46,12 +46,16 @@ service cloud.firestore {
       }
 
       match /interests/{investorId} {
-        // Any signed in user with investor role can create an interest
-        // We assume the caller checks the role, but for rules we simplify
         allow create: if isSignedIn() && request.auth.uid == investorId;
         allow get: if isSignedIn() && (request.auth.uid == investorId || isOwner(startupId));
         allow list: if isOwner(startupId);
       }
+    }
+
+    match /messages/{messageId} {
+      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+      allow get, list: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow update: if isSignedIn() && resource.data.receiverId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
     }
   }
 }

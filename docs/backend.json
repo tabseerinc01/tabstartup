@@ -84,9 +84,9 @@
         "availability": {
           "type": "object",
           "properties": {
-            "openToInvestment": { "type": "boolean" },
-            "hiring": { "type": "boolean" },
-            "coFounder": { "type": "boolean" }
+            "openToInvestment": { "boolean": true },
+            "hiring": { "boolean": true },
+            "coFounder": { "boolean": true }
           }
         },
         "isVerified": {
@@ -196,6 +196,21 @@
         "timestamp": { "type": "string", "format": "date-time" }
       },
       "required": ["startupId", "investorId", "timestamp"]
+    },
+    "Message": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Message",
+      "type": "object",
+      "description": "A private message between users.",
+      "properties": {
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "read": { "type": "boolean", "default": false },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "receiverId", "text", "timestamp"]
     }
   },
   "auth": {
@@ -233,6 +248,14 @@
           "entityName": "Interest",
           "schema": { "$ref": "#/backend/entities/Interest" },
           "description": "Tracks specific investor interest in a startup."
+        }
+      },
+      {
+        "path": "/messages/{messageId}",
+        "definition": {
+          "entityName": "Message",
+          "schema": { "$ref": "#/backend/entities/Message" },
+          "description": "Private messages between users."
         }
       }
     ]

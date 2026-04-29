@@ -31,7 +31,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
-import { doc, collection } from 'firebase/firestore';
+import { doc, collection, query, where, limit, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 
@@ -60,10 +60,31 @@ export default function DashboardOverviewPage() {
     return collection(firestore, 'startups', user.uid, 'interests');
   }, [firestore, user]);
 
+  const unreadMessagesQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return query(
+      collection(firestore, 'messages'),
+      where('receiverId', '==', user.uid),
+      where('read', '==', false)
+    );
+  }, [firestore, user]);
+
+  const latestMessagesQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return query(
+      collection(firestore, 'messages'),
+      where('receiverId', '==', user.uid),
+      orderBy('timestamp', 'desc'),
+      limit(3)
+    );
+  }, [firestore, user]);
+
   const { data: profile, isLoading: isProfileLoading } = useDoc(userRef);
   const { data: startup, isLoading: isStartupLoading } = useDoc(startupRef);
   const { data: views, isLoading: isViewsLoading } = useCollection(viewsQuery);
   const { data: interests, isLoading: isInterestsLoading } = useCollection(interestsQuery);
+  const { data: unreadMessages, isLoading: isUnreadLoading } = useCollection(unreadMessagesQuery);
+  const { data: latestMessages, isLoading: isLatestMessagesLoading } = useCollection(latestMessagesQuery);
 
   if (isUserLoading || isProfileLoading || isStartupLoading) {
     return (
@@ -78,6 +99,7 @@ export default function DashboardOverviewPage() {
   const isFounder = profile?.role === 'founder';
   const viewsCount = views?.length || 0;
   const interestsCount = interests?.length || 0;
+  const unreadCount = unreadMessages?.length || 0;
 
   const getCompleteness = () => {
     if (!profile) return 0;
@@ -107,11 +129,7 @@ export default function DashboardOverviewPage() {
   const activities = [
     { id: 1, type: 'view', text: 'Someone viewed your startup', time: 'Recently', icon: Eye, color: 'text-blue-500' },
     { id: 2, type: 'interest', text: 'An investor expressed interest', time: 'Recently', icon: Users, color: 'text-green-500' },
-    { id: 3, type: 'message', text: 'New message received', time: 'Yesterday', icon: MessageSquare, color: 'text-purple-500' },
-  ];
-
-  const messages = [
-    { id: 1, sender: 'System', text: 'Welcome to TabStartup! Start building your network.', time: '2d ago', avatar: 'https://picsum.photos/seed/sys/40/40' },
+    { id: 3, type: 'message', text: 'New message received', time: 'Recently', icon: MessageSquare, color: 'text-purple-500' },
   ];
 
   return (
@@ -279,8 +297,8 @@ export default function DashboardOverviewPage() {
             <MessageSquare className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">0</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Check your inbox</p>
+            <div className="text-xl font-bold">{isUnreadLoading ? "..." : unreadCount}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">{unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}</p>
           </CardContent>
         </Card>
         <Card className="border-primary/10 shadow-sm">
@@ -456,22 +474,43 @@ export default function DashboardOverviewPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
-              {messages.map((message) => (
-                <div key={message.id} className="flex items-start gap-4 group cursor-pointer hover:bg-muted/30 p-2 rounded-lg transition-colors">
-                  <Avatar className="h-10 w-10 border">
-                    <AvatarImage src={message.avatar} alt={message.sender} />
-                    <AvatarFallback>{message.sender.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 space-y-1 overflow-hidden">
-                    <div className="flex justify-between items-center">
-                      <p className="text-sm font-bold leading-none">{message.sender}</p>
-                      <p className="text-[10px] text-muted-foreground">{message.time}</p>
+              {isLatestMessagesLoading ? (
+                <div className="flex justify-center p-4"><Loader2 className="h-4 w-4 animate-spin" /></div>
+              ) : latestMessages && latestMessages.length > 0 ? (
+                latestMessages.map((message) => (
+                  <div key={message.id} className="flex items-start gap-4 group cursor-pointer hover:bg-muted/30 p-2 rounded-lg transition-colors">
+                    <Avatar className="h-10 w-10 border">
+                      <AvatarImage src={`https://picsum.photos/seed/${message.senderId}/40/40`} alt={message.senderName} />
+                      <AvatarFallback>{message.senderName?.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 space-y-1 overflow-hidden">
+                      <div className="flex justify-between items-center">
+                        <p className={`text-sm font-bold leading-none ${!message.read ? 'text-primary' : ''}`}>
+                          {message.senderName}
+                          {!message.read && <span className="ml-2 inline-block h-2 w-2 rounded-full bg-primary" />}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {message.timestamp?.toDate ? message.timestamp.toDate().toLocaleDateString() : 'Recently'}
+                        </p>
+                      </div>
+                      <p className={`text-xs truncate ${!message.read ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
+                        {message.text}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{message.text}</p>
                   </div>
+                ))
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <MessageSquare className="h-12 w-12 text-muted-foreground opacity-20 mb-2" />
+                  <p className="text-sm text-muted-foreground italic">No messages yet.</p>
                 </div>
-              ))}
+              )}
             </div>
+            {latestMessages && latestMessages.length > 0 && (
+              <Button variant="outline" size="sm" className="w-full mt-4" asChild>
+                <Link href="#">View All Messages</Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
