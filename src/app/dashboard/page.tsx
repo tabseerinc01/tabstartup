@@ -23,7 +23,8 @@ import {
   TrendingUp,
   FileText,
   Clock,
-  Mail
+  Mail,
+  Plus
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -135,6 +136,34 @@ export default function DashboardOverviewPage() {
             <p className="text-xs text-muted-foreground mt-2">
               {completeness < 100 ? "Add experience and vision to attract investors." : "Your profile is investor-ready!"}
             </p>
+            
+            {completeness < 100 && (
+              <div className="mt-4 pt-4 border-t border-dashed space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Suggestions</p>
+                <div className="space-y-2">
+                  {!profile?.bio && (
+                    <Link href="/dashboard/profile" className="flex items-center gap-2 text-[11px] text-primary hover:underline group">
+                      <Plus className="h-3 w-3 group-hover:scale-110 transition-transform" /> Add professional bio
+                    </Link>
+                  )}
+                  {!profile?.imageUrl && (
+                    <Link href="/dashboard/profile" className="flex items-center gap-2 text-[11px] text-primary hover:underline group">
+                      <Plus className="h-3 w-3 group-hover:scale-110 transition-transform" /> Upload profile photo
+                    </Link>
+                  )}
+                  {(!profile?.experience || profile.experience.length === 0) && (
+                    <Link href="/dashboard/profile" className="flex items-center gap-2 text-[11px] text-primary hover:underline group">
+                      <Plus className="h-3 w-3 group-hover:scale-110 transition-transform" /> Add work experience
+                    </Link>
+                  )}
+                  {isFounder && !startup?.pitchDeckUrl && (
+                    <Link href="/dashboard/fundraising" className="flex items-center gap-2 text-[11px] text-primary hover:underline group">
+                      <Plus className="h-3 w-3 group-hover:scale-110 transition-transform" /> Upload pitch deck
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
         
