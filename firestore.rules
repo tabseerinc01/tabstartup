@@ -3,27 +3,11 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * TABSTARTUP / TABEDGE SECURITY RULES
+     * TABSTARTUP SECURITY RULES
      * 
      * Core Philosophy: 
-     * This ruleset enforces a strict hierarchical ownership model. Access is primarily 
-     * determined by the user's placement within the document path (/userProfiles/{userId}).
-     * 
-     * Data Structure:
-     * All application data is nested under the UserProfile document. The hierarchy is:
-     * /userProfiles/{userId}/accounts/{accountId}/[subcollections]
-     * 
-     * Key Security Decisions:
-     * 1. Authorization Independence: We rely on the userId and accountId present in the 
-     *    document paths to verify ownership, avoiding expensive get() calls.
-     * 2. Denormalization: Critical IDs (ownerId, accountId, invoiceId) are expected to 
-     *    be present on the documents to ensure relational integrity between the path 
-     *    and the data.
-     * 3. Public Sharing: Invoices and Payment Links allow for public 'get' requests 
-     *    to support unauthenticated customer views, while 'list' and 'write' operations 
-     *    remain strictly owner-only.
-     * 4. Prototyping Flexibility: We enforce WHO can access data and ensure path 
-     *    consistency, but we do not enforce strict data schemas or types for non-relational fields.
+     * Enforces ownership for sensitive data while allowing authenticated users to 
+     * discover each other through profiles and startup listings.
      */
 
     // --- Helper Functions ---
@@ -56,24 +40,18 @@ service cloud.firestore {
     // --- Collection Rules ---
 
     /**
-     * @description Rules for user profile documents. Users can only manage their own profile.
-     * @path /userProfiles/{userId}
-     * @allow (create) if auth.uid == userId
-     * @deny (get) if auth.uid != userId
-     * @principle Ownership (Self-Creation) and Relational Integrity.
+     * @description Rules for user profile documents.
+     * @path /users/{userId}
      */
-    match /userProfiles/{userId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidLink('id', userId);
-      allow update: if isExistingOwner(userId) && isImmutable('id');
+    match /users/{userId} {
+      // Allow discovery: Any signed-in user can view profiles
+      allow get, list: if isSignedIn();
+      allow create: if isOwner(userId) && isValidLink('uid', userId);
+      allow update: if isExistingOwner(userId) && isImmutable('uid');
       allow delete: if isExistingOwner(userId);
 
       /**
-       * @description Rules for accounts. Must be nested under the owner's profile.
-       * @path /userProfiles/{userId}/accounts/{accountId}
-       * @allow (update) if auth.uid == userId and account already exists.
-       * @deny (create) if data.ownerId != userId.
-       * @principle Hierarchical Ownership and Path-to-Data consistency.
+       * @description Financial accounts nested under user profiles for Treasury services.
        */
       match /accounts/{accountId} {
         allow get, list: if isOwner(userId);
@@ -81,29 +59,15 @@ service cloud.firestore {
         allow update: if isExistingOwner(userId) && isImmutable('ownerId');
         allow delete: if isExistingOwner(userId);
 
-        /**
-         * @description Invoices for an account. Supports public viewing for customers.
-         * @path /userProfiles/{userId}/accounts/{accountId}/invoices/{invoiceId}
-         * @allow (get) if true (to allow customer viewing via shared link).
-         * @deny (list) if auth.uid != userId.
-         * @principle Public Read with Owner-Only Writes.
-         */
         match /invoices/{invoiceId} {
-          // Public get is allowed to support shareable invoice links
-          allow get: if true;
+          allow get: if true; // Public for shared links
           allow list: if isOwner(userId);
           allow create: if isOwner(userId) && isValidLink('accountId', accountId);
           allow update: if isExistingOwner(userId) && isImmutable('accountId');
           allow delete: if isExistingOwner(userId);
 
-          /**
-           * @description Line items for a specific invoice.
-           * @path /userProfiles/{userId}/accounts/{accountId}/invoices/{invoiceId}/lineItems/{lineItemId}
-           * @allow (list) if auth.uid == userId.
-           * @principle Relational Integrity via path nesting.
-           */
           match /lineItems/{lineItemId} {
-            allow get: if true; // Matches parent invoice accessibility
+            allow get: if true;
             allow list: if isOwner(userId);
             allow create: if isOwner(userId) && isValidLink('invoiceId', invoiceId);
             allow update: if isExistingOwner(userId) && isImmutable('invoiceId');
@@ -111,13 +75,6 @@ service cloud.firestore {
           }
         }
 
-        /**
-         * @description Payment links for an account. Supports public viewing for customers.
-         * @path /userProfiles/{userId}/accounts/{accountId}/paymentLinks/{paymentLinkId}
-         * @allow (get) if true.
-         * @deny (create) if auth.uid != userId.
-         * @principle Public Read with Owner-Only Writes.
-         */
         match /paymentLinks/{paymentLinkId} {
           allow get: if true;
           allow list: if isOwner(userId);
@@ -126,13 +83,6 @@ service cloud.firestore {
           allow delete: if isExistingOwner(userId);
         }
 
-        /**
-         * @description Financial transactions associated with an account. Private.
-         * @path /userProfiles/{userId}/accounts/{accountId}/transactions/{transactionId}
-         * @allow (list) if auth.uid == userId.
-         * @deny (get) if auth.uid != userId.
-         * @principle Strict path-based ownership for sensitive financial data.
-         */
         match /transactions/{transactionId} {
           allow get, list: if isOwner(userId);
           allow create: if isOwner(userId) && isValidLink('accountId', accountId);
@@ -140,12 +90,6 @@ service cloud.firestore {
           allow delete: if isExistingOwner(userId);
         }
 
-        /**
-         * @description Withdrawal requests from an account. Private.
-         * @path /userProfiles/{userId}/accounts/{accountId}/withdrawals/{withdrawalId}
-         * @allow (create) if auth.uid == userId.
-         * @principle Strict path-based ownership.
-         */
         match /withdrawals/{withdrawalId} {
           allow get, list: if isOwner(userId);
           allow create: if isOwner(userId) && isValidLink('accountId', accountId);
@@ -153,12 +97,6 @@ service cloud.firestore {
           allow delete: if isExistingOwner(userId);
         }
 
-        /**
-         * @description Treasury bank accounts issued to a specific account. Private.
-         * @path /userProfiles/{userId}/accounts/{accountId}/treasuryBankAccounts/{bankAccountId}
-         * @allow (get) if auth.uid == userId.
-         * @principle Strict path-based ownership for sensitive banking info.
-         */
         match /treasuryBankAccounts/{bankAccountId} {
           allow get, list: if isOwner(userId);
           allow create: if isOwner(userId) && isValidLink('accountId', accountId);
@@ -166,12 +104,6 @@ service cloud.firestore {
           allow delete: if isExistingOwner(userId);
         }
 
-        /**
-         * @description Treasury cards issued to a specific account. Private.
-         * @path /userProfiles/{userId}/accounts/{accountId}/treasuryCards/{cardId}
-         * @allow (get) if auth.uid == userId.
-         * @principle Strict path-based ownership for sensitive card data.
-         */
         match /treasuryCards/{cardId} {
           allow get, list: if isOwner(userId);
           allow create: if isOwner(userId) && isValidLink('accountId', accountId);
@@ -179,6 +111,18 @@ service cloud.firestore {
           allow delete: if isExistingOwner(userId);
         }
       }
+    }
+
+    /**
+     * @description Startup listings created by founders.
+     * @path /startups/{startupId}
+     */
+    match /startups/{startupId} {
+      // Discovery: Allow any authenticated user to view startups
+      allow get, list: if isSignedIn();
+      allow create: if isOwner(startupId) && isValidLink('ownerUid', startupId);
+      allow update: if isExistingOwner(startupId) && isImmutable('ownerUid');
+      allow delete: if isExistingOwner(startupId);
     }
   }
 }
