@@ -1,8 +1,7 @@
-
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { 
   Home, 
   User, 
@@ -15,6 +14,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
+import { useAuth, initiateSignOut } from '@/firebase';
 
 const menuItems = [
   { href: '/dashboard', label: 'Overview', icon: Home },
@@ -26,6 +26,13 @@ const menuItems = [
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const auth = useAuth();
+
+  const handleLogout = () => {
+    initiateSignOut(auth);
+    router.push('/login');
+  };
 
   return (
     <aside className="hidden md:flex flex-col w-64 border-r bg-background h-screen sticky top-0">
@@ -57,11 +64,13 @@ export function DashboardSidebar() {
       </nav>
 
       <div className="p-4 border-t">
-        <Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground" asChild>
-          <Link href="/login">
-            <LogOut className="h-4 w-4" />
-            Logout
-          </Link>
+        <Button 
+          variant="ghost" 
+          className="w-full justify-start gap-3 text-muted-foreground" 
+          onClick={handleLogout}
+        >
+          <LogOut className="h-4 w-4" />
+          Logout
         </Button>
       </div>
     </aside>
