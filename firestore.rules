@@ -6,8 +6,8 @@ service cloud.firestore {
      * TABSTARTUP SECURITY RULES
      * 
      * Core Philosophy: 
-     * Enforces ownership for sensitive data while allowing authenticated users to 
-     * discover each other through profiles and startup listings.
+     * Allows public discovery of founders and startups while strictly enforcing 
+     * ownership for private data and financial accounts.
      */
 
     // --- Helper Functions ---
@@ -44,14 +44,17 @@ service cloud.firestore {
      * @path /users/{userId}
      */
     match /users/{userId} {
-      // Allow discovery: Any signed-in user can view profiles
-      allow get, list: if isSignedIn();
+      // Public discovery: Allow anyone to view profile summaries
+      allow get, list: if true;
+      
+      // Ownership rules for creating/updating/deleting own profile
       allow create: if isOwner(userId) && isValidLink('uid', userId);
       allow update: if isExistingOwner(userId) && isImmutable('uid');
       allow delete: if isExistingOwner(userId);
 
       /**
        * @description Financial accounts nested under user profiles for Treasury services.
+       * These are strictly private to the owner.
        */
       match /accounts/{accountId} {
         allow get, list: if isOwner(userId);
@@ -118,8 +121,10 @@ service cloud.firestore {
      * @path /startups/{startupId}
      */
     match /startups/{startupId} {
-      // Discovery: Allow any authenticated user to view startups
-      allow get, list: if isSignedIn();
+      // Public discovery: Allow anyone to view startups
+      allow get, list: if true;
+      
+      // Ownership rules for management
       allow create: if isOwner(startupId) && isValidLink('ownerUid', startupId);
       allow update: if isExistingOwner(startupId) && isImmutable('ownerUid');
       allow delete: if isExistingOwner(startupId);
