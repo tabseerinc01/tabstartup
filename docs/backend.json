@@ -1,785 +1,135 @@
+
 {
   "entities": {
-    "UserProfile": {
+    "User": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "UserProfile",
+      "title": "User",
       "type": "object",
-      "description": "Represents an individual user's profile within TabEdge, linked to an external authentication system.",
+      "description": "Represents an individual user profile (Founder, Mentor, or Investor) in TabStartup.",
       "properties": {
-        "id": {
+        "uid": {
           "type": "string",
-          "description": "Unique identifier for the UserProfile entity, typically linked to an external authentication system's user ID."
+          "description": "Unique identifier matching the Firebase Auth UID."
+        },
+        "fullName": {
+          "type": "string"
         },
         "email": {
           "type": "string",
-          "description": "Primary email address of the user.",
           "format": "email"
         },
-        "fullName": {
+        "role": {
           "type": "string",
-          "description": "The full name of the user."
+          "enum": ["founder", "mentor", "investor"]
+        },
+        "headline": {
+          "type": "string"
+        },
+        "bio": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string",
+          "enum": ["Idea", "Early", "Growth", "Scaling", ""]
+        },
+        "skills": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "lookingFor": {
+          "type": "string"
+        },
+        "preferredStage": {
+          "type": "string"
+        },
+        "investorNote": {
+          "type": "string"
+        },
+        "isOpenToPitches": {
+          "type": "boolean"
         },
         "createdAt": {
           "type": "string",
-          "description": "Timestamp when the user profile was created.",
           "format": "date-time"
         },
         "updatedAt": {
           "type": "string",
-          "description": "Timestamp when the user profile was last updated.",
           "format": "date-time"
         }
       },
-      "required": [
-        "id",
-        "email",
-        "fullName",
-        "createdAt",
-        "updatedAt"
-      ]
+      "required": ["uid", "fullName", "email", "role", "createdAt", "updatedAt"]
     },
-    "Account": {
+    "Startup": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Account",
+      "title": "Startup",
       "type": "object",
-      "description": "Represents a personal or business account created by a user within the TabEdge platform, under which financial activities are managed.",
+      "description": "Represents a startup listing created by a Founder.",
       "properties": {
-        "id": {
+        "ownerUid": {
           "type": "string",
-          "description": "Unique identifier for the Account entity."
-        },
-        "ownerId": {
-          "type": "string",
-          "description": "Reference to the UserProfile that owns this account. (Relationship: UserProfile 1:N Account)"
-        },
-        "accountType": {
-          "type": "string",
-          "description": "The type of the account (e.g., 'personal', 'business')."
+          "description": "The UID of the founder who owns this startup."
         },
         "name": {
-          "type": "string",
-          "description": "A display name for the account (e.g., 'John Doe Personal', 'Acme Corp')."
+          "type": "string"
         },
-        "businessName": {
-          "type": "string",
-          "description": "The official business name if the accountType is 'business'."
+        "shortDescription": {
+          "type": "string"
         },
-        "taxId": {
-          "type": "string",
-          "description": "Tax identification number for business accounts (e.g., EIN, VAT ID)."
+        "industry": {
+          "type": "string"
         },
-        "addressStreet": {
-          "type": "string",
-          "description": "The street address for the account."
+        "stage": {
+          "type": "string"
         },
-        "addressCity": {
-          "type": "string",
-          "description": "The city for the account's address."
+        "fundingNeed": {
+          "type": "string"
         },
-        "addressState": {
-          "type": "string",
-          "description": "The state or province for the account's address."
+        "location": {
+          "type": "string"
         },
-        "addressPostalCode": {
-          "type": "string",
-          "description": "The postal code for the account's address."
+        "website": {
+          "type": "string"
         },
-        "addressCountry": {
-          "type": "string",
-          "description": "The country for the account's address."
-        },
-        "contactEmail": {
-          "type": "string",
-          "description": "Primary contact email for this account.",
-          "format": "email"
-        },
-        "contactPhone": {
-          "type": "string",
-          "description": "Contact phone number for this account."
-        },
-        "stripeAccountId": {
-          "type": "string",
-          "description": "ID of the connected Stripe account for payment and treasury services."
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
         },
         "createdAt": {
           "type": "string",
-          "description": "Timestamp when the account was created.",
           "format": "date-time"
         },
         "updatedAt": {
           "type": "string",
-          "description": "Timestamp when the account was last updated.",
           "format": "date-time"
         }
       },
-      "required": [
-        "id",
-        "ownerId",
-        "accountType",
-        "name",
-        "contactEmail",
-        "stripeAccountId",
-        "createdAt",
-        "updatedAt"
-      ]
-    },
-    "Invoice": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Invoice",
-      "type": "object",
-      "description": "Represents an invoice created by an account to request payment from a customer.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Invoice entity."
-        },
-        "accountId": {
-          "type": "string",
-          "description": "Reference to the Account that created this invoice. (Relationship: Account 1:N Invoice)"
-        },
-        "invoiceNumber": {
-          "type": "string",
-          "description": "A unique, user-friendly number for the invoice."
-        },
-        "customerName": {
-          "type": "string",
-          "description": "Name of the customer the invoice is for."
-        },
-        "customerEmail": {
-          "type": "string",
-          "description": "Email of the customer.",
-          "format": "email"
-        },
-        "customerAddressStreet": {
-          "type": "string",
-          "description": "The street address for the customer."
-        },
-        "customerAddressCity": {
-          "type": "string",
-          "description": "The city for the customer's address."
-        },
-        "customerAddressState": {
-          "type": "string",
-          "description": "The state or province for the customer's address."
-        },
-        "customerAddressPostalCode": {
-          "type": "string",
-          "description": "The postal code for the customer's address."
-        },
-        "customerAddressCountry": {
-          "type": "string",
-          "description": "The country for the customer's address."
-        },
-        "issueDate": {
-          "type": "string",
-          "description": "Date when the invoice was issued.",
-          "format": "date-time"
-        },
-        "dueDate": {
-          "type": "string",
-          "description": "Date when the invoice is due.",
-          "format": "date-time"
-        },
-        "currency": {
-          "type": "string",
-          "description": "Currency code for the invoice amount (e.g., 'USD', 'BDT')."
-        },
-        "subtotalAmount": {
-          "type": "number",
-          "description": "Sum of all line item totals before tax and discount."
-        },
-        "taxAmount": {
-          "type": "number",
-          "description": "Total tax applied to the invoice."
-        },
-        "discountAmount": {
-          "type": "number",
-          "description": "Total discount applied to the invoice."
-        },
-        "totalAmount": {
-          "type": "number",
-          "description": "Final total amount due for the invoice."
-        },
-        "status": {
-          "type": "string",
-          "description": "Current status of the invoice (e.g., 'draft', 'sent', 'viewed', 'partially_paid', 'paid', 'overdue', 'void')."
-        },
-        "notes": {
-          "type": "string",
-          "description": "Additional notes or instructions for the customer."
-        },
-        "paymentTerms": {
-          "type": "string",
-          "description": "Terms and conditions for payment."
-        },
-        "publicViewUrl": {
-          "type": "string",
-          "description": "Public URL for customers to view and pay the invoice without logging in.",
-          "format": "uri"
-        },
-        "pdfDownloadUrl": {
-          "type": "string",
-          "description": "URL to download the invoice as a PDF.",
-          "format": "uri"
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the invoice was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the invoice was last updated.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "accountId",
-        "invoiceNumber",
-        "customerName",
-        "customerEmail",
-        "issueDate",
-        "dueDate",
-        "currency",
-        "totalAmount",
-        "status",
-        "publicViewUrl",
-        "createdAt",
-        "updatedAt"
-      ]
-    },
-    "LineItem": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "LineItem",
-      "type": "object",
-      "description": "Represents a single item or service included in an invoice.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the LineItem entity."
-        },
-        "invoiceId": {
-          "type": "string",
-          "description": "Reference to the Invoice this line item belongs to. (Relationship: Invoice 1:N LineItem)"
-        },
-        "description": {
-          "type": "string",
-          "description": "Description of the item or service."
-        },
-        "quantity": {
-          "type": "number",
-          "description": "The quantity of the item or service."
-        },
-        "unitPrice": {
-          "type": "number",
-          "description": "The price per unit of the item or service."
-        },
-        "total": {
-          "type": "number",
-          "description": "The total price for this line item (quantity * unitPrice)."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the line item was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the line item was last updated.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "invoiceId",
-        "description",
-        "quantity",
-        "unitPrice",
-        "total",
-        "createdAt",
-        "updatedAt"
-      ]
-    },
-    "PaymentLink": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "PaymentLink",
-      "type": "object",
-      "description": "Represents a shareable payment link generated by an account to collect payments for specific items or services.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the PaymentLink entity."
-        },
-        "accountId": {
-          "type": "string",
-          "description": "Reference to the Account that created this payment link. (Relationship: Account 1:N PaymentLink)"
-        },
-        "name": {
-          "type": "string",
-          "description": "A descriptive name for the payment link (e.g., 'Web Design Service', 'Donation Link')."
-        },
-        "description": {
-          "type": "string",
-          "description": "A detailed description of what the payment link is for."
-        },
-        "amount": {
-          "type": "number",
-          "description": "The fixed amount to be collected via this payment link."
-        },
-        "currency": {
-          "type": "string",
-          "description": "Currency code for the payment link amount."
-        },
-        "status": {
-          "type": "string",
-          "description": "Current status of the payment link (e.g., 'active', 'inactive', 'expired')."
-        },
-        "publicUrl": {
-          "type": "string",
-          "description": "Public URL for customers to pay via this link without logging in.",
-          "format": "uri"
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the payment link was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the payment link was last updated.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "accountId",
-        "name",
-        "amount",
-        "currency",
-        "status",
-        "publicUrl",
-        "createdAt",
-        "updatedAt"
-      ]
-    },
-    "Transaction": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Transaction",
-      "type": "object",
-      "description": "Represents a financial transaction (e.g., payment received, withdrawal, fee) associated with an account.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Transaction entity."
-        },
-        "accountId": {
-          "type": "string",
-          "description": "Reference to the Account this transaction belongs to. (Relationship: Account 1:N Transaction)"
-        },
-        "stripeTransactionId": {
-          "type": "string",
-          "description": "The identifier for this transaction in Stripe's system."
-        },
-        "type": {
-          "type": "string",
-          "description": "Type of financial movement (e.g., 'payment_in', 'withdrawal', 'fee', 'refund')."
-        },
-        "status": {
-          "type": "string",
-          "description": "Current status of the transaction (e.g., 'pending', 'succeeded', 'failed', 'refunded', 'partially_refunded')."
-        },
-        "amount": {
-          "type": "number",
-          "description": "The gross amount of the transaction."
-        },
-        "currency": {
-          "type": "string",
-          "description": "Currency code of the transaction amount."
-        },
-        "description": {
-          "type": "string",
-          "description": "A brief description of the transaction."
-        },
-        "sourceEntityId": {
-          "type": "string",
-          "description": "Reference to the entity (Invoice, PaymentLink, Withdrawal) that initiated this transaction. (Relationship: Invoice/PaymentLink/Withdrawal 1:N Transaction)"
-        },
-        "sourceEntityType": {
-          "type": "string",
-          "description": "Type of the source entity (e.g., 'invoice', 'payment_link', 'withdrawal')."
-        },
-        "customerName": {
-          "type": "string",
-          "description": "Name of the customer for incoming payments."
-        },
-        "customerEmail": {
-          "type": "string",
-          "description": "Email of the customer for incoming payments.",
-          "format": "email"
-        },
-        "transactionDate": {
-          "type": "string",
-          "description": "Date and time when the transaction occurred.",
-          "format": "date-time"
-        },
-        "feeAmount": {
-          "type": "number",
-          "description": "Amount of fees deducted for this transaction."
-        },
-        "netAmount": {
-          "type": "number",
-          "description": "The net amount after fees for this transaction."
-        },
-        "paymentMethod": {
-          "type": "string",
-          "description": "Method used for payment (e.g., 'card', 'bank_transfer', 'crypto')."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the transaction record was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the transaction record was last updated.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "accountId",
-        "stripeTransactionId",
-        "type",
-        "status",
-        "amount",
-        "currency",
-        "description",
-        "sourceEntityId",
-        "sourceEntityType",
-        "transactionDate",
-        "feeAmount",
-        "netAmount",
-        "createdAt",
-        "updatedAt"
-      ]
-    },
-    "Withdrawal": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Withdrawal",
-      "type": "object",
-      "description": "Represents a request by an account to withdraw collected funds to a linked treasury bank account or card.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Withdrawal entity."
-        },
-        "accountId": {
-          "type": "string",
-          "description": "Reference to the Account requesting the withdrawal. (Relationship: Account 1:N Withdrawal)"
-        },
-        "amount": {
-          "type": "number",
-          "description": "The amount requested for withdrawal."
-        },
-        "currency": {
-          "type": "string",
-          "description": "Currency code of the withdrawal amount."
-        },
-        "destinationFinancialAccountId": {
-          "type": "string",
-          "description": "Reference to the TreasuryBankAccount ID where funds are to be sent. (Relationship: TreasuryBankAccount 1:N Withdrawal)"
-        },
-        "status": {
-          "type": "string",
-          "description": "Current status of the withdrawal (e.g., 'pending', 'processing', 'completed', 'failed', 'canceled')."
-        },
-        "stripePayoutId": {
-          "type": "string",
-          "description": "The identifier for this payout in Stripe's system."
-        },
-        "transactionId": {
-          "type": "string",
-          "description": "Reference to the Transaction entity created for this withdrawal. (Relationship: Withdrawal 1:1 Transaction)"
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the withdrawal request was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the withdrawal request was last updated.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "accountId",
-        "amount",
-        "currency",
-        "destinationFinancialAccountId",
-        "status",
-        "stripePayoutId",
-        "transactionId",
-        "createdAt",
-        "updatedAt"
-      ]
-    },
-    "TreasuryBankAccount": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "TreasuryBankAccount",
-      "type": "object",
-      "description": "Represents a virtual bank account issued through Stripe Treasury for a TabEdge account.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the TreasuryBankAccount entity."
-        },
-        "accountId": {
-          "type": "string",
-          "description": "Reference to the Account that owns this treasury bank account. (Relationship: Account 1:N TreasuryBankAccount)"
-        },
-        "stripeFinancialAccountId": {
-          "type": "string",
-          "description": "The identifier for the financial account in Stripe's system."
-        },
-        "accountNumber": {
-          "type": "string",
-          "description": "The bank account number."
-        },
-        "routingNumber": {
-          "type": "string",
-          "description": "The routing number for the bank account."
-        },
-        "bankName": {
-          "type": "string",
-          "description": "The name of the bank (e.g., 'Stripe Treasury')."
-        },
-        "currency": {
-          "type": "string",
-          "description": "Currency supported by this bank account."
-        },
-        "status": {
-          "type": "string",
-          "description": "Current status of the bank account (e.g., 'active', 'inactive', 'closed')."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the treasury bank account was created.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the treasury bank account was last updated.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "accountId",
-        "stripeFinancialAccountId",
-        "accountNumber",
-        "routingNumber",
-        "bankName",
-        "currency",
-        "status",
-        "createdAt",
-        "updatedAt"
-      ]
-    },
-    "TreasuryCard": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "TreasuryCard",
-      "type": "object",
-      "description": "Represents a virtual or physical card issued through Stripe Treasury for a TabEdge account.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the TreasuryCard entity."
-        },
-        "accountId": {
-          "type": "string",
-          "description": "Reference to the Account that owns this treasury card. (Relationship: Account 1:N TreasuryCard)"
-        },
-        "stripeCardId": {
-          "type": "string",
-          "description": "The identifier for the card in Stripe's issuing system."
-        },
-        "last4": {
-          "type": "string",
-          "description": "The last four digits of the card number."
-        },
-        "cardType": {
-          "type": "string",
-          "description": "Type of card (e.g., 'virtual', 'physical')."
-        },
-        "brand": {
-          "type": "string",
-          "description": "The brand of the card (e.g., 'Visa', 'Mastercard')."
-        },
-        "expirationMonth": {
-          "type": "number",
-          "description": "Month of card expiration."
-        },
-        "expirationYear": {
-          "type": "number",
-          "description": "Year of card expiration."
-        },
-        "status": {
-          "type": "string",
-          "description": "Current status of the card (e.g., 'active', 'inactive', 'canceled', 'suspended')."
-        },
-        "billingAddressStreet": {
-          "type": "string",
-          "description": "The street address for the card's billing address."
-        },
-        "billingAddressCity": {
-          "type": "string",
-          "description": "The city for the card's billing address."
-        },
-        "billingAddressState": {
-          "type": "string",
-          "description": "The state or province for the card's billing address."
-        },
-        "billingAddressPostalCode": {
-          "type": "string",
-          "description": "The postal code for the card's billing address."
-        },
-        "billingAddressCountry": {
-          "type": "string",
-          "description": "The country for the card's billing address."
-        },
-        "currency": {
-          "type": "string",
-          "description": "Currency for transactions with this card."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when the treasury card was issued.",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "description": "Timestamp when the treasury card was last updated.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "accountId",
-        "stripeCardId",
-        "last4",
-        "cardType",
-        "brand",
-        "expirationMonth",
-        "expirationYear",
-        "status",
-        "currency",
-        "createdAt",
-        "updatedAt"
-      ]
+      "required": ["ownerUid", "name", "createdAt", "updatedAt"]
     }
   },
   "auth": {
-    "providers": [
-      "password",
-      "anonymous"
-    ]
+    "providers": ["password", "anonymous"]
   },
   "firestore": {
     "structure": [
       {
-        "path": "/userProfiles/{userId}",
+        "path": "/users/{userId}",
         "definition": {
-          "entityName": "UserProfile",
-          "schema": {
-            "$ref": "#/backend/entities/UserProfile"
-          },
-          "description": "Stores user profile information, uniquely identified by their Firebase Authentication UID. The 'id' field within the document must match the '{userId}' in the path, ensuring direct ownership and authorization independence."
+          "entityName": "User",
+          "schema": { "$ref": "#/backend/entities/User" },
+          "description": "Main user profile collection. Stores personal info and roles."
         }
       },
       {
-        "path": "/userProfiles/{userId}/accounts/{accountId}",
+        "path": "/startups/{startupId}",
         "definition": {
-          "entityName": "Account",
-          "schema": {
-            "$ref": "#/backend/entities/Account"
-          },
-          "description": "Represents a user's personal or business account. Nested under the owning user's profile. The 'ownerId' field within the document must match the '{userId}' in the path, ensuring authorization independence."
-        }
-      },
-      {
-        "path": "/userProfiles/{userId}/accounts/{accountId}/invoices/{invoiceId}",
-        "definition": {
-          "entityName": "Invoice",
-          "schema": {
-            "$ref": "#/backend/entities/Invoice"
-          },
-          "description": "Invoices created by a specific account. Nested under the respective account. The 'accountId' field within the document must match the '{accountId}' in the path, providing authorization independence and enabling QAPs for listing invoices for an account. Supports public read-only access for individual documents via 'publicViewUrl' field."
-        }
-      },
-      {
-        "path": "/userProfiles/{userId}/accounts/{accountId}/invoices/{invoiceId}/lineItems/{lineItemId}",
-        "definition": {
-          "entityName": "LineItem",
-          "schema": {
-            "$ref": "#/backend/entities/LineItem"
-          },
-          "description": "Individual line items associated with a specific invoice. Nested under the invoice. The 'invoiceId' field within the document must match the '{invoiceId}' in the path for authorization independence."
-        }
-      },
-      {
-        "path": "/userProfiles/{userId}/accounts/{accountId}/paymentLinks/{paymentLinkId}",
-        "definition": {
-          "entityName": "PaymentLink",
-          "schema": {
-            "$ref": "#/backend/entities/PaymentLink"
-          },
-          "description": "Payment links generated by a specific account. Nested under the respective account. The 'accountId' field within the document must match the '{accountId}' in the path, providing authorization independence and enabling QAPs for listing payment links for an account. Supports public read-only access for individual documents via 'publicUrl' field."
-        }
-      },
-      {
-        "path": "/userProfiles/{userId}/accounts/{accountId}/transactions/{transactionId}",
-        "definition": {
-          "entityName": "Transaction",
-          "schema": {
-            "$ref": "#/backend/entities/Transaction"
-          },
-          "description": "Financial transactions associated with a specific account. Nested under the respective account. The 'accountId' field within the document must match the '{accountId}' in the path, providing authorization independence and enabling QAPs for listing transactions for an account."
-        }
-      },
-      {
-        "path": "/userProfiles/{userId}/accounts/{accountId}/withdrawals/{withdrawalId}",
-        "definition": {
-          "entityName": "Withdrawal",
-          "schema": {
-            "$ref": "#/backend/entities/Withdrawal"
-          },
-          "description": "Withdrawal requests made from a specific account. Nested under the respective account. The 'accountId' field within the document must match the '{accountId}' in the path, providing authorization independence and enabling QAPs for listing withdrawals for an account."
-        }
-      },
-      {
-        "path": "/userProfiles/{userId}/accounts/{accountId}/treasuryBankAccounts/{bankAccountId}",
-        "definition": {
-          "entityName": "TreasuryBankAccount",
-          "schema": {
-            "$ref": "#/backend/entities/TreasuryBankAccount"
-          },
-          "description": "Virtual bank accounts issued via Stripe Treasury for a specific account. Nested under the respective account. The 'accountId' field within the document must match the '{accountId}' in the path, providing authorization independence and enabling QAPs for listing bank accounts for an account."
-        }
-      },
-      {
-        "path": "/userProfiles/{userId}/accounts/{accountId}/treasuryCards/{cardId}",
-        "definition": {
-          "entityName": "TreasuryCard",
-          "schema": {
-            "$ref": "#/backend/entities/TreasuryCard"
-          },
-          "description": "Virtual or physical cards issued via Stripe Treasury for a specific account. Nested under the respective account. The 'accountId' field within the document must match the '{accountId}' in the path, providing authorization independence and enabling QAPs for listing cards for an account."
+          "entityName": "Startup",
+          "schema": { "$ref": "#/backend/entities/Startup" },
+          "description": "Startup listings. Each founder has one startup, where startupId is the ownerUid."
         }
       }
-    ],
-    "reasoning": "The Firestore structure for TabEdge is designed to prioritize security, scalability, and debuggability, strictly adhering to the core design principles and strategy mandates. The primary strategy employed is **Authorization Independence via Denormalization** and **Structural Segregation**, ensuring that security rules are simple, robust, and easily debuggable.\n\n**Authorization Independence (CRITICAL):**\nThis design achieves authorization independence by consistently using path-based ownership and denormalizing parent IDs into child documents. For instance, `Account` documents are stored under `/userProfiles/{userId}/accounts/{accountId}`, where `userId` is the Firebase Auth UID. Each `Account` document explicitly contains an `ownerId` field that matches the `{userId}` from its parent path. Similarly, all subsequent subcollections like `Invoices`, `PaymentLinks`, `Transactions`, `Withdrawals`, `TreasuryBankAccounts`, and `TreasuryCards` are nested under `/userProfiles/{userId}/accounts/{accountId}/...`. Each document in these subcollections explicitly includes an `accountId` field that matches the `{accountId}` from its parent path.\n\nThis nesting and denormalization eliminate the need for `get()` calls in Firestore Security Rules to determine ownership. For example, to check if a user can access an invoice, the rule only needs to verify `request.auth.uid == userId` (from the path) and `resource.data.accountId == accountId` (from the path). This makes rules atomic, efficient, and significantly easier to write and debug, as authorization logic is self-contained within the document's path and its own fields.\n\n**QAPs (Rules are not Filters):**\nThe structure inherently supports Query-Aware Permissions (QAPs) by utilizing hierarchical paths for user-owned data and denormalized IDs. When a user queries for their accounts (`/userProfiles/{userId}/accounts`), the security rule `allow list: if request.auth.uid == userId;` naturally constrains the query results to only the accounts owned by the authenticated user. Firestore ensures that any `list` operation on such a collection will only return documents whose path matches the `userId` of the authenticated user, thus preventing unauthorized data leakage through broad queries.\n\nThe same principle applies to all subcollections. A query for `/userProfiles/{userId}/accounts/{accountId}/invoices` with `allow list: if request.auth.uid == userId;` will only return invoices belonging to the specified account, owned by the authenticated user. The denormalized `accountId` within the invoice documents further allows for direct filtering on `accountId` in queries, which aligns perfectly with QAPs. The `status` field for entities like `Invoice` and `PaymentLink` further supports this by allowing status-specific queries (e.g., all 'paid' invoices for an account).\n\nFor the public sharing feature of Invoices and Payment Links (via `publicViewUrl`), the design segregates public access from private list access. Authenticated users access their invoices through their private, path-secured collections. Public viewing for specific documents would be handled by highly restrictive `read` rules on specific document IDs, activated only when a document's `publicViewUrl` and `status` explicitly permit public, unauthenticated access. This prevents broad public `list` operations on the main collections while allowing targeted public reads."
+    ]
   }
 }

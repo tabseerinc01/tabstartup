@@ -1,7 +1,6 @@
 
 'use client';
 
-import { mockFounders } from '@/lib/mock-data';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -9,13 +8,27 @@ import { Badge } from '@/components/ui/badge';
 import { User as UserIcon, Rocket, Target, ArrowRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useUser } from '@/firebase';
+import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
 
 export default function DashboardOverviewPage() {
   const { user, isUserLoading } = useUser();
-  const demoUser = mockFounders[0]; // Ahmed Rafiq (demo fallback)
+  const firestore = useFirestore();
 
-  if (isUserLoading) {
+  const userRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+
+  const startupRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'startups', user.uid);
+  }, [firestore, user]);
+
+  const { data: profile, isLoading: isProfileLoading } = useDoc(userRef);
+  const { data: startup, isLoading: isStartupLoading } = useDoc(startupRef);
+
+  if (isUserLoading || isProfileLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -23,15 +36,20 @@ export default function DashboardOverviewPage() {
     );
   }
 
-  const displayName = user?.email?.split('@')[0] || demoUser.name;
-  const headline = user ? "Welcome back to your workspace." : demoUser.headline;
+  const displayName = profile?.fullName || user?.email?.split('@')[0] || "Founder";
+  const roleDisplay = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : "Founder";
+
+  // Simple completeness calculation
+  const fields = ['headline', 'location', 'stage', 'skills', 'lookingFor'];
+  const filledFields = fields.filter(f => profile && profile[f] && (Array.isArray(profile[f]) ? profile[f].length > 0 : profile[f] !== ''));
+  const completeness = Math.round((filledFields.length / fields.length) * 100);
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Welcome, {displayName}</h1>
         <p className="text-muted-foreground">
-          {user ? `Logged in as ${user.email}` : `Founder (demo) • ${demoUser.headline}`}
+          {roleDisplay} • {user?.email}
         </p>
       </div>
 
@@ -42,10 +60,10 @@ export default function DashboardOverviewPage() {
             <UserIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">60%</div>
-            <Progress value={60} className="mt-2" />
+            <div className="text-2xl font-bold">{completeness}%</div>
+            <Progress value={completeness} className="mt-2" />
             <p className="text-xs text-muted-foreground mt-2">
-              Add your experience to reach 100%.
+              {completeness < 100 ? "Complete your profile to stand out." : "Your profile is fully complete!"}
             </p>
           </CardContent>
         </Card>
@@ -55,12 +73,14 @@ export default function DashboardOverviewPage() {
             <Rocket className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">Draft</div>
+            <div className="text-2xl font-bold">{startup ? "Created" : "Not Listed"}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Startup profile not created yet.
+              {startup ? startup.name : "Pitch your startup to investors."}
             </p>
             <Button size="sm" variant="outline" asChild className="mt-4 w-full">
-              <Link href="/dashboard/startup">Create Startup Listing</Link>
+              <Link href="/dashboard/startup">
+                {startup ? "Manage Startup" : "Create Startup Listing"}
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -93,51 +113,51 @@ export default function DashboardOverviewPage() {
                 <UserIcon className="h-4 w-4 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-semibold">Complete your bio</p>
-                <p className="text-xs text-muted-foreground">Help mentors understand your background better.</p>
+                <p className="text-sm font-semibold">Update your headline</p>
+                <p className="text-xs text-muted-foreground">Summarize what you do in one sentence.</p>
               </div>
               <Button size="sm" variant="ghost" asChild>
                 <Link href="/dashboard/profile">Edit</Link>
               </Button>
             </div>
-            <div className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
-              <div className="bg-primary/10 p-2 rounded-full">
-                <Rocket className="h-4 w-4 text-primary" />
+            {!startup && (
+              <div className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
+                <div className="bg-primary/10 p-2 rounded-full">
+                  <Rocket className="h-4 w-4 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold">List your startup</p>
+                  <p className="text-xs text-muted-foreground">Make your venture discoverable by investors.</p>
+                </div>
+                <Button size="sm" variant="ghost" asChild>
+                  <Link href="/dashboard/startup">Create</Link>
+                </Button>
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold">List your startup</p>
-                <p className="text-xs text-muted-foreground">Make your venture discoverable by investors.</p>
-              </div>
-              <Button size="sm" variant="ghost" asChild>
-                <Link href="/dashboard/startup">Create</Link>
-              </Button>
-            </div>
+            )}
           </CardContent>
         </Card>
         
         <Card className="col-span-1">
           <CardHeader>
-            <CardTitle>My Current Profile</CardTitle>
+            <CardTitle>My Public View</CardTitle>
             <CardDescription>How you appear to others.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-4 mb-4">
               <div className="relative h-16 w-16 rounded-full overflow-hidden bg-muted">
-                <Image src={demoUser.imageUrl} alt={displayName} fill className="object-cover" />
+                <Image src={`https://picsum.photos/seed/${user?.uid || 'user'}/128/128`} alt={displayName} fill className="object-cover" />
               </div>
               <div>
-                <p className="font-bold">{user?.email || demoUser.name}</p>
-                <Badge variant="secondary">{user ? "Active" : demoUser.stage + " Stage"}</Badge>
+                <p className="font-bold">{displayName}</p>
+                <Badge variant="secondary">{profile?.stage || "Early"} Stage</Badge>
               </div>
             </div>
             <p className="text-sm italic text-muted-foreground mb-4">
-              &quot;{user ? "Founder at TabStartup" : demoUser.headline}&quot;
+              &quot;{profile?.headline || "Building amazing things."}&quot;
             </p>
-            {!user && (
-              <div className="flex flex-wrap gap-1">
-                {demoUser.skills.map(s => <Badge key={s} variant="outline" className="text-[10px]">{s}</Badge>)}
-              </div>
-            )}
+            <div className="flex flex-wrap gap-1">
+              {profile?.skills?.map((s: string) => <Badge key={s} variant="outline" className="text-[10px]">{s}</Badge>)}
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -11,7 +11,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth, useUser, initiateEmailSignUp } from '@/firebase';
+import { useAuth, useUser, useFirestore } from '@/firebase';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
 
 export default function SignupPage() {
@@ -19,6 +21,7 @@ export default function SignupPage() {
   const router = useRouter();
   const { toast } = useToast();
   const auth = useAuth();
+  const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   
   const roleParam = searchParams.get('role');
@@ -28,23 +31,46 @@ export default function SignupPage() {
   const [role, setRole] = useState(roleParam || 'founder');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Redirect if already logged in
   useEffect(() => {
     if (user && !isUserLoading) {
       router.push('/dashboard');
     }
   }, [user, isUserLoading, router]);
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     
     try {
-      initiateEmailSignUp(auth, email, password);
-      toast({ 
-        title: "Creating account...", 
-        description: "You will be redirected to your dashboard shortly." 
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const newUser = userCredential.user;
+      
+      await updateProfile(newUser, { displayName: name });
+
+      // Create Firestore User Profile
+      await setDoc(doc(firestore, "users", newUser.uid), {
+        uid: newUser.uid,
+        fullName: name,
+        email: email,
+        role: role,
+        headline: "",
+        bio: "",
+        location: "",
+        stage: "",
+        skills: [],
+        lookingFor: "",
+        preferredStage: "",
+        investorNote: "",
+        isOpenToPitches: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
+
+      toast({ 
+        title: "Account created!", 
+        description: "Welcome to TabStartup." 
+      });
+      router.push('/dashboard');
     } catch (error: any) {
       setIsSubmitting(false);
       toast({ 

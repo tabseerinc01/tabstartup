@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,14 +10,26 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { Globe, MapPin, Tag } from 'lucide-react';
+import { Globe, MapPin, Tag, Loader2, Rocket } from 'lucide-react';
+import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function StartupPage() {
   const { toast } = useToast();
-  const [isCreated, setIsCreated] = useState(false);
+  const { user } = useUser();
+  const firestore = useFirestore();
+
+  const startupRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'startups', user.uid);
+  }, [firestore, user]);
+
+  const { data: startupData, isLoading } = useDoc(startupRef);
+  const [isEditing, setIsEditing] = useState(false);
+
   const [startup, setStartup] = useState({
     name: '',
-    description: '',
+    shortDescription: '',
     industry: '',
     stage: 'Idea',
     fundingNeed: '',
@@ -26,20 +38,66 @@ export default function StartupPage() {
     tags: '',
   });
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (startupData) {
+      setStartup({
+        name: startupData.name || '',
+        shortDescription: startupData.shortDescription || '',
+        industry: startupData.industry || '',
+        stage: startupData.stage || 'Idea',
+        fundingNeed: startupData.fundingNeed || '',
+        location: startupData.location || '',
+        website: startupData.website || '',
+        tags: Array.isArray(startupData.tags) ? startupData.tags.join(', ') : '',
+      });
+      setIsEditing(false);
+    } else {
+      setIsEditing(true);
+    }
+  }, [startupData]);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsCreated(true);
-    toast({
-      title: "Startup Created",
-      description: "Listing updated locally (demo mode).",
-    });
+    if (!user || !firestore) return;
+
+    try {
+      const tagsArray = startup.tags.split(',').map(t => t.trim()).filter(t => t !== '');
+      
+      await setDoc(doc(firestore, 'startups', user.uid), {
+        ...startup,
+        tags: tagsArray,
+        ownerUid: user.uid,
+        updatedAt: serverTimestamp(),
+        createdAt: startupData ? startupData.createdAt : serverTimestamp(),
+      });
+
+      toast({
+        title: "Startup Saved",
+        description: "Your startup profile has been updated.",
+      });
+      setIsEditing(false);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save startup data.",
+      });
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto w-full space-y-8">
       <h1 className="text-3xl font-bold">Startup Listing</h1>
       
-      {!isCreated ? (
+      {isEditing ? (
         <Card>
           <form onSubmit={handleSave}>
             <CardHeader>
@@ -73,8 +131,8 @@ export default function StartupPage() {
                   id="description" 
                   rows={3} 
                   placeholder="What are you building?"
-                  value={startup.description}
-                  onChange={e => setStartup({...startup, description: e.target.value})}
+                  value={startup.shortDescription}
+                  onChange={e => setStartup({...startup, shortDescription: e.target.value})}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -131,8 +189,9 @@ export default function StartupPage() {
                 />
               </div>
             </CardContent>
-            <CardFooter>
-              <Button type="submit" className="w-full">Create Listing</Button>
+            <CardFooter className="flex gap-2">
+              <Button type="submit" className="w-full">Save Listing</Button>
+              {startupData && <Button variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>}
             </CardFooter>
           </form>
         </Card>
@@ -142,40 +201,44 @@ export default function StartupPage() {
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-2xl">{startup.name}</CardTitle>
-                  <p className="text-primary font-medium">{startup.industry}</p>
+                  <CardTitle className="text-2xl">{startupData?.name}</CardTitle>
+                  <p className="text-primary font-medium">{startupData?.industry}</p>
                 </div>
-                <Badge>{startup.stage}</Badge>
+                <Badge>{startupData?.stage}</Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <p className="text-lg">{startup.description}</p>
+              <p className="text-lg">{startupData?.shortDescription}</p>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <MapPin className="h-4 w-4" />
-                  {startup.location}
+                  {startupData?.location}
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Globe className="h-4 w-4" />
-                  {startup.website}
-                </div>
+                {startupData?.website && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Globe className="h-4 w-4" />
+                    <a href={startupData.website} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                      {startupData.website.replace(/^https?:\/\//, '')}
+                    </a>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-sm text-muted-foreground font-semibold">
-                  Goal: ${startup.fundingNeed}
+                  Goal: ${startupData?.fundingNeed}
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {startup.tags.split(',').map(tag => (
+                {startupData?.tags?.map((tag: string) => (
                   <Badge key={tag} variant="secondary" className="flex items-center gap-1">
                     <Tag className="h-3 w-3" />
-                    {tag.trim()}
+                    {tag}
                   </Badge>
                 ))}
               </div>
             </CardContent>
             <CardFooter className="bg-muted/30 p-4 border-t">
-              <Button variant="ghost" onClick={() => setIsCreated(false)} className="text-xs">
+              <Button variant="outline" onClick={() => setIsEditing(true)} className="text-xs">
                 Edit Listing
               </Button>
             </CardFooter>
