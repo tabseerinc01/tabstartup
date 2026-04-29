@@ -29,8 +29,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
+import { doc, collection } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 
@@ -49,8 +49,14 @@ export default function DashboardOverviewPage() {
     return doc(firestore, 'startups', user.uid);
   }, [firestore, user]);
 
+  const viewsQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return collection(firestore, 'startups', user.uid, 'views');
+  }, [firestore, user]);
+
   const { data: profile, isLoading: isProfileLoading } = useDoc(userRef);
   const { data: startup, isLoading: isStartupLoading } = useDoc(startupRef);
+  const { data: views, isLoading: isViewsLoading } = useCollection(viewsQuery);
 
   if (isUserLoading || isProfileLoading || isStartupLoading) {
     return (
@@ -63,6 +69,7 @@ export default function DashboardOverviewPage() {
   const displayName = profile?.fullName || user?.email?.split('@')[0] || "Founder";
   const roleDisplay = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : "Founder";
   const isFounder = profile?.role === 'founder';
+  const viewsCount = views?.length || 0;
 
   const getCompleteness = () => {
     if (!profile) return 0;
@@ -257,8 +264,8 @@ export default function DashboardOverviewPage() {
             <Eye className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">1,284</div>
-            <p className="text-[10px] text-muted-foreground mt-1">+12% from last month</p>
+            <div className="text-xl font-bold">{isViewsLoading ? "..." : viewsCount.toLocaleString()}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Total views tracked</p>
           </CardContent>
         </Card>
         <Card className="border-primary/10 shadow-sm">

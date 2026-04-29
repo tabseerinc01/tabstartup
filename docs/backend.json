@@ -170,6 +170,18 @@
         }
       },
       "required": ["ownerUid", "name", "createdAt", "updatedAt"]
+    },
+    "View": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "View",
+      "type": "object",
+      "description": "Tracks a single view of a startup profile.",
+      "properties": {
+        "startupId": { "type": "string" },
+        "viewerId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["startupId", "timestamp"]
     }
   },
   "auth": {
@@ -191,6 +203,14 @@
           "entityName": "Startup",
           "schema": { "$ref": "#/backend/entities/Startup" },
           "description": "Startup listings. Each founder has one startup, where startupId is the ownerUid."
+        }
+      },
+      {
+        "path": "/startups/{startupId}/views/{viewId}",
+        "definition": {
+          "entityName": "View",
+          "schema": { "$ref": "#/backend/entities/View" },
+          "description": "Tracks views for a specific startup."
         }
       }
     ]

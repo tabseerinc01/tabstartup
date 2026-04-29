@@ -1,61 +1,38 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
      * TABSTARTUP SECURITY RULES
-     * 
-     * Core Philosophy: 
-     * Allows public discovery of founders and startups while strictly enforcing 
-     * ownership for private data and financial accounts.
      */
 
-    // --- Helper Functions ---
-
-    /** @description Checks if the request is from an authenticated user. */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /** @description Checks if the authenticated user matches the provided userId. */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    /** @description Verifies ownership and ensures the document exists for updates/deletes. */
     function isExistingOwner(userId) {
       return resource != null && isOwner(userId);
     }
 
-    /** @description Validates that a field in the incoming data matches a specific value. */
     function isValidLink(field, value) {
       return request.resource.data[field] == value;
     }
 
-    /** @description Ensures a field remains unchanged during an update. */
     function isImmutable(field) {
       return request.resource.data[field] == resource.data[field];
     }
 
-    // --- Collection Rules ---
-
-    /**
-     * @description Rules for user profile documents.
-     * @path /users/{userId}
-     */
     match /users/{userId} {
-      // Public discovery: Allow anyone to view profile summaries
       allow get, list: if true;
-      
-      // Ownership rules for creating/updating/deleting own profile
       allow create: if isOwner(userId) && isValidLink('uid', userId);
       allow update: if isExistingOwner(userId) && isImmutable('uid');
       allow delete: if isExistingOwner(userId);
 
-      /**
-       * @description Financial accounts nested under user profiles for Treasury services.
-       * These are strictly private to the owner.
-       */
       match /accounts/{accountId} {
         allow get, list: if isOwner(userId);
         allow create: if isOwner(userId) && isValidLink('ownerId', userId);
@@ -63,19 +40,11 @@ service cloud.firestore {
         allow delete: if isExistingOwner(userId);
 
         match /invoices/{invoiceId} {
-          allow get: if true; // Public for shared links
+          allow get: if true;
           allow list: if isOwner(userId);
           allow create: if isOwner(userId) && isValidLink('accountId', accountId);
           allow update: if isExistingOwner(userId) && isImmutable('accountId');
           allow delete: if isExistingOwner(userId);
-
-          match /lineItems/{lineItemId} {
-            allow get: if true;
-            allow list: if isOwner(userId);
-            allow create: if isOwner(userId) && isValidLink('invoiceId', invoiceId);
-            allow update: if isExistingOwner(userId) && isImmutable('invoiceId');
-            allow delete: if isExistingOwner(userId);
-          }
         }
 
         match /paymentLinks/{paymentLinkId} {
@@ -92,42 +61,19 @@ service cloud.firestore {
           allow update: if isExistingOwner(userId) && isImmutable('accountId');
           allow delete: if isExistingOwner(userId);
         }
-
-        match /withdrawals/{withdrawalId} {
-          allow get, list: if isOwner(userId);
-          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
-          allow update: if isExistingOwner(userId) && isImmutable('accountId');
-          allow delete: if isExistingOwner(userId);
-        }
-
-        match /treasuryBankAccounts/{bankAccountId} {
-          allow get, list: if isOwner(userId);
-          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
-          allow update: if isExistingOwner(userId) && isImmutable('accountId');
-          allow delete: if isExistingOwner(userId);
-        }
-
-        match /treasuryCards/{cardId} {
-          allow get, list: if isOwner(userId);
-          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
-          allow update: if isExistingOwner(userId) && isImmutable('accountId');
-          allow delete: if isExistingOwner(userId);
-        }
       }
     }
 
-    /**
-     * @description Startup listings created by founders.
-     * @path /startups/{startupId}
-     */
     match /startups/{startupId} {
-      // Public discovery: Allow anyone to view startups
       allow get, list: if true;
-      
-      // Ownership rules for management
       allow create: if isOwner(startupId) && isValidLink('ownerUid', startupId);
       allow update: if isExistingOwner(startupId) && isImmutable('ownerUid');
       allow delete: if isExistingOwner(startupId);
+
+      match /views/{viewId} {
+        allow create: if true;
+        allow list: if isOwner(startupId);
+      }
     }
   }
 }
