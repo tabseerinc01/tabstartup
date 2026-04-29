@@ -22,7 +22,8 @@ import {
   MessageSquare,
   TrendingUp,
   FileText,
-  Clock
+  Clock,
+  Mail
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -91,6 +92,12 @@ export default function DashboardOverviewPage() {
     { id: 3, type: 'message', text: 'New message from Marcus Thorne regarding pitch deck', time: 'Yesterday', icon: MessageSquare, color: 'text-purple-500' },
     { id: 4, type: 'view', text: 'Startup viewed 15 times in the last 24 hours', time: '1 day ago', icon: TrendingUp, color: 'text-primary' },
     { id: 5, type: 'milestone', text: 'Profile completeness reached 85%', time: '2 days ago', icon: CheckCircle2, color: 'text-orange-500' },
+  ];
+
+  const messages = [
+    { id: 1, sender: 'Marcus Thorne', text: 'Hey! Can you send over the updated financial model?', time: '2h ago', avatar: 'https://picsum.photos/seed/m1/40/40' },
+    { id: 2, sender: 'Jasmine Akter', text: 'I\'d love to chat more about your scale plan for next year.', time: '5h ago', avatar: 'https://picsum.photos/seed/m2/40/40' },
+    { id: 3, sender: 'Elena Rodriguez', text: 'Thanks for the intro! Let\'s schedule a call for Tuesday.', time: '1d ago', avatar: 'https://picsum.photos/seed/m3/40/40' },
   ];
 
   return (
@@ -375,33 +382,67 @@ export default function DashboardOverviewPage() {
         </Card>
       </div>
 
-      {/* Activity Feed Section */}
-      <Card className="border-primary/10 shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" /> Recent Activity
-            </CardTitle>
-            <CardDescription>Track interactions with your startup and profile.</CardDescription>
-          </div>
-          <Button variant="ghost" size="sm" className="text-xs">View All</Button>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            {activities.map((activity) => (
-              <div key={activity.id} className="flex items-start gap-4 group cursor-default">
-                <div className={`mt-1 p-2 rounded-lg bg-muted/50 ${activity.color} group-hover:scale-110 transition-transform`}>
-                  <activity.icon className="h-4 w-4" />
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="border-primary/10 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary" /> Recent Activity
+              </CardTitle>
+              <CardDescription>Track interactions with your startup and profile.</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" className="text-xs">View All</Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {activities.map((activity) => (
+                <div key={activity.id} className="flex items-start gap-4 group cursor-default">
+                  <div className={`mt-1 p-2 rounded-lg bg-muted/50 ${activity.color} group-hover:scale-110 transition-transform`}>
+                    <activity.icon className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <p className="text-sm font-medium leading-none">{activity.text}</p>
+                    <p className="text-xs text-muted-foreground">{activity.time}</p>
+                  </div>
                 </div>
-                <div className="flex-1 space-y-1">
-                  <p className="text-sm font-medium leading-none">{activity.text}</p>
-                  <p className="text-xs text-muted-foreground">{activity.time}</p>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-primary/10 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" /> Messages Preview
+              </CardTitle>
+              <CardDescription>Latest correspondence from your network.</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" className="text-xs" asChild>
+              <Link href="/dashboard">View All Messages</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {messages.map((message) => (
+                <div key={message.id} className="flex items-start gap-4 group cursor-pointer hover:bg-muted/30 p-2 rounded-lg transition-colors">
+                  <Avatar className="h-10 w-10 border">
+                    <AvatarImage src={message.avatar} alt={message.sender} />
+                    <AvatarFallback>{message.sender.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 space-y-1 overflow-hidden">
+                    <div className="flex justify-between items-center">
+                      <p className="text-sm font-bold leading-none">{message.sender}</p>
+                      <p className="text-[10px] text-muted-foreground">{message.time}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{message.text}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
