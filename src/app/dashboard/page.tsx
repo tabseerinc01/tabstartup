@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   User as UserIcon, 
   Rocket, 
@@ -20,7 +21,8 @@ import {
   Users,
   MessageSquare,
   TrendingUp,
-  FileText
+  FileText,
+  Clock
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -82,6 +84,14 @@ export default function DashboardOverviewPage() {
       description: `${type} link has been copied to your clipboard.`,
     });
   };
+
+  const activities = [
+    { id: 1, type: 'view', text: 'An investor from London viewed your startup', time: '2 hours ago', icon: Eye, color: 'text-blue-500' },
+    { id: 2, type: 'interest', text: 'Jasmine Akter expressed interest in your venture', time: '5 hours ago', icon: Users, color: 'text-green-500' },
+    { id: 3, type: 'message', text: 'New message from Marcus Thorne regarding pitch deck', time: 'Yesterday', icon: MessageSquare, color: 'text-purple-500' },
+    { id: 4, type: 'view', text: 'Startup viewed 15 times in the last 24 hours', time: '1 day ago', icon: TrendingUp, color: 'text-primary' },
+    { id: 5, type: 'milestone', text: 'Profile completeness reached 85%', time: '2 days ago', icon: CheckCircle2, color: 'text-orange-500' },
+  ];
 
   return (
     <div className="space-y-8">
@@ -196,7 +206,6 @@ export default function DashboardOverviewPage() {
         )}
       </div>
 
-      {/* Metrics Row Section */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-primary/10 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -240,7 +249,6 @@ export default function DashboardOverviewPage() {
         </Card>
       </div>
 
-      {/* Quick Actions Section */}
       <Card className="border-primary/10 shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">Quick Actions</CardTitle>
@@ -366,6 +374,34 @@ export default function DashboardOverviewPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Activity Feed Section */}
+      <Card className="border-primary/10 shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Clock className="h-5 w-5 text-primary" /> Recent Activity
+            </CardTitle>
+            <CardDescription>Track interactions with your startup and profile.</CardDescription>
+          </div>
+          <Button variant="ghost" size="sm" className="text-xs">View All</Button>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-6">
+            {activities.map((activity) => (
+              <div key={activity.id} className="flex items-start gap-4 group cursor-default">
+                <div className={`mt-1 p-2 rounded-lg bg-muted/50 ${activity.color} group-hover:scale-110 transition-transform`}>
+                  <activity.icon className="h-4 w-4" />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <p className="text-sm font-medium leading-none">{activity.text}</p>
+                  <p className="text-xs text-muted-foreground">{activity.time}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
