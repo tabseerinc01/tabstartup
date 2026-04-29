@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { User as UserIcon, Rocket, Target, ArrowRight, Loader2, CheckCircle2, Share2, ExternalLink, Copy } from 'lucide-react';
+import { User as UserIcon, Rocket, Target, ArrowRight, Loader2, CheckCircle2, Share2, ExternalLink, Copy, HandCoins } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
@@ -40,6 +40,7 @@ export default function DashboardOverviewPage() {
 
   const displayName = profile?.fullName || user?.email?.split('@')[0] || "Founder";
   const roleDisplay = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : "Founder";
+  const isFounder = profile?.role === 'founder';
 
   const getCompleteness = () => {
     if (!profile) return 0;
@@ -131,25 +132,29 @@ export default function DashboardOverviewPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-primary/10 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Public Visibility</CardTitle>
-            <UserIcon className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">Active</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Your profile is visible to investors.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-1">
-              {profile?.availability?.openToInvestment && <Badge variant="outline" className="text-[9px] bg-green-50 text-green-700 border-green-200">Investing</Badge>}
-              {profile?.availability?.hiring && <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200">Hiring</Badge>}
-              <Button variant="ghost" size="sm" className="ml-auto h-6 text-[10px]" onClick={() => copyToClipboard(`/founders/${user?.uid}`, 'Profile')}>
-                <Copy className="h-3 w-3 mr-1" /> Copy Profile Link
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        {isFounder && (
+          <Card className="border-primary/10 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Fundraising</CardTitle>
+              <HandCoins className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {startup?.fundraisingStatus || 'Inactive'}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Goal: {startup?.fundingNeed || '$0'}
+              </p>
+              <div className="flex gap-2 mt-4">
+                <Button size="sm" variant="outline" asChild className="flex-1">
+                  <Link href="/dashboard/fundraising">
+                    Manage Round
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -159,6 +164,20 @@ export default function DashboardOverviewPage() {
             <CardDescription>Actions to strengthen your presence.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {!startup?.pitchDeckUrl && isFounder && (
+              <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group">
+                <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
+                  <HandCoins className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold">Upload Pitch Deck</p>
+                  <p className="text-xs text-muted-foreground">Add your presentation to attract investors.</p>
+                </div>
+                <Button size="sm" variant="ghost" asChild>
+                  <Link href="/dashboard/fundraising">Add Deck</Link>
+                </Button>
+              </div>
+            )}
             {!profile?.whyBuilding && (
               <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group">
                 <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
@@ -170,34 +189,6 @@ export default function DashboardOverviewPage() {
                 </div>
                 <Button size="sm" variant="ghost" asChild>
                   <Link href="/dashboard/profile">Start</Link>
-                </Button>
-              </div>
-            )}
-            {!profile?.imageUrl && (
-              <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group">
-                <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
-                  <UserIcon className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold">Upload Profile Photo</p>
-                  <p className="text-xs text-muted-foreground">Add a photo to build trust with investors.</p>
-                </div>
-                <Button size="sm" variant="ghost" asChild>
-                  <Link href="/dashboard/profile">Add Photo</Link>
-                </Button>
-              </div>
-            )}
-            {!startup && (
-              <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group">
-                <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
-                  <Rocket className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold">Launch your startup card</p>
-                  <p className="text-xs text-muted-foreground">Get discovered by early-stage investors.</p>
-                </div>
-                <Button size="sm" variant="ghost" asChild>
-                  <Link href="/dashboard/startup">Create</Link>
                 </Button>
               </div>
             )}
@@ -240,12 +231,12 @@ export default function DashboardOverviewPage() {
               </div>
               
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Availability</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Fundraising</p>
                 <div className="flex flex-wrap gap-1">
-                  {profile?.availability?.openToInvestment ? (
-                    <Badge variant="outline" className="text-[9px] bg-green-50 text-green-700">Open to Investment</Badge>
+                  {startup?.fundraisingStatus === 'Open' ? (
+                    <Badge variant="outline" className="text-[9px] bg-green-50 text-green-700">Open for Investment</Badge>
                   ) : (
-                    <span className="text-xs text-muted-foreground italic">None specified</span>
+                    <span className="text-xs text-muted-foreground italic">Not currently raising</span>
                   )}
                 </div>
               </div>

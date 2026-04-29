@@ -148,6 +148,18 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "pitchDeckUrl": {
+            "type": "string",
+            "description": "Link to the pitch deck document."
+        },
+        "equityOffered": {
+            "type": "string",
+            "description": "Percentage of equity offered for the target funding."
+        },
+        "fundraisingStatus": {
+            "type": "string",
+            "enum": ["Open", "Closed", "Paused"]
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time"

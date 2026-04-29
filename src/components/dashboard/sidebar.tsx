@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -9,30 +10,44 @@ import {
   Users, 
   Settings,
   LogOut,
-  ChevronRight
+  ChevronRight,
+  HandCoins
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
-import { useAuth, initiateSignOut } from '@/firebase';
-
-const menuItems = [
-  { href: '/dashboard', label: 'Overview', icon: Home },
-  { href: '/dashboard/profile', label: 'My Profile', icon: User },
-  { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
-  { href: '#', label: 'Connections', icon: Users, disabled: true },
-  { href: '#', label: 'Settings', icon: Settings, disabled: true },
-];
+import { useAuth, initiateSignOut, useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
 
 export function DashboardSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const auth = useAuth();
+  const { user } = useUser();
+  const firestore = useFirestore();
+
+  const userRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+
+  const { data: profile } = useDoc(userRef);
 
   const handleLogout = () => {
     initiateSignOut(auth);
     router.push('/login');
   };
+
+  const isFounder = profile?.role === 'founder';
+
+  const menuItems = [
+    { href: '/dashboard', label: 'Overview', icon: Home },
+    { href: '/dashboard/profile', label: 'My Profile', icon: User },
+    { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
+    ...(isFounder ? [{ href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }] : []),
+    { href: '#', label: 'Connections', icon: Users, disabled: true },
+    { href: '#', label: 'Settings', icon: Settings, disabled: true },
+  ];
 
   return (
     <aside className="hidden md:flex flex-col w-64 border-r bg-background h-screen sticky top-0">
