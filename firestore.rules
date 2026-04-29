@@ -2,9 +2,33 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // TEMP: allow everything for testing
-    match /{document=**} {
-      allow read, write: if true;
+    match /users/{userId} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /startups/{startupId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /startups/{startupId}/views/{viewId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /startups/{startupId}/interests/{investorId} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /pitches/{pitchId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && (request.auth.uid == resource.data.toFounderUid
+               || request.auth.uid == resource.data.fromInvestorUid);
+      allow update: if request.auth != null && request.auth.uid == resource.data.toFounderUid;
+    }
+
+    match /messages/{messageId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && (request.auth.uid == resource.data.receiverId || request.auth.uid == resource.data.senderId);
+      allow update: if request.auth != null && request.auth.uid == resource.data.receiverId;
     }
   }
 }

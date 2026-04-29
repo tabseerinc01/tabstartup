@@ -1,31 +1,43 @@
 'use client';
 
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, limit } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { useFirestore } from '@/firebase';
+import { collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Rocket, Loader2 } from 'lucide-react';
+import { MapPin, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { mockFounders } from '@/lib/mock-data';
 
 export function CommunitySpotlight() {
+  const [founders, setFounders] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const firestore = useFirestore();
 
-  const foundersQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(
-      collection(firestore, 'users'),
-      where('role', '==', 'founder'),
-      limit(6)
-    );
+  useEffect(() => {
+    async function loadSpotlight() {
+      if (!firestore) return;
+      setIsLoading(true);
+      try {
+        const q = query(
+          collection(firestore, 'users'),
+          where('role', '==', 'founder'),
+          limit(6)
+        );
+        const snap = await getDocs(q);
+        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setFounders(items.length > 0 ? items : mockFounders.slice(0, 6));
+      } catch (error) {
+        console.error("Error loading spotlight:", error);
+        setFounders(mockFounders.slice(0, 6));
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadSpotlight();
   }, [firestore]);
-
-  const { data: dbFounders, isLoading } = useCollection(foundersQuery);
-
-  // Fallback to mock data if Firestore returns nothing
-  const foundersList = (dbFounders && dbFounders.length > 0) ? dbFounders : mockFounders.slice(0, 6);
 
   if (isLoading) {
     return (
@@ -37,7 +49,7 @@ export function CommunitySpotlight() {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {foundersList.map((founder) => (
+      {founders.map((founder) => (
         <Card key={founder.id} className="overflow-hidden hover:shadow-xl transition-all group rounded-2xl">
           <div className="relative h-48 w-full bg-muted">
             <Image 
@@ -45,7 +57,6 @@ export function CommunitySpotlight() {
               alt={founder.fullName || founder.name} 
               fill 
               className="object-cover group-hover:scale-105 transition-transform duration-500" 
-              data-ai-hint="founder portrait"
             />
           </div>
           <CardHeader>
@@ -61,11 +72,6 @@ export function CommunitySpotlight() {
             <div className="flex items-center text-xs text-muted-foreground mb-4">
               <MapPin className="mr-1 h-3 w-3" />
               {founder.location}
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {founder.skills?.slice(0, 3).map((skill: string) => (
-                <Badge key={skill} variant="outline" className="text-[10px]">{skill}</Badge>
-              ))}
             </div>
             <Button variant="ghost" size="sm" className="w-full mt-4 text-primary" asChild>
               <Link href="/founders">View Profile</Link>
