@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { mockFounders } from '@/lib/mock-data';
 import { MapPin, Search, Filter, Loader2, Linkedin, Globe, Twitter, Award, Briefcase, GraduationCap, CheckCircle2, MessageSquare, Calendar } from 'lucide-react';
 import Image from 'next/image';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
@@ -150,6 +150,12 @@ function FounderCard({ founder }: { founder: any }) {
               <Button className="flex-1">View Full Profile</Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[700px] max-h-[90vh] p-0 overflow-hidden">
+              <DialogHeader className="sr-only">
+                <DialogTitle>{displayName}'s Profile</DialogTitle>
+                <DialogDescription>
+                  Detailed information about founder {displayName}, including their background, vision, and professional experience.
+                </DialogDescription>
+              </DialogHeader>
               <ScrollArea className="max-h-[90vh]">
                 <div className="p-0">
                   {/* Banner/Header */}
