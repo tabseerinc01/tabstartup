@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { Globe, MapPin, Tag, Loader2, Rocket } from 'lucide-react';
+import { Globe, MapPin, Tag, Loader2, Rocket, Share2 } from 'lucide-react';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -71,7 +71,6 @@ export default function StartupPage() {
         tags: tagsArray,
         ownerUid: user.uid,
         updatedAt: serverTimestamp(),
-        // Only set createdAt if it doesn't exist
         ...(startupData ? {} : { createdAt: serverTimestamp() })
       };
 
@@ -93,6 +92,15 @@ export default function StartupPage() {
     }
   };
 
+  const copyListingLink = () => {
+    const url = `${window.location.origin}/startups/${user?.uid}`;
+    navigator.clipboard.writeText(url);
+    toast({
+      title: "Link Copied",
+      description: "Startup listing link copied to clipboard.",
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -105,11 +113,18 @@ export default function StartupPage() {
     <div className="max-w-4xl mx-auto w-full space-y-8">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Startup Listing</h1>
-        {!isEditing && startupData && (
-          <Button variant="outline" onClick={() => setIsEditing(true)}>
-            Edit Listing
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {!isEditing && startupData && (
+            <>
+              <Button variant="outline" className="gap-2" onClick={copyListingLink}>
+                <Share2 className="h-4 w-4" /> Share Listing
+              </Button>
+              <Button variant="outline" onClick={() => setIsEditing(true)}>
+                Edit Listing
+              </Button>
+            </>
+          )}
+        </div>
       </div>
       
       {isEditing ? (

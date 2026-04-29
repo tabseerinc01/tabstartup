@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { Loader2, Plus, Trash2, Github, Linkedin, Globe, Twitter } from 'lucide-react';
+import { Loader2, Plus, Trash2, Github, Linkedin, Globe, Twitter, Image as ImageIcon } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
 export default function ProfilePage() {
@@ -29,6 +29,7 @@ export default function ProfilePage() {
 
   const [formData, setFormData] = useState({
     fullName: '',
+    imageUrl: '',
     headline: '',
     location: '',
     stage: '',
@@ -54,6 +55,7 @@ export default function ProfilePage() {
     if (profile) {
       setFormData({
         fullName: profile.fullName || '',
+        imageUrl: profile.imageUrl || '',
         headline: profile.headline || '',
         location: profile.location || '',
         stage: profile.stage || '',
@@ -170,6 +172,18 @@ export default function ProfilePage() {
                     onChange={e => setFormData({...formData, location: e.target.value})}
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="imageUrl" className="flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4" /> Profile Image URL (avatarUrl)
+                </Label>
+                <Input 
+                  id="imageUrl" 
+                  placeholder="https://..."
+                  value={formData.imageUrl}
+                  onChange={e => setFormData({...formData, imageUrl: e.target.value})}
+                />
+                <p className="text-[10px] text-muted-foreground">Enter a direct link to your image (e.g. from Unsplash or Pinterest)</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="headline">Headline</Label>
