@@ -31,7 +31,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
-import { doc, collection, query, where, limit, orderBy, updateDoc } from 'firebase/firestore';
+import { doc, collection, query, where, limit, orderBy, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 
@@ -60,7 +60,7 @@ export default function DashboardOverviewPage() {
     return collection(firestore, 'startups', user.uid, 'interests');
   }, [firestore, user?.uid]);
 
-  // SECURE QUERY: Must filter by receiverId to comply with security rules
+  // SECURE QUERY: Filter by receiverId to satisfy security rules and avoid collection-wide read
   const unreadMessagesQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
@@ -70,7 +70,7 @@ export default function DashboardOverviewPage() {
     );
   }, [firestore, user?.uid]);
 
-  // SECURE QUERY: Must filter by receiverId to comply with security rules
+  // SECURE QUERY: Filter by receiverId to satisfy security rules and avoid collection-wide read
   const latestMessagesQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
@@ -123,7 +123,7 @@ export default function DashboardOverviewPage() {
     if (!firestore) return;
     updateDoc(doc(firestore, 'messages', messageId), {
       read: true,
-      updatedAt: new Date().toISOString()
+      updatedAt: serverTimestamp()
     }).catch(err => console.error("Failed to mark as read:", err));
   };
 
