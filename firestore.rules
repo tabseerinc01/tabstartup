@@ -54,8 +54,18 @@ service cloud.firestore {
 
     match /messages/{messageId} {
       allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
-      allow get, list: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
-      allow update: if isSignedIn() && resource.data.receiverId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      // Refined get/list rules for messages to ensure better query satisfaction
+      allow get: if isSignedIn() && (
+        (resource != null && resource.data.senderId == request.auth.uid) || 
+        (resource != null && resource.data.receiverId == request.auth.uid)
+      );
+      allow list: if isSignedIn() && (
+        (resource != null && resource.data.senderId == request.auth.uid) || 
+        (resource != null && resource.data.receiverId == request.auth.uid)
+      );
+      allow update: if isSignedIn() && 
+        resource.data.receiverId == request.auth.uid && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
     }
   }
 }

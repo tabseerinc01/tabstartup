@@ -41,43 +41,43 @@ export default function DashboardOverviewPage() {
   const { toast } = useToast();
 
   const userRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.uid) return null;
     return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
 
   const startupRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.uid) return null;
     return doc(firestore, 'startups', user.uid);
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
 
   const viewsQuery = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.uid) return null;
     return collection(firestore, 'startups', user.uid, 'views');
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
 
   const interestsQuery = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.uid) return null;
     return collection(firestore, 'startups', user.uid, 'interests');
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
 
   const unreadMessagesQuery = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.uid) return null;
     return query(
       collection(firestore, 'messages'),
       where('receiverId', '==', user.uid),
       where('read', '==', false)
     );
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
 
   const latestMessagesQuery = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
+    if (!firestore || !user?.uid) return null;
     return query(
       collection(firestore, 'messages'),
       where('receiverId', '==', user.uid),
       orderBy('timestamp', 'desc'),
       limit(3)
     );
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
 
   const { data: profile, isLoading: isProfileLoading } = useDoc(userRef);
   const { data: startup, isLoading: isStartupLoading } = useDoc(startupRef);
