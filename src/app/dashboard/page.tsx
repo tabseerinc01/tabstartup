@@ -24,13 +24,15 @@ import {
   FileText,
   Clock,
   Mail,
-  Plus
+  Plus,
+  Send
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { Separator } from '@/components/ui/separator';
 
 export default function DashboardOverviewPage() {
   const { user, isUserLoading } = useUser();
@@ -99,6 +101,12 @@ export default function DashboardOverviewPage() {
     { id: 1, sender: 'Marcus Thorne', text: 'Hey! Can you send over the updated financial model?', time: '2h ago', avatar: 'https://picsum.photos/seed/m1/40/40' },
     { id: 2, sender: 'Jasmine Akter', text: 'I\'d love to chat more about your scale plan for next year.', time: '5h ago', avatar: 'https://picsum.photos/seed/m2/40/40' },
     { id: 3, sender: 'Elena Rodriguez', text: 'Thanks for the intro! Let\'s schedule a call for Tuesday.', time: '1d ago', avatar: 'https://picsum.photos/seed/m3/40/40' },
+  ];
+
+  const interestedInvestors = [
+    { id: 'inv1', name: 'Jasmine Akter', firm: 'Delta VC', info: 'Early-stage Fintech focus', avatar: 'https://picsum.photos/seed/inv1/40/40' },
+    { id: 'inv2', name: 'Marcus Thorne', firm: 'Angel Investor', info: 'Sustainability & AI advisor', avatar: 'https://picsum.photos/seed/inv2/40/40' },
+    { id: 'inv3', name: 'Elena Rodriguez', firm: 'Impact Fund', info: 'Scaling social ventures', avatar: 'https://picsum.photos/seed/inv3/40/40' },
   ];
 
   return (
@@ -360,51 +368,55 @@ export default function DashboardOverviewPage() {
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="border-primary/10 shadow-sm">
           <CardHeader>
-            <CardTitle>Investor View</CardTitle>
-            <CardDescription>Your current public appearance.</CardDescription>
+            <CardTitle>Investor Engagement</CardTitle>
+            <CardDescription>Your appearance and interested leads.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="flex items-center gap-4">
-              <div className="relative h-16 w-16 rounded-2xl overflow-hidden bg-muted shadow-sm">
-                <Image src={profile?.imageUrl || `https://picsum.photos/seed/${user?.uid || 'user'}/128/128`} alt={displayName} fill className="object-cover" />
-              </div>
-              <div>
-                <p className="font-bold flex items-center gap-1">
-                  {displayName} 
-                  {profile?.isVerified && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                </p>
-                <Badge variant="secondary" className="text-[10px]">{profile?.stage || "Early"} Stage</Badge>
+            <div className="space-y-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Public Preview</p>
+              <div className="flex items-center gap-4 p-3 bg-muted/30 rounded-2xl border border-dashed border-primary/10">
+                <div className="relative h-12 w-12 rounded-xl overflow-hidden bg-muted shadow-sm">
+                  <Image src={profile?.imageUrl || `https://picsum.photos/seed/${user?.uid || 'user'}/128/128`} alt={displayName} fill className="object-cover" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold flex items-center gap-1">
+                    {displayName} 
+                    {profile?.isVerified && <CheckCircle2 className="h-3 w-3 text-primary" />}
+                  </p>
+                  <Badge variant="secondary" className="text-[9px] h-4">{profile?.stage || "Early"} Stage</Badge>
+                </div>
               </div>
             </div>
+
+            <Separator className="bg-primary/5" />
             
             <div className="space-y-4">
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Headline</p>
-                <p className="text-sm font-medium text-primary">"{profile?.headline || "Building amazing things."}"</p>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Interested Investors</p>
+                <Badge variant="outline" className="text-[9px] h-4 bg-primary/5">{interestedInvestors.length} Leads</Badge>
               </div>
-              
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Fundraising</p>
-                <div className="flex flex-wrap gap-1">
-                  {startup?.fundraisingStatus === 'Open' ? (
-                    <Badge variant="outline" className="text-[9px] bg-green-50 text-green-700">Open for Investment</Badge>
-                  ) : (
-                    <span className="text-xs text-muted-foreground italic">Not currently raising</span>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Top Skills</p>
-                <div className="flex flex-wrap gap-1">
-                  {profile?.skills?.slice(0, 3).map((s: string) => <Badge key={s} variant="outline" className="text-[9px]">{s}</Badge>)}
-                </div>
+              <div className="space-y-3">
+                {interestedInvestors.map((investor) => (
+                  <div key={investor.id} className="flex items-center gap-3 group">
+                    <Avatar className="h-8 w-8 border border-primary/10">
+                      <AvatarImage src={investor.avatar} alt={investor.name} />
+                      <AvatarFallback>{investor.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 overflow-hidden">
+                      <p className="text-xs font-bold leading-none">{investor.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{investor.firm} • {investor.info}</p>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" title="Send Message">
+                      <Send className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <Button variant="outline" size="sm" className="w-full mt-4" asChild>
+            <Button variant="outline" size="sm" className="w-full mt-2" asChild>
               <Link href={`/founders/${user?.uid}`}>View Full Public Profile</Link>
             </Button>
           </CardContent>
