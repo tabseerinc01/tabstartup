@@ -48,41 +48,44 @@ export default function DashboardOverviewPage() {
     return doc(firestore, 'users', user.uid);
   }, [firestore, user?.uid]);
 
+  const { data: profile, isLoading: isProfileLoading } = useDoc(userRef);
+
   const startupRef = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return doc(firestore, 'startups', user.uid);
   }, [firestore, user?.uid]);
 
   const viewsQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
+    if (!firestore || !user?.uid || profile?.role !== 'founder') return null;
     return collection(firestore, 'startups', user.uid, 'views');
-  }, [firestore, user?.uid]);
+  }, [firestore, user?.uid, profile?.role]);
 
   const interestsQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
+    if (!firestore || !user?.uid || profile?.role !== 'founder') return null;
     return collection(firestore, 'startups', user.uid, 'interests');
-  }, [firestore, user?.uid]);
+  }, [firestore, user?.uid, profile?.role]);
 
-  // Pitches queries
+  // Pitches queries - strictly filtered by role to satisfy security rules
   const incomingPitchesQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
+    if (!firestore || !user?.uid || profile?.role !== 'founder') return null;
     return query(
       collection(firestore, 'pitches'),
       where('toFounderUid', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(10)
     );
-  }, [firestore, user?.uid]);
+  }, [firestore, user?.uid, profile?.role]);
 
   const sentPitchesQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
+    if (!firestore || !user?.uid || profile?.role !== 'investor') return null;
     return query(
       collection(firestore, 'pitches'),
       where('fromInvestorUid', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(10)
     );
-  }, [firestore, user?.uid]);
+  }, [firestore, user?.uid, profile?.role]);
 
-  const { data: profile, isLoading: isProfileLoading } = useDoc(userRef);
   const { data: startup, isLoading: isStartupLoading } = useDoc(startupRef);
   const { data: views, isLoading: isViewsLoading } = useCollection(viewsQuery);
   const { data: interests, isLoading: isInterestsLoading } = useCollection(interestsQuery);
@@ -321,11 +324,11 @@ export default function DashboardOverviewPage() {
                           </Avatar>
                           <div>
                             <p className="text-sm font-bold">Investor</p>
-                            <p className="text-xs text-muted-foreground">{new Date(pitch.createdAt?.toDate()).toLocaleDateString()}</p>
+                            <p className="text-xs text-muted-foreground">{pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Just now'}</p>
                           </div>
                         </div>
                         <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
-                          {pitch.status.toUpperCase()}
+                          {pitch.status?.toUpperCase()}
                         </Badge>
                       </div>
                       <p className="text-sm italic text-muted-foreground">"{pitch.message}"</p>
@@ -372,10 +375,10 @@ export default function DashboardOverviewPage() {
                     <div key={pitch.id} className="p-4 border rounded-2xl bg-muted/20 space-y-3">
                       <div className="flex justify-between items-center">
                         <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                          Sent on {new Date(pitch.createdAt?.toDate()).toLocaleDateString()}
+                          Sent on {pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Just now'}
                         </p>
                         <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
-                          {pitch.status.toUpperCase()}
+                          {pitch.status?.toUpperCase()}
                         </Badge>
                       </div>
                       <p className="text-sm line-clamp-2">"{pitch.message}"</p>
