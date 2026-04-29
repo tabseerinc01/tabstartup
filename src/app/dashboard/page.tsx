@@ -31,7 +31,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
-import { doc, collection, query, where, limit, orderBy, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, query, where, limit, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 
@@ -60,33 +60,10 @@ export default function DashboardOverviewPage() {
     return collection(firestore, 'startups', user.uid, 'interests');
   }, [firestore, user?.uid]);
 
-  // SECURE QUERY: Filter by receiverId to satisfy security rules and avoid collection-wide read
-  const unreadMessagesQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
-    return query(
-      collection(firestore, 'messages'),
-      where('receiverId', '==', user.uid),
-      where('read', '==', false)
-    );
-  }, [firestore, user?.uid]);
-
-  // SECURE QUERY: Filter by receiverId to satisfy security rules and avoid collection-wide read
-  const latestMessagesQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
-    return query(
-      collection(firestore, 'messages'),
-      where('receiverId', '==', user.uid),
-      orderBy('timestamp', 'desc'),
-      limit(3)
-    );
-  }, [firestore, user?.uid]);
-
   const { data: profile, isLoading: isProfileLoading } = useDoc(userRef);
   const { data: startup, isLoading: isStartupLoading } = useDoc(startupRef);
   const { data: views, isLoading: isViewsLoading } = useCollection(viewsQuery);
   const { data: interests, isLoading: isInterestsLoading } = useCollection(interestsQuery);
-  const { data: unreadMessages, isLoading: isUnreadLoading } = useCollection(unreadMessagesQuery);
-  const { data: latestMessages, isLoading: isLatestMessagesLoading } = useCollection(latestMessagesQuery);
 
   if (isUserLoading || isProfileLoading || isStartupLoading) {
     return (
@@ -101,7 +78,6 @@ export default function DashboardOverviewPage() {
   const isFounder = profile?.role === 'founder';
   const viewsCount = views?.length || 0;
   const interestsCount = interests?.length || 0;
-  const unreadCount = unreadMessages?.length || 0;
 
   const getCompleteness = () => {
     if (!profile) return 0;
@@ -119,14 +95,6 @@ export default function DashboardOverviewPage() {
 
   const completeness = getCompleteness();
 
-  const handleMessageClick = (messageId: string) => {
-    if (!firestore) return;
-    updateDoc(doc(firestore, 'messages', messageId), {
-      read: true,
-      updatedAt: serverTimestamp()
-    }).catch(err => console.error("Failed to mark as read:", err));
-  };
-
   const copyToClipboard = (path: string, type: string) => {
     const url = `${window.location.origin}${path}`;
     navigator.clipboard.writeText(url);
@@ -139,7 +107,7 @@ export default function DashboardOverviewPage() {
   const activities = [
     { id: 1, type: 'view', text: 'Someone viewed your startup', time: viewsCount > 0 ? 'Recently' : 'No views yet', icon: Eye, color: 'text-blue-500' },
     { id: 2, type: 'interest', text: 'An investor expressed interest', time: interestsCount > 0 ? 'Recently' : 'No interest yet', icon: Users, color: 'text-green-500' },
-    { id: 3, type: 'message', text: 'New message received', time: unreadCount > 0 ? 'Recently' : 'No new messages', icon: MessageSquare, color: 'text-purple-500' },
+    { id: 3, type: 'status', text: 'Profile visibility is live', time: 'Active', icon: CheckCircle2, color: 'text-primary' },
   ];
 
   return (
@@ -280,7 +248,7 @@ export default function DashboardOverviewPage() {
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card className="border-primary/10 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Startup Views</CardTitle>
@@ -299,16 +267,6 @@ export default function DashboardOverviewPage() {
           <CardContent>
             <div className="text-xl font-bold">{isInterestsLoading ? "..." : interestsCount}</div>
             <p className="text-[10px] text-muted-foreground mt-1">{interestsCount > 0 ? `${interestsCount} leads to follow up` : 'No interests yet'}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-primary/10 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Unread Messages</CardTitle>
-            <MessageSquare className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">{isUnreadLoading ? "..." : unreadCount}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">{unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}</p>
           </CardContent>
         </Card>
         <Card className="border-primary/10 shadow-sm">
@@ -382,6 +340,18 @@ export default function DashboardOverviewPage() {
                 </Button>
               </div>
             )}
+            <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group">
+              <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
+                <MessageSquare className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold">Message Network</p>
+                <p className="text-xs text-muted-foreground">Check in with your connections and investors.</p>
+              </div>
+              <Button size="sm" variant="ghost" asChild>
+                <Link href="#">Open Inbox</Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
         
@@ -447,7 +417,7 @@ export default function DashboardOverviewPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card className="border-primary/10 shadow-sm">
+        <Card className="border-primary/10 shadow-sm md:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -470,61 +440,6 @@ export default function DashboardOverviewPage() {
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-primary/10 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Mail className="h-5 w-5 text-primary" /> Messages Preview
-              </CardTitle>
-              <CardDescription>Latest correspondence from your network.</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {isLatestMessagesLoading ? (
-                <div className="flex justify-center p-4"><Loader2 className="h-4 w-4 animate-spin" /></div>
-              ) : latestMessages && latestMessages.length > 0 ? (
-                latestMessages.map((message) => (
-                  <div 
-                    key={message.id} 
-                    className="flex items-start gap-4 group cursor-pointer hover:bg-muted/30 p-2 rounded-lg transition-colors"
-                    onClick={() => handleMessageClick(message.id)}
-                  >
-                    <Avatar className="h-10 w-10 border">
-                      <AvatarImage src={`https://picsum.photos/seed/${message.senderId}/40/40`} alt={message.senderName} />
-                      <AvatarFallback>{message.senderName?.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 space-y-1 overflow-hidden">
-                      <div className="flex justify-between items-center">
-                        <p className={`text-sm font-bold leading-none ${!message.read ? 'text-primary' : ''}`}>
-                          {message.senderName}
-                          {!message.read && <span className="ml-2 inline-block h-2 w-2 rounded-full bg-primary" />}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {message.timestamp?.toDate ? message.timestamp.toDate().toLocaleDateString() : 'Recently'}
-                        </p>
-                      </div>
-                      <p className={`text-xs truncate ${!message.read ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
-                        {message.text}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <MessageSquare className="h-12 w-12 text-muted-foreground opacity-20 mb-2" />
-                  <p className="text-sm text-muted-foreground italic">No messages yet.</p>
-                </div>
-              )}
-            </div>
-            {latestMessages && latestMessages.length > 0 && (
-              <Button variant="outline" size="sm" className="w-full mt-4" asChild>
-                <Link href="#">View All Messages</Link>
-              </Button>
-            )}
           </CardContent>
         </Card>
       </div>
