@@ -1,202 +1,181 @@
-/**
- * This ruleset enforces a strict user-ownership security model for the TabEdge Pay application.
- *
- * Core Philosophy:
- * The security model is built on the principle that users can only access their own data.
- * All user-generated content is stored in subcollections under that user's unique ID,
- * creating a clear and secure data boundary.
- *
- * Data Structure:
- * All data is hierarchically organized under the /users/{userId} path. This structure includes
- * user accounts, wallets, invoices, transactions, and other related entities. This path-based
- * ownership allows for simple, performant, and highly secure rules.
- *
- * Key Security Decisions:
- * - User Isolation: All read and write operations are restricted to the authenticated owner of the data.
- * - No User Enumeration: The top-level `/users` collection cannot be listed, preventing attackers
- *   from discovering a list of all application users.
- * - Relational Integrity: Rules enforce that when a document is created (e.g., an invoice),
- *   its internal ownership fields (like `userId` or `userAccountId`) must match the IDs in the
- *   document's path. This prevents data from being associated with the wrong owner. These
- *   ownership fields are immutable once set.
- * - Prototyping Flexibility: While ownership and relational links are strictly enforced, the
- *   specific shape and data types of other document fields (like amounts, statuses, or descriptions)
- *   are not validated. This allows for rapid frontend development and iteration.
- */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions for reusable logic and improved readability.
-
     /**
-     * Checks if a user is authenticated.
+     * TABSTARTUP / TABEDGE SECURITY RULES
+     * 
+     * Core Philosophy: 
+     * This ruleset enforces a strict hierarchical ownership model. Access is primarily 
+     * determined by the user's placement within the document path (/userProfiles/{userId}).
+     * 
+     * Data Structure:
+     * All application data is nested under the UserProfile document. The hierarchy is:
+     * /userProfiles/{userId}/accounts/{accountId}/[subcollections]
+     * 
+     * Key Security Decisions:
+     * 1. Authorization Independence: We rely on the userId and accountId present in the 
+     *    document paths to verify ownership, avoiding expensive get() calls.
+     * 2. Denormalization: Critical IDs (ownerId, accountId, invoiceId) are expected to 
+     *    be present on the documents to ensure relational integrity between the path 
+     *    and the data.
+     * 3. Public Sharing: Invoices and Payment Links allow for public 'get' requests 
+     *    to support unauthenticated customer views, while 'list' and 'write' operations 
+     *    remain strictly owner-only.
+     * 4. Prototyping Flexibility: We enforce WHO can access data and ensure path 
+     *    consistency, but we do not enforce strict data schemas or types for non-relational fields.
      */
+
+    // --- Helper Functions ---
+
+    /** @description Checks if the request is from an authenticated user. */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * Checks if the currently authenticated user's UID matches the given userId.
-     * This is the primary function for enforcing data ownership.
-     */
+    /** @description Checks if the authenticated user matches the provided userId. */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    /**
-     * Combines an ownership check with a check for the document's existence.
-     * CRITICAL for all update and delete operations to prevent modifying non-existent data.
-     */
+    /** @description Verifies ownership and ensures the document exists for updates/deletes. */
     function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
+      return resource != null && isOwner(userId);
     }
 
-    /**
-     * Validates that the `id` field within a new User document matches the document's ID (`userId`).
-     * This enforces relational integrity at creation time.
-     */
-    function hasValidOwnerIdOnCreate(userId) {
-      return request.resource.data.id == userId;
+    /** @description Validates that a field in the incoming data matches a specific value. */
+    function isValidLink(field, value) {
+      return request.resource.data[field] == value;
     }
 
-    /**
-     * Validates that a relational field (e.g., 'id', 'userId') is not changed during an update.
-     * This protects the ownership link of a document from being modified.
-     */
-    function isImmutable(fieldName) {
-      return request.resource.data[fieldName] == resource.data[fieldName];
-    }
-    
-    /**
-     * Validates that the `userId` field within a new UserAccount document matches the path's {userId}.
-     */
-    function hasValidUserIdOnCreate(userId) {
-      return request.resource.data.userId == userId;
+    /** @description Ensures a field remains unchanged during an update. */
+    function isImmutable(field) {
+      return request.resource.data[field] == resource.data[field];
     }
 
-    /**
-     * Validates that the `userAccountId` field within a new sub-account document
-     * (e.g., Wallet, Invoice) matches the path's {userAccountId}.
-     */
-    function hasValidAccountIdOnCreate(userAccountId) {
-      return request.resource.data.userAccountId == userAccountId;
-    }
+    // --- Collection Rules ---
 
     /**
-     * @description Rules for the User collection, which stores user profiles.
-     * @path /users/{userId}
-     * @allow (get) An authenticated user to read their own profile.
-     * @allow (create) An authenticated user to create their own profile document.
-     * @deny (list) Any user, to prevent user enumeration.
-     * @deny (update) An authenticated user trying to modify another user's profile.
-     * @principle Restricts access to a user's own data tree and prevents user enumeration.
+     * @description Rules for user profile documents. Users can only manage their own profile.
+     * @path /userProfiles/{userId}
+     * @allow (create) if auth.uid == userId
+     * @deny (get) if auth.uid != userId
+     * @principle Ownership (Self-Creation) and Relational Integrity.
      */
-    match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId) && hasValidOwnerIdOnCreate(userId);
+    match /userProfiles/{userId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidLink('id', userId);
       allow update: if isExistingOwner(userId) && isImmutable('id');
       allow delete: if isExistingOwner(userId);
 
       /**
-       * @description Rules for UserAccount documents, representing personal or business accounts.
-       * @path /users/{userId}/accounts/{userAccountId}
-       * @allow (create) A user to create a new account for themselves.
-       * @allow (list) A user to list all of their own accounts.
-       * @deny (get) A user trying to read an account belonging to someone else.
-       * @deny (delete) A user trying to delete an account owned by another user.
-       * @principle Enforces strict document ownership and validates the relational link to the parent user.
+       * @description Rules for accounts. Must be nested under the owner's profile.
+       * @path /userProfiles/{userId}/accounts/{accountId}
+       * @allow (update) if auth.uid == userId and account already exists.
+       * @deny (create) if data.ownerId != userId.
+       * @principle Hierarchical Ownership and Path-to-Data consistency.
        */
-      match /accounts/{userAccountId} {
-        allow get: if isOwner(userId);
-        allow list: if isOwner(userId);
-        allow create: if isOwner(userId) && hasValidUserIdOnCreate(userId);
-        allow update: if isExistingOwner(userId) && isImmutable('userId');
+      match /accounts/{accountId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidLink('ownerId', userId);
+        allow update: if isExistingOwner(userId) && isImmutable('ownerId');
         allow delete: if isExistingOwner(userId);
 
         /**
-         * @description Rules for Wallet documents, which hold balance information for an account.
-         * @path /users/{userId}/accounts/{userAccountId}/wallet/{walletId}
-         * @allow (get) The owner of the account to read their wallet information.
-         * @allow (create) The owner of the account to create a wallet.
-         * @deny (update) A user trying to update a wallet for an account they do not own.
-         * @deny (list) A user trying to list wallets from another user's account.
-         * @principle Secures financial data by inheriting ownership from the parent user path.
-         */
-        match /wallet/{walletId} {
-          allow get: if isOwner(userId);
-          allow list: if isOwner(userId);
-          allow create: if isOwner(userId) && hasValidAccountIdOnCreate(userAccountId);
-          allow update: if isExistingOwner(userId) && isImmutable('userAccountId');
-          allow delete: if isExistingOwner(userId);
-        }
-
-        /**
-         * @description Rules for Invoice documents created under a specific user account.
-         * @path /users/{userId}/accounts/{userAccountId}/invoices/{invoiceId}
-         * @allow (create) The owner of the account to create a new invoice.
-         * @allow (list) The owner of the account to list all their invoices.
-         * @deny (get) A user trying to read an invoice from an account they do not own.
-         * @deny (delete) A user trying to delete another user's invoice.
-         * @principle Enforces document ownership for all CRUD operations on invoices.
+         * @description Invoices for an account. Supports public viewing for customers.
+         * @path /userProfiles/{userId}/accounts/{accountId}/invoices/{invoiceId}
+         * @allow (get) if true (to allow customer viewing via shared link).
+         * @deny (list) if auth.uid != userId.
+         * @principle Public Read with Owner-Only Writes.
          */
         match /invoices/{invoiceId} {
-          allow get: if isOwner(userId);
+          // Public get is allowed to support shareable invoice links
+          allow get: if true;
           allow list: if isOwner(userId);
-          allow create: if isOwner(userId) && hasValidAccountIdOnCreate(userAccountId);
-          allow update: if isExistingOwner(userId) && isImmutable('userAccountId');
+          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
+          allow update: if isExistingOwner(userId) && isImmutable('accountId');
           allow delete: if isExistingOwner(userId);
+
+          /**
+           * @description Line items for a specific invoice.
+           * @path /userProfiles/{userId}/accounts/{accountId}/invoices/{invoiceId}/lineItems/{lineItemId}
+           * @allow (list) if auth.uid == userId.
+           * @principle Relational Integrity via path nesting.
+           */
+          match /lineItems/{lineItemId} {
+            allow get: if true; // Matches parent invoice accessibility
+            allow list: if isOwner(userId);
+            allow create: if isOwner(userId) && isValidLink('invoiceId', invoiceId);
+            allow update: if isExistingOwner(userId) && isImmutable('invoiceId');
+            allow delete: if isExistingOwner(userId);
+          }
         }
 
         /**
-         * @description Rules for PaymentLink documents created under a specific user account.
-         * @path /users/{userId}/accounts/{userAccountId}/paymentLinks/{paymentLinkId}
-         * @allow (create) The owner of the account to create a new payment link.
-         * @allow (list) The owner of the account to list all their payment links.
-         * @deny (get) A user trying to read a payment link from an account they do not own.
-         * @deny (update) A user trying to modify another user's payment link.
-         * @principle Enforces document ownership for all CRUD operations on payment links.
+         * @description Payment links for an account. Supports public viewing for customers.
+         * @path /userProfiles/{userId}/accounts/{accountId}/paymentLinks/{paymentLinkId}
+         * @allow (get) if true.
+         * @deny (create) if auth.uid != userId.
+         * @principle Public Read with Owner-Only Writes.
          */
         match /paymentLinks/{paymentLinkId} {
-          allow get: if isOwner(userId);
+          allow get: if true;
           allow list: if isOwner(userId);
-          allow create: if isOwner(userId) && hasValidAccountIdOnCreate(userAccountId);
-          allow update: if isExistingOwner(userId) && isImmutable('userAccountId');
+          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
+          allow update: if isExistingOwner(userId) && isImmutable('accountId');
           allow delete: if isExistingOwner(userId);
         }
 
         /**
-         * @description Rules for Transaction documents, recording financial activity for an account.
-         * @path /users/{userId}/accounts/{userAccountId}/transactions/{transactionId}
-         * @allow (get) The owner of the account to read a specific transaction.
-         * @allow (list) The owner of the account to list their transaction history.
-         * @deny (create) Any user trying to create a transaction directly (should be server-side).
-         * @deny (update) A user trying to modify a transaction record.
-         * @principle Secures financial records by making them read-only for the owner.
+         * @description Financial transactions associated with an account. Private.
+         * @path /userProfiles/{userId}/accounts/{accountId}/transactions/{transactionId}
+         * @allow (list) if auth.uid == userId.
+         * @deny (get) if auth.uid != userId.
+         * @principle Strict path-based ownership for sensitive financial data.
          */
         match /transactions/{transactionId} {
-          allow get: if isOwner(userId);
-          allow list: if isOwner(userId);
-          allow create: if isOwner(userId) && hasValidAccountIdOnCreate(userAccountId);
-          allow update: if isExistingOwner(userId) && isImmutable('userAccountId');
+          allow get, list: if isOwner(userId);
+          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
+          allow update: if isExistingOwner(userId) && isImmutable('accountId');
           allow delete: if isExistingOwner(userId);
         }
 
         /**
-         * @description Rules for Client documents associated with a specific user account.
-         * @path /users/{userId}/accounts/{userAccountId}/clients/{clientId}
-         * @allow (create) The owner of the account to add a new client.
-         * @allow (list) The owner of the account to list all their clients.
-         * @deny (get) A user trying to read client information from an account they do not own.
-         * @deny (delete) A user trying to delete another user's client.
-         * @principle Enforces document ownership for all CRUD operations on client records.
+         * @description Withdrawal requests from an account. Private.
+         * @path /userProfiles/{userId}/accounts/{accountId}/withdrawals/{withdrawalId}
+         * @allow (create) if auth.uid == userId.
+         * @principle Strict path-based ownership.
          */
-        match /clients/{clientId} {
-          allow get: if isOwner(userId);
-          allow list: if isOwner(userId);
-          allow create: if isOwner(userId) && hasValidAccountIdOnCreate(userAccountId);
-          allow update: if isExistingOwner(userId) && isImmutable('userAccountId');
+        match /withdrawals/{withdrawalId} {
+          allow get, list: if isOwner(userId);
+          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
+          allow update: if isExistingOwner(userId) && isImmutable('accountId');
+          allow delete: if isExistingOwner(userId);
+        }
+
+        /**
+         * @description Treasury bank accounts issued to a specific account. Private.
+         * @path /userProfiles/{userId}/accounts/{accountId}/treasuryBankAccounts/{bankAccountId}
+         * @allow (get) if auth.uid == userId.
+         * @principle Strict path-based ownership for sensitive banking info.
+         */
+        match /treasuryBankAccounts/{bankAccountId} {
+          allow get, list: if isOwner(userId);
+          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
+          allow update: if isExistingOwner(userId) && isImmutable('accountId');
+          allow delete: if isExistingOwner(userId);
+        }
+
+        /**
+         * @description Treasury cards issued to a specific account. Private.
+         * @path /userProfiles/{userId}/accounts/{accountId}/treasuryCards/{cardId}
+         * @allow (get) if auth.uid == userId.
+         * @principle Strict path-based ownership for sensitive card data.
+         */
+        match /treasuryCards/{cardId} {
+          allow get, list: if isOwner(userId);
+          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
+          allow update: if isExistingOwner(userId) && isImmutable('accountId');
           allow delete: if isExistingOwner(userId);
         }
       }
