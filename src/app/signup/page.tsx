@@ -37,48 +37,62 @@ export default function SignupPage() {
     }
   }, [user, isUserLoading, router]);
 
-  const handleSignup = async (e: React.FormEvent) => {
+  const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const newUser = userCredential.user;
-      
-      await updateProfile(newUser, { displayName: name });
+    // Following non-blocking pattern: Initiate, then handle results via callbacks
+    createUserWithEmailAndPassword(auth, email, password)
+      .then((userCredential) => {
+        const newUser = userCredential.user;
+        
+        // Update profile and create Firestore record
+        updateProfile(newUser, { displayName: name });
 
-      // Create Firestore User Profile
-      await setDoc(doc(firestore, "users", newUser.uid), {
-        uid: newUser.uid,
-        fullName: name,
-        email: email,
-        role: role,
-        headline: "",
-        bio: "",
-        location: "",
-        stage: "",
-        skills: [],
-        lookingFor: "",
-        preferredStage: "",
-        investorNote: "",
-        isOpenToPitches: false,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+        setDoc(doc(firestore, "users", newUser.uid), {
+          uid: newUser.uid,
+          fullName: name,
+          email: email,
+          role: role,
+          headline: "",
+          bio: "",
+          location: "",
+          stage: "",
+          skills: [],
+          lookingFor: "",
+          preferredStage: "",
+          investorNote: "",
+          isOpenToPitches: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
 
-      toast({ 
-        title: "Account created!", 
-        description: "Welcome to TabStartup." 
+        toast({ 
+          title: "Account created!", 
+          description: "Welcome to TabStartup." 
+        });
+        
+        // Navigation will be handled by the auth state observer in most cases, 
+        // but we can also trigger it manually here.
+        router.push('/dashboard');
+      })
+      .catch((error: any) => {
+        setIsSubmitting(false);
+        let message = "An error occurred during signup.";
+        if (error.code === 'auth/email-already-in-use') {
+          message = "An account already exists with this email.";
+        } else if (error.code === 'auth/weak-password') {
+          message = "Password should be at least 6 characters.";
+        } else if (error.code === 'auth/invalid-email') {
+          message = "Please enter a valid email address.";
+        }
+        
+        toast({ 
+          variant: "destructive",
+          title: "Signup failed", 
+          description: message 
+        });
       });
-      router.push('/dashboard');
-    } catch (error: any) {
-      setIsSubmitting(false);
-      toast({ 
-        variant: "destructive",
-        title: "Signup failed", 
-        description: error.message || "An error occurred during signup." 
-      });
-    }
   };
 
   if (isUserLoading) {

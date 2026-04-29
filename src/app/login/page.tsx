@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth, useUser, initiateEmailSignIn } from '@/firebase';
+import { useAuth, useUser } from '@/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -34,20 +35,37 @@ export default function LoginPage() {
     e.preventDefault();
     setIsSubmitting(true);
     
-    try {
-      initiateEmailSignIn(auth, email, password);
-      toast({ 
-        title: "Logging in...", 
-        description: "Checking your credentials." 
+    // Using the SDK directly and following non-blocking pattern by not using 'await'
+    // but still catching errors to prevent runtime crashes.
+    signInWithEmailAndPassword(auth, email, password)
+      .then(() => {
+        toast({ 
+          title: "Success", 
+          description: "Welcome back!" 
+        });
+        // Success redirect is handled by the useEffect monitoring auth state
+      })
+      .catch((error: any) => {
+        setIsSubmitting(false);
+        let message = "An error occurred during login.";
+        
+        // Handle common Firebase Auth error codes
+        if (error.code === 'auth/invalid-credential') {
+          message = "Invalid email or password.";
+        } else if (error.code === 'auth/user-not-found') {
+          message = "No account found with this email.";
+        } else if (error.code === 'auth/wrong-password') {
+          message = "Incorrect password.";
+        } else if (error.code === 'auth/too-many-requests') {
+          message = "Too many failed attempts. Please try again later.";
+        }
+        
+        toast({ 
+          variant: "destructive",
+          title: "Login failed", 
+          description: message 
+        });
       });
-    } catch (error: any) {
-      setIsSubmitting(false);
-      toast({ 
-        variant: "destructive",
-        title: "Login failed", 
-        description: error.message || "An error occurred during login." 
-      });
-    }
   };
 
   if (isUserLoading) {
