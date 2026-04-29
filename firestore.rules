@@ -1,85 +1,30 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /**
-     * TABSTARTUP SECURITY RULES
-     */
-
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isExistingOwner(userId) {
-      return resource != null && isOwner(userId);
-    }
-
-    function isValidLink(field, value) {
-      return request.resource.data[field] == value;
-    }
-
-    function isImmutable(field) {
-      return request.resource.data[field] == resource.data[field];
-    }
-
+    // USERS
     match /users/{userId} {
-      allow get, list: if true;
-      allow create: if isOwner(userId) && isValidLink('uid', userId);
-      allow update: if isExistingOwner(userId) && isImmutable('uid');
-      allow delete: if isExistingOwner(userId);
+      allow read, write: if request.auth != null;
     }
 
+    // STARTUPS
     match /startups/{startupId} {
-      allow get, list: if true;
-      allow create: if isOwner(startupId) && isValidLink('ownerUid', startupId);
-      allow update: if isExistingOwner(startupId) && isImmutable('ownerUid');
-      allow delete: if isExistingOwner(startupId);
-
-      match /views/{viewId} {
-        allow create: if true;
-        allow list: if isOwner(startupId);
-      }
-
-      match /interests/{investorId} {
-        allow create: if isSignedIn() && request.auth.uid == investorId;
-        allow get: if isSignedIn() && (request.auth.uid == investorId || isOwner(startupId));
-        allow list: if isOwner(startupId);
+      allow read, write: if request.auth != null;
+      
+      // Sub-collections like views and interests
+      match /{allSubcollections=**} {
+        allow read, write: if request.auth != null;
       }
     }
 
-    match /messages/{messageId} {
-      allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
-      allow get: if isSignedIn() && (
-        resource.data.senderId == request.auth.uid || 
-        resource.data.receiverId == request.auth.uid
-      );
-      allow list: if isSignedIn() && (
-        resource.data.senderId == request.auth.uid || 
-        resource.data.receiverId == request.auth.uid
-      );
-      allow update: if isSignedIn() && 
-        resource.data.receiverId == request.auth.uid && 
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-    }
-
+    // PITCHES
     match /pitches/{pitchId} {
-      allow create: if isSignedIn() && request.resource.data.fromInvestorUid == request.auth.uid;
-      allow get: if isSignedIn() && (
-        resource.data.fromInvestorUid == request.auth.uid || 
-        resource.data.toFounderUid == request.auth.uid
-      );
-      allow list: if isSignedIn() && (
-        resource.data.fromInvestorUid == request.auth.uid || 
-        resource.data.toFounderUid == request.auth.uid
-      );
-      allow update: if isSignedIn() && 
-        resource.data.toFounderUid == request.auth.uid && 
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow read, write: if request.auth != null;
+    }
+
+    // MESSAGES
+    match /messages/{messageId} {
+      allow read, write: if request.auth != null;
     }
   }
 }
