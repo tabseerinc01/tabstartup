@@ -25,7 +25,8 @@ import {
   Clock,
   Mail,
   Plus,
-  Send
+  Send,
+  Heart
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -54,9 +55,15 @@ export default function DashboardOverviewPage() {
     return collection(firestore, 'startups', user.uid, 'views');
   }, [firestore, user]);
 
+  const interestsQuery = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return collection(firestore, 'startups', user.uid, 'interests');
+  }, [firestore, user]);
+
   const { data: profile, isLoading: isProfileLoading } = useDoc(userRef);
   const { data: startup, isLoading: isStartupLoading } = useDoc(startupRef);
   const { data: views, isLoading: isViewsLoading } = useCollection(viewsQuery);
+  const { data: interests, isLoading: isInterestsLoading } = useCollection(interestsQuery);
 
   if (isUserLoading || isProfileLoading || isStartupLoading) {
     return (
@@ -70,6 +77,7 @@ export default function DashboardOverviewPage() {
   const roleDisplay = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : "Founder";
   const isFounder = profile?.role === 'founder';
   const viewsCount = views?.length || 0;
+  const interestsCount = interests?.length || 0;
 
   const getCompleteness = () => {
     if (!profile) return 0;
@@ -97,23 +105,13 @@ export default function DashboardOverviewPage() {
   };
 
   const activities = [
-    { id: 1, type: 'view', text: 'An investor from London viewed your startup', time: '2 hours ago', icon: Eye, color: 'text-blue-500' },
-    { id: 2, type: 'interest', text: 'Jasmine Akter expressed interest in your venture', time: '5 hours ago', icon: Users, color: 'text-green-500' },
-    { id: 3, type: 'message', text: 'New message from Marcus Thorne regarding pitch deck', time: 'Yesterday', icon: MessageSquare, color: 'text-purple-500' },
-    { id: 4, type: 'view', text: 'Startup viewed 15 times in the last 24 hours', time: '1 day ago', icon: TrendingUp, color: 'text-primary' },
-    { id: 5, type: 'milestone', text: 'Profile completeness reached 85%', time: '2 days ago', icon: CheckCircle2, color: 'text-orange-500' },
+    { id: 1, type: 'view', text: 'Someone viewed your startup', time: 'Recently', icon: Eye, color: 'text-blue-500' },
+    { id: 2, type: 'interest', text: 'An investor expressed interest', time: 'Recently', icon: Users, color: 'text-green-500' },
+    { id: 3, type: 'message', text: 'New message received', time: 'Yesterday', icon: MessageSquare, color: 'text-purple-500' },
   ];
 
   const messages = [
-    { id: 1, sender: 'Marcus Thorne', text: 'Hey! Can you send over the updated financial model?', time: '2h ago', avatar: 'https://picsum.photos/seed/m1/40/40' },
-    { id: 2, sender: 'Jasmine Akter', text: 'I\'d love to chat more about your scale plan for next year.', time: '5h ago', avatar: 'https://picsum.photos/seed/m2/40/40' },
-    { id: 3, sender: 'Elena Rodriguez', text: 'Thanks for the intro! Let\'s schedule a call for Tuesday.', time: '1d ago', avatar: 'https://picsum.photos/seed/m3/40/40' },
-  ];
-
-  const interestedInvestors = [
-    { id: 'inv1', name: 'Jasmine Akter', firm: 'Delta VC', info: 'Early-stage Fintech focus', avatar: 'https://picsum.photos/seed/inv1/40/40' },
-    { id: 'inv2', name: 'Marcus Thorne', firm: 'Angel Investor', info: 'Sustainability & AI advisor', avatar: 'https://picsum.photos/seed/inv2/40/40' },
-    { id: 'inv3', name: 'Elena Rodriguez', firm: 'Impact Fund', info: 'Scaling social ventures', avatar: 'https://picsum.photos/seed/inv3/40/40' },
+    { id: 1, sender: 'System', text: 'Welcome to TabStartup! Start building your network.', time: '2d ago', avatar: 'https://picsum.photos/seed/sys/40/40' },
   ];
 
   return (
@@ -232,24 +230,21 @@ export default function DashboardOverviewPage() {
                 
                 <div className="grid grid-cols-2 gap-2 py-2 border-t border-b border-dashed border-primary/10 mt-2">
                   <div className="text-center border-r border-dashed border-primary/10">
-                    <p className="text-[10px] text-muted-foreground uppercase">Investors</p>
-                    <p className="text-sm font-bold text-primary">12</p>
+                    <p className="text-[10px] text-muted-foreground uppercase">Interest</p>
+                    <p className="text-sm font-bold text-primary">{interestsCount}</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase">Interest</p>
-                    <p className="text-sm font-bold text-primary">$22.5k</p>
+                    <p className="text-[10px] text-muted-foreground uppercase">Views</p>
+                    <p className="text-sm font-bold text-primary">{viewsCount}</p>
                   </div>
                 </div>
               </div>
 
               <div className="flex gap-2 mt-4">
-                <Button size="sm" variant="outline" asChild className="flex-1">
+                <Button size="sm" variant="outline" asChild className="w-full">
                   <Link href="/dashboard/fundraising">
-                    Edit Campaign
+                    Manage Campaign
                   </Link>
-                </Button>
-                <Button size="sm" variant="ghost" className="flex-1">
-                  View Campaign
                 </Button>
               </div>
             </CardContent>
@@ -271,11 +266,11 @@ export default function DashboardOverviewPage() {
         <Card className="border-primary/10 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Investor Interests</CardTitle>
-            <Users className="h-4 w-4 text-primary" />
+            <Heart className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">12</div>
-            <p className="text-[10px] text-muted-foreground mt-1">3 new this week</p>
+            <div className="text-xl font-bold">{isInterestsLoading ? "..." : interestsCount}</div>
+            <p className="text-[10px] text-muted-foreground mt-1">{interestsCount > 0 ? `${interestsCount} leads to follow up` : 'No interests yet'}</p>
           </CardContent>
         </Card>
         <Card className="border-primary/10 shadow-sm">
@@ -284,7 +279,7 @@ export default function DashboardOverviewPage() {
             <MessageSquare className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">5</div>
+            <div className="text-xl font-bold">0</div>
             <p className="text-[10px] text-muted-foreground mt-1">Check your inbox</p>
           </CardContent>
         </Card>
@@ -320,9 +315,6 @@ export default function DashboardOverviewPage() {
             <Link href="/dashboard/startup">
               <Rocket className="h-4 w-4" /> Edit Startup Profile
             </Link>
-          </Button>
-          <Button variant="outline" className="gap-2">
-            <MessageSquare className="h-4 w-4" /> Open Messages
           </Button>
         </CardContent>
       </Card>
@@ -362,16 +354,6 @@ export default function DashboardOverviewPage() {
                 </Button>
               </div>
             )}
-            <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group opacity-60">
-              <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
-                <Target className="h-5 w-5 text-primary" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold">Verified Founder Badge</p>
-                <p className="text-xs text-muted-foreground">Submit documents for official verification.</p>
-              </div>
-              <Badge variant="secondary">Upcoming</Badge>
-            </div>
           </CardContent>
         </Card>
         
@@ -402,24 +384,30 @@ export default function DashboardOverviewPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Interested Investors</p>
-                <Badge variant="outline" className="text-[9px] h-4 bg-primary/5">{interestedInvestors.length} Leads</Badge>
+                <Badge variant="outline" className="text-[9px] h-4 bg-primary/5">{interestsCount} Leads</Badge>
               </div>
               <div className="space-y-3">
-                {interestedInvestors.map((investor) => (
-                  <div key={investor.id} className="flex items-center gap-3 group">
-                    <Avatar className="h-8 w-8 border border-primary/10">
-                      <AvatarImage src={investor.avatar} alt={investor.name} />
-                      <AvatarFallback>{investor.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 overflow-hidden">
-                      <p className="text-xs font-bold leading-none">{investor.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{investor.firm} • {investor.info}</p>
+                {isInterestsLoading ? (
+                  <div className="flex justify-center p-4"><Loader2 className="h-4 w-4 animate-spin" /></div>
+                ) : interests && interests.length > 0 ? (
+                  interests.map((interest: any) => (
+                    <div key={interest.id} className="flex items-center gap-3 group">
+                      <Avatar className="h-8 w-8 border border-primary/10">
+                        <AvatarImage src={`https://picsum.photos/seed/${interest.investorId}/40/40`} />
+                        <AvatarFallback>{interest.investorName?.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 overflow-hidden">
+                        <p className="text-xs font-bold leading-none">{interest.investorName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{interest.investorHeadline}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" title="Send Message">
+                        <Send className="h-3 w-3" />
+                      </Button>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" title="Send Message">
-                      <Send className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-[10px] text-muted-foreground italic text-center py-2">No active leads yet.</p>
+                )}
               </div>
             </div>
 
@@ -439,7 +427,6 @@ export default function DashboardOverviewPage() {
               </CardTitle>
               <CardDescription>Track interactions with your startup and profile.</CardDescription>
             </div>
-            <Button variant="ghost" size="sm" className="text-xs">View All</Button>
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
@@ -466,9 +453,6 @@ export default function DashboardOverviewPage() {
               </CardTitle>
               <CardDescription>Latest correspondence from your network.</CardDescription>
             </div>
-            <Button variant="ghost" size="sm" className="text-xs" asChild>
-              <Link href="/dashboard">View All Messages</Link>
-            </Button>
           </CardHeader>
           <CardContent>
             <div className="space-y-6">

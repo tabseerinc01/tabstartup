@@ -182,6 +182,20 @@
         "timestamp": { "type": "string", "format": "date-time" }
       },
       "required": ["startupId", "timestamp"]
+    },
+    "Interest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Interest",
+      "type": "object",
+      "description": "Tracks investor interest in a startup.",
+      "properties": {
+        "startupId": { "type": "string" },
+        "investorId": { "type": "string" },
+        "investorName": { "type": "string" },
+        "investorHeadline": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["startupId", "investorId", "timestamp"]
     }
   },
   "auth": {
@@ -211,6 +225,14 @@
           "entityName": "View",
           "schema": { "$ref": "#/backend/entities/View" },
           "description": "Tracks views for a specific startup."
+        }
+      },
+      {
+        "path": "/startups/{startupId}/interests/{investorId}",
+        "definition": {
+          "entityName": "Interest",
+          "schema": { "$ref": "#/backend/entities/Interest" },
+          "description": "Tracks specific investor interest in a startup."
         }
       }
     ]

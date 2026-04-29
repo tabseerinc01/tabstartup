@@ -1,16 +1,16 @@
 
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useFirestore, useDoc, useMemoFirebase, useUser } from '@/firebase';
-import { doc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, addDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Globe, Tag, Loader2, Rocket, Share2, HandCoins, ExternalLink } from 'lucide-react';
+import { MapPin, Globe, Tag, Loader2, Rocket, Share2, HandCoins, ExternalLink, Heart } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
@@ -20,12 +20,26 @@ export default function StartupPublicProfilePage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
+  const userRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+
   const startupRef = useMemoFirebase(() => {
     if (!firestore || !uid) return null;
     return doc(firestore, 'startups', uid as string);
   }, [firestore, uid]);
 
+  const interestRef = useMemoFirebase(() => {
+    if (!firestore || !uid || !user) return null;
+    return doc(firestore, 'startups', uid as string, 'interests', user.uid);
+  }, [firestore, uid, user]);
+
   const { data: startup, isLoading } = useDoc(startupRef);
+  const { data: currentUserProfile } = useDoc(userRef);
+  const { data: existingInterest } = useDoc(interestRef);
+  
+  const [isSubmittingInterest, setIsSubmittingInterest] = useState(false);
 
   useEffect(() => {
     if (!firestore || !uid) return;
@@ -38,6 +52,53 @@ export default function StartupPublicProfilePage() {
       timestamp: serverTimestamp(),
     }).catch(err => console.error("Failed to record view:", err));
   }, [firestore, uid, user]);
+
+  const handleExpressInterest = async () => {
+    if (!user || !firestore || !uid || !currentUserProfile) {
+      toast({
+        title: "Login Required",
+        description: "Please sign in to express interest.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (currentUserProfile.role !== 'investor') {
+      toast({
+        title: "Investors Only",
+        description: "Only verified investors can express interest in startups.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSubmittingInterest(true);
+    try {
+      const interestData = {
+        startupId: uid,
+        investorId: user.uid,
+        investorName: currentUserProfile.fullName || user.displayName || "Anonymous Investor",
+        investorHeadline: currentUserProfile.headline || "Active Investor",
+        timestamp: serverTimestamp(),
+      };
+
+      await setDoc(doc(firestore, 'startups', uid as string, 'interests', user.uid), interestData);
+      
+      toast({
+        title: "Interest Noted!",
+        description: "The founder has been notified of your interest.",
+      });
+    } catch (error) {
+      console.error("Error saving interest:", error);
+      toast({
+        title: "Error",
+        description: "Could not save your interest. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmittingInterest(true); // Keep disabled after success
+    }
+  };
 
   const copyListingLink = () => {
     const url = window.location.href;
@@ -73,6 +134,8 @@ export default function StartupPublicProfilePage() {
     );
   }
 
+  const canExpressInterest = user && currentUserProfile?.role === 'investor' && !existingInterest && !isSubmittingInterest;
+
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
@@ -89,7 +152,17 @@ export default function StartupPublicProfilePage() {
                   </div>
                   <p className="text-xl text-primary font-semibold">{startup.industry}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {canExpressInterest && (
+                    <Button onClick={handleExpressInterest} className="rounded-xl h-12 px-6 gap-2 bg-green-600 hover:bg-green-700">
+                      <Heart className="h-5 w-5 fill-white" /> Express Interest
+                    </Button>
+                  )}
+                  {existingInterest && (
+                    <Badge variant="outline" className="h-12 px-4 rounded-xl border-green-500 text-green-600 flex items-center gap-2 bg-green-50">
+                      <Heart className="h-4 w-4 fill-green-600" /> Interest Sent
+                    </Badge>
+                  )}
                   <Button variant="outline" size="icon" onClick={copyListingLink} className="rounded-xl h-12 w-12">
                     <Share2 className="h-5 w-5" />
                   </Button>

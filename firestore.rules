@@ -32,36 +32,6 @@ service cloud.firestore {
       allow create: if isOwner(userId) && isValidLink('uid', userId);
       allow update: if isExistingOwner(userId) && isImmutable('uid');
       allow delete: if isExistingOwner(userId);
-
-      match /accounts/{accountId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) && isValidLink('ownerId', userId);
-        allow update: if isExistingOwner(userId) && isImmutable('ownerId');
-        allow delete: if isExistingOwner(userId);
-
-        match /invoices/{invoiceId} {
-          allow get: if true;
-          allow list: if isOwner(userId);
-          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
-          allow update: if isExistingOwner(userId) && isImmutable('accountId');
-          allow delete: if isExistingOwner(userId);
-        }
-
-        match /paymentLinks/{paymentLinkId} {
-          allow get: if true;
-          allow list: if isOwner(userId);
-          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
-          allow update: if isExistingOwner(userId) && isImmutable('accountId');
-          allow delete: if isExistingOwner(userId);
-        }
-
-        match /transactions/{transactionId} {
-          allow get, list: if isOwner(userId);
-          allow create: if isOwner(userId) && isValidLink('accountId', accountId);
-          allow update: if isExistingOwner(userId) && isImmutable('accountId');
-          allow delete: if isExistingOwner(userId);
-        }
-      }
     }
 
     match /startups/{startupId} {
@@ -72,6 +42,14 @@ service cloud.firestore {
 
       match /views/{viewId} {
         allow create: if true;
+        allow list: if isOwner(startupId);
+      }
+
+      match /interests/{investorId} {
+        // Any signed in user with investor role can create an interest
+        // We assume the caller checks the role, but for rules we simplify
+        allow create: if isSignedIn() && request.auth.uid == investorId;
+        allow get: if isSignedIn() && (request.auth.uid == investorId || isOwner(startupId));
         allow list: if isOwner(startupId);
       }
     }
