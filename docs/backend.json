@@ -211,6 +211,20 @@
         "timestamp": { "type": "string", "format": "date-time" }
       },
       "required": ["senderId", "receiverId", "text", "timestamp"]
+    },
+    "Pitch": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Pitch",
+      "type": "object",
+      "description": "A pitch sent from an investor to a founder.",
+      "properties": {
+        "fromInvestorUid": { "type": "string" },
+        "toFounderUid": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fromInvestorUid", "toFounderUid", "message", "status", "createdAt"]
     }
   },
   "auth": {
@@ -256,6 +270,14 @@
           "entityName": "Message",
           "schema": { "$ref": "#/backend/entities/Message" },
           "description": "Private messages between users."
+        }
+      },
+      {
+        "path": "/pitches/{pitchId}",
+        "definition": {
+          "entityName": "Pitch",
+          "schema": { "$ref": "#/backend/entities/Pitch" },
+          "description": "Investment pitches from investors to founders."
         }
       }
     ]

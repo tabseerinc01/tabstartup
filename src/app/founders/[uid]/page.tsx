@@ -1,21 +1,27 @@
 
 'use client';
 
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useFirestore, useDoc, useMemoFirebase, useUser } from '@/firebase';
+import { doc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Briefcase, Award, CheckCircle2, MessageSquare, Calendar, Globe, Linkedin, GraduationCap, ArrowLeft, Loader2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { MapPin, Briefcase, Award, CheckCircle2, MessageSquare, Calendar, Globe, Linkedin, GraduationCap, ArrowLeft, Loader2, Send } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 
 export default function FounderPublicProfilePage() {
   const { uid } = useParams();
   const firestore = useFirestore();
+  const { user } = useUser();
+  const { toast } = useToast();
 
   const userRef = useMemoFirebase(() => {
     if (!firestore || !uid) return null;
@@ -23,6 +29,46 @@ export default function FounderPublicProfilePage() {
   }, [firestore, uid]);
 
   const { data: founder, isLoading } = useDoc(userRef);
+  
+  // Current user's profile to check role
+  const currentUserRef = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user?.uid]);
+  
+  const { data: currentUserProfile } = useDoc(currentUserRef);
+
+  const [pitchMessage, setPitchMessage] = useState('');
+  const [isSendingPitch, setIsSendingPitch] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const handleSendPitch = async () => {
+    if (!user || !firestore || !uid) return;
+    if (!pitchMessage.trim()) {
+      toast({ title: "Message Required", description: "Please enter a message for your pitch.", variant: "destructive" });
+      return;
+    }
+
+    setIsSendingPitch(true);
+    try {
+      await addDoc(collection(firestore, 'pitches'), {
+        fromInvestorUid: user.uid,
+        toFounderUid: uid,
+        message: pitchMessage,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
+
+      toast({ title: "Pitch Sent!", description: "Your pitch has been delivered to the founder." });
+      setPitchMessage('');
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error("Error sending pitch:", error);
+      toast({ title: "Error", description: "Failed to send pitch. Please try again.", variant: "destructive" });
+    } finally {
+      setIsSendingPitch(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -51,6 +97,7 @@ export default function FounderPublicProfilePage() {
 
   const displayName = founder.fullName || founder.name;
   const imageId = founder.uid || founder.id || 'user';
+  const isInvestor = currentUserProfile?.role === 'investor';
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
@@ -87,7 +134,41 @@ export default function FounderPublicProfilePage() {
               </div>
 
               <div className="flex flex-wrap gap-4 mb-12">
-                <Button className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base"><MessageSquare className="h-5 w-5" /> Message Founder</Button>
+                {isInvestor ? (
+                  <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base bg-primary hover:bg-primary/90">
+                        <Send className="h-5 w-5" /> Send Pitch
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Pitch to {displayName}</DialogTitle>
+                        <DialogDescription>
+                          Share your investment proposal or express interest in collaborating.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <Textarea 
+                          placeholder="Tell the founder why you're interested and what you can offer..."
+                          className="min-h-[150px] rounded-xl"
+                          value={pitchMessage}
+                          onChange={(e) => setPitchMessage(e.target.value)}
+                        />
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSendingPitch}>Cancel</Button>
+                        <Button onClick={handleSendPitch} disabled={isSendingPitch}>
+                          {isSendingPitch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                          Send Pitch
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                ) : (
+                  <Button className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base"><MessageSquare className="h-5 w-5" /> Message Founder</Button>
+                )}
+                
                 <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base"><Calendar className="h-5 w-5" /> Schedule Meeting</Button>
                 <div className="flex gap-2">
                   {founder.socialLinks?.linkedin && (

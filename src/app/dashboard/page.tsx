@@ -26,12 +26,15 @@ import {
   Mail,
   Plus,
   Send,
-  Heart
+  Heart,
+  Check,
+  X,
+  FileSignature
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
-import { doc, collection, query, where, limit, orderBy } from 'firebase/firestore';
+import { doc, collection, query, where, limit, orderBy, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 
@@ -60,10 +63,31 @@ export default function DashboardOverviewPage() {
     return collection(firestore, 'startups', user.uid, 'interests');
   }, [firestore, user?.uid]);
 
+  // Pitches queries
+  const incomingPitchesQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(
+      collection(firestore, 'pitches'),
+      where('toFounderUid', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+  }, [firestore, user?.uid]);
+
+  const sentPitchesQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(
+      collection(firestore, 'pitches'),
+      where('fromInvestorUid', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+  }, [firestore, user?.uid]);
+
   const { data: profile, isLoading: isProfileLoading } = useDoc(userRef);
   const { data: startup, isLoading: isStartupLoading } = useDoc(startupRef);
   const { data: views, isLoading: isViewsLoading } = useCollection(viewsQuery);
   const { data: interests, isLoading: isInterestsLoading } = useCollection(interestsQuery);
+  const { data: incomingPitches, isLoading: isIncomingPitchesLoading } = useCollection(incomingPitchesQuery);
+  const { data: sentPitches, isLoading: isSentPitchesLoading } = useCollection(sentPitchesQuery);
 
   if (isUserLoading || isProfileLoading || isStartupLoading) {
     return (
@@ -76,8 +100,27 @@ export default function DashboardOverviewPage() {
   const displayName = profile?.fullName || user?.email?.split('@')[0] || "Founder";
   const roleDisplay = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : "Founder";
   const isFounder = profile?.role === 'founder';
+  const isInvestor = profile?.role === 'investor';
   const viewsCount = views?.length || 0;
   const interestsCount = interests?.length || 0;
+
+  const handlePitchStatus = async (pitchId: string, status: 'accepted' | 'rejected') => {
+    if (!firestore) return;
+    try {
+      await updateDoc(doc(firestore, 'pitches', pitchId), { status });
+      toast({
+        title: `Pitch ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+        description: `You have ${status} this investment pitch.`,
+      });
+    } catch (error) {
+      console.error("Error updating pitch status:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update pitch status.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const getCompleteness = () => {
     if (!profile) return 0;
@@ -123,7 +166,7 @@ export default function DashboardOverviewPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/founders/${user?.uid}`} className="gap-2">
+            <Link href={isFounder ? `/founders/${user?.uid}` : `/investors/${user?.uid}`} className="gap-2">
               <ExternalLink className="h-4 w-4" /> View Public Profile
             </Link>
           </Button>
@@ -143,7 +186,7 @@ export default function DashboardOverviewPage() {
             <div className="text-2xl font-bold">{completeness}%</div>
             <Progress value={completeness} className="mt-2 h-2" />
             <p className="text-xs text-muted-foreground mt-2">
-              {completeness < 100 ? "Add experience and vision to attract investors." : "Your profile is investor-ready!"}
+              {completeness < 100 ? "Add experience and vision to attract partners." : "Your profile is fully ready!"}
             </p>
             
             {completeness < 100 && (
@@ -176,32 +219,34 @@ export default function DashboardOverviewPage() {
           </CardContent>
         </Card>
         
-        <Card className="border-primary/10 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Startup Listing</CardTitle>
-            <Rocket className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold truncate">{startup ? startup.name : "Unlisted"}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {startup 
-                ? `${startup.industry} • ${startup.stage}` 
-                : "Pitch your venture to the community."}
-            </p>
-            <div className="flex gap-2 mt-4">
-              <Button size="sm" variant="ghost" asChild className="flex-1 border border-dashed border-primary/20 hover:bg-primary/5">
-                <Link href="/dashboard/startup">
-                  {startup ? "Update Venture" : "Create Startup Listing"}
-                </Link>
-              </Button>
-              {startup && (
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`/startups/${user?.uid}`, 'Startup')} title="Copy Startup Link">
-                  <Share2 className="h-4 w-4" />
+        {isFounder && (
+          <Card className="border-primary/10 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Startup Listing</CardTitle>
+              <Rocket className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold truncate">{startup ? startup.name : "Unlisted"}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {startup 
+                  ? `${startup.industry} • ${startup.stage}` 
+                  : "Pitch your venture to the community."}
+              </p>
+              <div className="flex gap-2 mt-4">
+                <Button size="sm" variant="ghost" asChild className="flex-1 border border-dashed border-primary/20 hover:bg-primary/5">
+                  <Link href="/dashboard/startup">
+                    {startup ? "Update Venture" : "Create Startup Listing"}
+                  </Link>
                 </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                {startup && (
+                  <Button size="sm" variant="outline" onClick={() => copyToClipboard(`/startups/${user?.uid}`, 'Startup')} title="Copy Startup Link">
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {isFounder && (
           <Card className="border-primary/10 shadow-sm">
@@ -248,37 +293,175 @@ export default function DashboardOverviewPage() {
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="border-primary/10 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Startup Views</CardTitle>
-            <Eye className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">{isViewsLoading ? "..." : viewsCount.toLocaleString()}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">Total views tracked</p>
-          </CardContent>
-        </Card>
-        <Card className="border-primary/10 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Investor Interests</CardTitle>
-            <Heart className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">{isInterestsLoading ? "..." : interestsCount}</div>
-            <p className="text-[10px] text-muted-foreground mt-1">{interestsCount > 0 ? `${interestsCount} leads to follow up` : 'No interests yet'}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-primary/10 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Funding Progress</CardTitle>
-            <TrendingUp className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold">0%</div>
-            <Progress value={0} className="mt-2 h-1" />
-          </CardContent>
-        </Card>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {/* Pitch System UI */}
+        {isFounder && (
+          <Card className="lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileSignature className="h-5 w-5 text-primary" /> Incoming Pitches
+                </CardTitle>
+                <CardDescription>Review proposals from interested investors.</CardDescription>
+              </div>
+              <Badge variant="outline" className="bg-primary/5">{incomingPitches?.length || 0}</Badge>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {isIncomingPitchesLoading ? (
+                  <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                ) : incomingPitches && incomingPitches.length > 0 ? (
+                  incomingPitches.map((pitch: any) => (
+                    <div key={pitch.id} className="p-4 border rounded-2xl bg-muted/20 space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={`https://picsum.photos/seed/${pitch.fromInvestorUid}/40/40`} />
+                            <AvatarFallback>I</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="text-sm font-bold">Investor</p>
+                            <p className="text-xs text-muted-foreground">{new Date(pitch.createdAt?.toDate()).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                        <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
+                          {pitch.status.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <p className="text-sm italic text-muted-foreground">"{pitch.message}"</p>
+                      {pitch.status === 'pending' && (
+                        <div className="flex gap-2 justify-end">
+                          <Button size="sm" variant="outline" onClick={() => handlePitchStatus(pitch.id, 'rejected')} className="text-destructive hover:text-destructive">
+                            <X className="h-4 w-4 mr-1" /> Reject
+                          </Button>
+                          <Button size="sm" onClick={() => handlePitchStatus(pitch.id, 'accepted')}>
+                            <Check className="h-4 w-4 mr-1" /> Accept
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 border-2 border-dashed rounded-3xl">
+                    <Mail className="h-12 w-12 mx-auto text-muted-foreground/20 mb-3" />
+                    <p className="text-sm text-muted-foreground">No incoming pitches yet.</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {isInvestor && (
+          <Card className="lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Send className="h-5 w-5 text-primary" /> Sent Pitches
+                </CardTitle>
+                <CardDescription>Track the status of your investment proposals.</CardDescription>
+              </div>
+              <Badge variant="outline" className="bg-primary/5">{sentPitches?.length || 0}</Badge>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {isSentPitchesLoading ? (
+                  <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                ) : sentPitches && sentPitches.length > 0 ? (
+                  sentPitches.map((pitch: any) => (
+                    <div key={pitch.id} className="p-4 border rounded-2xl bg-muted/20 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                          Sent on {new Date(pitch.createdAt?.toDate()).toLocaleDateString()}
+                        </p>
+                        <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
+                          {pitch.status.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <p className="text-sm line-clamp-2">"{pitch.message}"</p>
+                      <div className="flex justify-end">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/founders/${pitch.toFounderUid}`}>View Founder Profile</Link>
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 border-2 border-dashed rounded-3xl">
+                    <Send className="h-12 w-12 mx-auto text-muted-foreground/20 mb-3" />
+                    <p className="text-sm text-muted-foreground">You haven't sent any pitches yet.</p>
+                    <Button variant="outline" className="mt-4" asChild>
+                      <Link href="/founders">Browse Founders</Link>
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Interested Investors List for Founders */}
+        {isFounder && (
+          <Card className="border-primary/10 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">Investor Engagement</CardTitle>
+              <CardDescription>Investors tracking your venture.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Public Preview</p>
+                <div className="flex items-center gap-4 p-3 bg-muted/30 rounded-2xl border border-dashed border-primary/10">
+                  <div className="relative h-12 w-12 rounded-xl overflow-hidden bg-muted shadow-sm">
+                    <Image src={profile?.imageUrl || `https://picsum.photos/seed/${user?.uid || 'user'}/128/128`} alt={displayName} fill className="object-cover" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold flex items-center gap-1">
+                      {displayName} 
+                      {profile?.isVerified && <CheckCircle2 className="h-3 w-3 text-primary" />}
+                    </p>
+                    <Badge variant="secondary" className="text-[9px] h-4">{profile?.stage || "Early"} Stage</Badge>
+                  </div>
+                </div>
+              </div>
+
+              <Separator className="bg-primary/5" />
+              
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Interested Investors</p>
+                  <Badge variant="outline" className="text-[9px] h-4 bg-primary/5">{interestsCount} Leads</Badge>
+                </div>
+                <div className="space-y-3">
+                  {isInterestsLoading ? (
+                    <div className="flex justify-center p-4"><Loader2 className="h-4 w-4 animate-spin" /></div>
+                  ) : interests && interests.length > 0 ? (
+                    interests.map((interest: any) => (
+                      <div key={interest.id} className="flex items-center gap-3 group">
+                        <Avatar className="h-8 w-8 border border-primary/10">
+                          <AvatarImage src={`https://picsum.photos/seed/${interest.investorId}/40/40`} />
+                          <AvatarFallback>{interest.investorName?.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 overflow-hidden">
+                          <p className="text-xs font-bold leading-none">{interest.investorName}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{interest.investorHeadline}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" title="Send Message">
+                          <Send className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground italic text-center py-2">No active leads yet.</p>
+                  )}
+                </div>
+              </div>
+
+              <Button variant="outline" size="sm" className="w-full mt-2" asChild>
+                <Link href={`/founders/${user?.uid}`}>View Full Public Profile</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card className="border-primary/10 shadow-sm">
@@ -287,134 +470,34 @@ export default function DashboardOverviewPage() {
           <CardDescription>Common tasks you might want to perform.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
-          <Button variant="outline" className="gap-2" asChild>
-            <Link href="/dashboard/fundraising">
-              <HandCoins className="h-4 w-4" /> Launch / Edit Fundraising
-            </Link>
-          </Button>
-          <Button variant="outline" className="gap-2" asChild>
-            <Link href="/dashboard/fundraising">
-              <FileText className="h-4 w-4" /> Upload Pitch Deck
-            </Link>
-          </Button>
-          <Button variant="outline" className="gap-2" asChild>
-            <Link href="/dashboard/startup">
-              <Rocket className="h-4 w-4" /> Edit Startup Profile
-            </Link>
-          </Button>
+          {isFounder && (
+            <>
+              <Button variant="outline" className="gap-2" asChild>
+                <Link href="/dashboard/fundraising">
+                  <HandCoins className="h-4 w-4" /> Launch / Edit Fundraising
+                </Link>
+              </Button>
+              <Button variant="outline" className="gap-2" asChild>
+                <Link href="/dashboard/fundraising">
+                  <FileText className="h-4 w-4" /> Upload Pitch Deck
+                </Link>
+              </Button>
+              <Button variant="outline" className="gap-2" asChild>
+                <Link href="/dashboard/startup">
+                  <Rocket className="h-4 w-4" /> Edit Startup Profile
+                </Link>
+              </Button>
+            </>
+          )}
+          {isInvestor && (
+            <Button variant="outline" className="gap-2" asChild>
+              <Link href="/founders">
+                <Users className="h-4 w-4" /> Browse Founders
+              </Link>
+            </Button>
+          )}
         </CardContent>
       </Card>
-
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Next Milestones</CardTitle>
-            <CardDescription>Actions to strengthen your presence.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!startup?.pitchDeckUrl && isFounder && (
-              <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group">
-                <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
-                  <HandCoins className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold">Upload Pitch Deck</p>
-                  <p className="text-xs text-muted-foreground">Add your presentation to attract investors.</p>
-                </div>
-                <Button size="sm" variant="ghost" asChild>
-                  <Link href="/dashboard/fundraising">Add Deck</Link>
-                </Button>
-              </div>
-            )}
-            {!profile?.whyBuilding && (
-              <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group">
-                <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
-                  <Target className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold">Share your "Why"</p>
-                  <p className="text-xs text-muted-foreground">Explain the passion behind your startup.</p>
-                </div>
-                <Button size="sm" variant="ghost" asChild>
-                  <Link href="/dashboard/profile">Start</Link>
-                </Button>
-              </div>
-            )}
-            <div className="flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/30 transition-all cursor-pointer group">
-              <div className="bg-primary/10 p-3 rounded-full group-hover:bg-primary/20">
-                <MessageSquare className="h-5 w-5 text-primary" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold">Message Network</p>
-                <p className="text-xs text-muted-foreground">Check in with your connections and investors.</p>
-              </div>
-              <Button size="sm" variant="ghost" asChild>
-                <Link href="#">Open Inbox</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="border-primary/10 shadow-sm">
-          <CardHeader>
-            <CardTitle>Investor Engagement</CardTitle>
-            <CardDescription>Your appearance and interested leads.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Public Preview</p>
-              <div className="flex items-center gap-4 p-3 bg-muted/30 rounded-2xl border border-dashed border-primary/10">
-                <div className="relative h-12 w-12 rounded-xl overflow-hidden bg-muted shadow-sm">
-                  <Image src={profile?.imageUrl || `https://picsum.photos/seed/${user?.uid || 'user'}/128/128`} alt={displayName} fill className="object-cover" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold flex items-center gap-1">
-                    {displayName} 
-                    {profile?.isVerified && <CheckCircle2 className="h-3 w-3 text-primary" />}
-                  </p>
-                  <Badge variant="secondary" className="text-[9px] h-4">{profile?.stage || "Early"} Stage</Badge>
-                </div>
-              </div>
-            </div>
-
-            <Separator className="bg-primary/5" />
-            
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Interested Investors</p>
-                <Badge variant="outline" className="text-[9px] h-4 bg-primary/5">{interestsCount} Leads</Badge>
-              </div>
-              <div className="space-y-3">
-                {isInterestsLoading ? (
-                  <div className="flex justify-center p-4"><Loader2 className="h-4 w-4 animate-spin" /></div>
-                ) : interests && interests.length > 0 ? (
-                  interests.map((interest: any) => (
-                    <div key={interest.id} className="flex items-center gap-3 group">
-                      <Avatar className="h-8 w-8 border border-primary/10">
-                        <AvatarImage src={`https://picsum.photos/seed/${interest.investorId}/40/40`} />
-                        <AvatarFallback>{interest.investorName?.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 overflow-hidden">
-                        <p className="text-xs font-bold leading-none">{interest.investorName}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{interest.investorHeadline}</p>
-                      </div>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" title="Send Message">
-                        <Send className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-[10px] text-muted-foreground italic text-center py-2">No active leads yet.</p>
-                )}
-              </div>
-            </div>
-
-            <Button variant="outline" size="sm" className="w-full mt-2" asChild>
-              <Link href={`/founders/${user?.uid}`}>View Full Public Profile</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="border-primary/10 shadow-sm md:col-span-2">
