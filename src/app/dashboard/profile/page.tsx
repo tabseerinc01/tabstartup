@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,23 +9,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { Loader2, Plus, Trash2, Github, Linkedin, Globe, Twitter, Image as ImageIcon } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
+import { useUser, useFirestore } from '@/firebase';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { Loader2, Plus, Trash2, Linkedin, Globe, Twitter, Image as ImageIcon } from 'lucide-react';
 
 export default function ProfilePage() {
   const { toast } = useToast();
   const { user } = useUser();
   const firestore = useFirestore();
 
-  const userRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
-
-  const { data: profile, isLoading } = useDoc(userRef);
-
+  const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState({
     fullName: '',
     imageUrl: '',
@@ -52,24 +44,37 @@ export default function ProfilePage() {
   });
 
   useEffect(() => {
-    if (profile) {
-      setFormData({
-        fullName: profile.fullName || '',
-        imageUrl: profile.imageUrl || '',
-        headline: profile.headline || '',
-        location: profile.location || '',
-        stage: profile.stage || '',
-        skills: Array.isArray(profile.skills) ? profile.skills.join(', ') : '',
-        bio: profile.bio || '',
-        whyBuilding: profile.whyBuilding || '',
-        lookingFor: profile.lookingFor || '',
-        socialLinks: profile.socialLinks || { linkedin: '', website: '', twitter: '' },
-        availability: profile.availability || { openToInvestment: false, hiring: false, coFounder: false },
-        experience: profile.experience && profile.experience.length > 0 ? profile.experience : [{ company: '', role: '', duration: '', description: '' }],
-        achievements: profile.achievements && profile.achievements.length > 0 ? profile.achievements : [''],
-      });
+    async function loadProfile() {
+      if (!firestore || !user?.uid) return;
+      setIsLoading(true);
+      try {
+        const snap = await getDoc(doc(firestore, 'users', user.uid));
+        if (snap.exists()) {
+          const profile = snap.data();
+          setFormData({
+            fullName: profile.fullName || '',
+            imageUrl: profile.imageUrl || '',
+            headline: profile.headline || '',
+            location: profile.location || '',
+            stage: profile.stage || '',
+            skills: Array.isArray(profile.skills) ? profile.skills.join(', ') : '',
+            bio: profile.bio || '',
+            whyBuilding: profile.whyBuilding || '',
+            lookingFor: profile.lookingFor || '',
+            socialLinks: profile.socialLinks || { linkedin: '', website: '', twitter: '' },
+            availability: profile.availability || { openToInvestment: false, hiring: false, coFounder: false },
+            experience: profile.experience && profile.experience.length > 0 ? profile.experience : [{ company: '', role: '', duration: '', description: '' }],
+            achievements: profile.achievements && profile.achievements.length > 0 ? profile.achievements : [''],
+          });
+        }
+      } catch (error) {
+        console.error("Error loading profile:", error);
+      } finally {
+        setIsLoading(false);
+      }
     }
-  }, [profile]);
+    loadProfile();
+  }, [firestore, user?.uid]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,7 +180,7 @@ export default function ProfilePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="imageUrl" className="flex items-center gap-2">
-                  <ImageIcon className="h-4 w-4" /> Profile Image URL (avatarUrl)
+                  <ImageIcon className="h-4 w-4" /> Profile Image URL
                 </Label>
                 <Input 
                   id="imageUrl" 
@@ -183,13 +188,12 @@ export default function ProfilePage() {
                   value={formData.imageUrl}
                   onChange={e => setFormData({...formData, imageUrl: e.target.value})}
                 />
-                <p className="text-[10px] text-muted-foreground">Enter a direct link to your image (e.g. from Unsplash or Pinterest)</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="headline">Headline</Label>
                 <Input 
                   id="headline" 
-                  placeholder="e.g. Building the future of AgriTech in Bangladesh"
+                  placeholder="e.g. Building the future of AgriTech"
                   value={formData.headline}
                   onChange={e => setFormData({...formData, headline: e.target.value})}
                 />
@@ -273,19 +277,9 @@ export default function ProfilePage() {
                 <Textarea 
                   id="why" 
                   rows={6} 
-                  placeholder="Investors look for passion and purpose. Explain why this problem matters to you."
+                  placeholder="Investors look for passion and purpose."
                   value={formData.whyBuilding}
                   onChange={e => setFormData({...formData, whyBuilding: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="looking">What are you looking for right now?</Label>
-                <Textarea 
-                  id="looking" 
-                  rows={3} 
-                  placeholder="e.g. Seed funding, Technical co-founder, Mentorship..."
-                  value={formData.lookingFor}
-                  onChange={e => setFormData({...formData, lookingFor: e.target.value})}
                 />
               </div>
             </CardContent>
@@ -296,7 +290,6 @@ export default function ProfilePage() {
           <Card>
             <CardHeader>
               <CardTitle>Availability</CardTitle>
-              <CardDescription>Let others know your current status.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center space-x-2">
@@ -321,47 +314,6 @@ export default function ProfilePage() {
                 />
                 <Label htmlFor="hiring">Currently Hiring</Label>
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="cofounder" 
-                  checked={formData.availability.coFounder}
-                  onCheckedChange={(checked) => setFormData({
-                    ...formData, 
-                    availability: {...formData.availability, coFounder: !!checked}
-                  })}
-                />
-                <Label htmlFor="cofounder">Looking for a Co-Founder</Label>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Skills & Expertise</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="stage">Current Stage</Label>
-                <Select value={formData.stage} onValueChange={v => setFormData({...formData, stage: v})}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select stage" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Idea">Idea</SelectItem>
-                    <SelectItem value="Early">Early</SelectItem>
-                    <SelectItem value="Growth">Growth</SelectItem>
-                    <SelectItem value="Scaling">Scaling</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="skills">Skills (comma-separated)</Label>
-                <Input 
-                  id="skills" 
-                  value={formData.skills}
-                  onChange={e => setFormData({...formData, skills: e.target.value})}
-                />
-              </div>
             </CardContent>
           </Card>
 
@@ -373,7 +325,7 @@ export default function ProfilePage() {
               <div className="space-y-2">
                 <Label className="flex items-center gap-2"><Linkedin className="h-4 w-4" /> LinkedIn</Label>
                 <Input 
-                  placeholder="https://linkedin.com/in/..."
+                  placeholder="https://..."
                   value={formData.socialLinks.linkedin}
                   onChange={e => setFormData({
                     ...formData, 
@@ -381,51 +333,6 @@ export default function ProfilePage() {
                   })}
                 />
               </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2"><Globe className="h-4 w-4" /> Website</Label>
-                <Input 
-                  placeholder="https://..."
-                  value={formData.socialLinks.website}
-                  onChange={e => setFormData({
-                    ...formData, 
-                    socialLinks: {...formData.socialLinks, website: e.target.value}
-                  })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2"><Twitter className="h-4 w-4" /> Twitter/X</Label>
-                <Input 
-                  placeholder="https://twitter.com/..."
-                  value={formData.socialLinks.twitter}
-                  onChange={e => setFormData({
-                    ...formData, 
-                    socialLinks: {...formData.socialLinks, twitter: e.target.value}
-                  })}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Achievements</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {formData.achievements.map((ach, index) => (
-                <div key={index} className="flex gap-2">
-                  <Input 
-                    placeholder="e.g. Forbes 30 Under 30"
-                    value={ach}
-                    onChange={e => updateAchievement(index, e.target.value)}
-                  />
-                  <Button variant="ghost" size="icon" onClick={() => removeAchievement(index)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-              <Button variant="outline" className="w-full" size="sm" onClick={addAchievement}>
-                <Plus className="h-4 w-4 mr-2" /> Add Achievement
-              </Button>
             </CardContent>
           </Card>
         </div>

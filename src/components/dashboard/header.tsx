@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Bell, Search, Menu, LogOut, User as UserIcon, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -14,10 +15,9 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { DashboardSidebar } from './sidebar';
-import { useUser, useAuth, initiateSignOut, useDoc, useMemoFirebase } from '@/firebase';
+import { useUser, useAuth, initiateSignOut, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { doc } from 'firebase/firestore';
-import { useFirestore } from '@/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
 
 export function DashboardHeader() {
@@ -26,12 +26,22 @@ export function DashboardHeader() {
   const firestore = useFirestore();
   const router = useRouter();
 
-  const userRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
+  const [profile, setProfile] = useState<any>(null);
 
-  const { data: profile } = useDoc(userRef);
+  useEffect(() => {
+    async function loadProfile() {
+      if (!firestore || !user?.uid) return;
+      try {
+        const snap = await getDoc(doc(firestore, 'users', user.uid));
+        if (snap.exists()) {
+          setProfile(snap.data());
+        }
+      } catch (error) {
+        console.error("Error loading header profile:", error);
+      }
+    }
+    loadProfile();
+  }, [firestore, user?.uid]);
 
   const handleLogout = () => {
     initiateSignOut(auth);
@@ -39,7 +49,7 @@ export function DashboardHeader() {
   };
 
   const displayName = profile?.fullName || user?.displayName || user?.email?.split('@')[0] || "User";
-  const avatarUrl = `https://picsum.photos/seed/${user?.uid || 'user'}/40/40`;
+  const avatarUrl = profile?.imageUrl || `https://picsum.photos/seed/${user?.uid || 'user'}/40/40`;
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur px-4 h-16 flex items-center justify-between">

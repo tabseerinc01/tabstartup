@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -11,23 +10,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Globe, MapPin, Tag, Loader2, Rocket, Share2 } from 'lucide-react';
-import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useUser, useFirestore } from '@/firebase';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function StartupPage() {
   const { toast } = useToast();
   const { user } = useUser();
   const firestore = useFirestore();
 
-  const startupRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return doc(firestore, 'startups', user.uid);
-  }, [firestore, user]);
-
-  const { data: startupData, isLoading } = useDoc(startupRef);
-  
+  const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [startupData, setStartupData] = useState<any>(null);
 
   const [startup, setStartup] = useState({
     name: '',
@@ -41,22 +35,36 @@ export default function StartupPage() {
   });
 
   useEffect(() => {
-    if (startupData) {
-      setStartup({
-        name: startupData.name || '',
-        shortDescription: startupData.shortDescription || '',
-        industry: startupData.industry || '',
-        stage: startupData.stage || 'Idea',
-        fundingNeed: startupData.fundingNeed || '',
-        location: startupData.location || '',
-        website: startupData.website || '',
-        tags: Array.isArray(startupData.tags) ? startupData.tags.join(', ') : '',
-      });
-      setIsEditing(false);
-    } else if (!isLoading) {
-      setIsEditing(true);
+    async function loadStartup() {
+      if (!firestore || !user?.uid) return;
+      setIsLoading(true);
+      try {
+        const snap = await getDoc(doc(firestore, 'startups', user.uid));
+        if (snap.exists()) {
+          const data = snap.data();
+          setStartupData(data);
+          setStartup({
+            name: data.name || '',
+            shortDescription: data.shortDescription || '',
+            industry: data.industry || '',
+            stage: data.stage || 'Idea',
+            fundingNeed: data.fundingNeed || '',
+            location: data.location || '',
+            website: data.website || '',
+            tags: Array.isArray(data.tags) ? data.tags.join(', ') : '',
+          });
+          setIsEditing(false);
+        } else {
+          setIsEditing(true);
+        }
+      } catch (error) {
+        console.error("Error loading startup:", error);
+      } finally {
+        setIsLoading(false);
+      }
     }
-  }, [startupData, isLoading]);
+    loadStartup();
+  }, [firestore, user?.uid]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,6 +89,7 @@ export default function StartupPage() {
         description: "Your startup profile has been updated.",
       });
       setIsEditing(false);
+      setStartupData(updateData);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -132,7 +141,6 @@ export default function StartupPage() {
           <form onSubmit={handleSave}>
             <CardHeader>
               <CardTitle>{startupData ? 'Update Startup' : 'Register Your Startup'}</CardTitle>
-              <CardDescription>Fill in the details to list your venture on the platform.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -149,7 +157,6 @@ export default function StartupPage() {
                   <Label htmlFor="industry">Industry</Label>
                   <Input 
                     id="industry" 
-                    placeholder="e.g. Fintech, Edtech" 
                     value={startup.industry}
                     onChange={e => setStartup({...startup, industry: e.target.value})}
                   />
@@ -160,7 +167,6 @@ export default function StartupPage() {
                 <Textarea 
                   id="description" 
                   rows={3} 
-                  placeholder="What are you building?"
                   value={startup.shortDescription}
                   onChange={e => setStartup({...startup, shortDescription: e.target.value})}
                 />
@@ -169,16 +175,11 @@ export default function StartupPage() {
                 <div className="space-y-2">
                   <Label htmlFor="stage">Current Stage</Label>
                   <Select value={startup.stage} onValueChange={v => setStartup({...startup, stage: v})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Idea">Idea</SelectItem>
-                      <SelectItem value="Pre-Seed">Pre-Seed</SelectItem>
                       <SelectItem value="Seed">Seed</SelectItem>
-                      <SelectItem value="Series A">Series A</SelectItem>
                       <SelectItem value="Growth">Growth</SelectItem>
-                      <SelectItem value="Scaling">Scaling</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -186,106 +187,41 @@ export default function StartupPage() {
                   <Label htmlFor="funding">Funding Need ($)</Label>
                   <Input 
                     id="funding" 
-                    placeholder="e.g. 50,000" 
                     value={startup.fundingNeed}
                     onChange={e => setStartup({...startup, fundingNeed: e.target.value})}
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
-                  <Input 
-                    id="location" 
-                    value={startup.location}
-                    onChange={e => setStartup({...startup, location: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="website">Website</Label>
-                  <Input 
-                    id="website" 
-                    placeholder="https://..." 
-                    value={startup.website}
-                    onChange={e => setStartup({...startup, website: e.target.value})}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tags">Tags (comma-separated)</Label>
-                <Input 
-                  id="tags" 
-                  placeholder="e.g. AI, SaaS, Green" 
-                  value={startup.tags}
-                  onChange={e => setStartup({...startup, tags: e.target.value})}
-                />
-              </div>
             </CardContent>
             <CardFooter className="flex gap-2">
               <Button type="submit" className="flex-1" disabled={isSaving}>
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                {startupData ? 'Update Startup' : 'Save Listing'}
+                Save Listing
               </Button>
-              {startupData && (
-                <Button variant="ghost" onClick={() => setIsEditing(false)}>
-                  Cancel
-                </Button>
-              )}
+              {startupData && <Button variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>}
             </CardFooter>
           </form>
         </Card>
       ) : (
-        <div className="space-y-6">
-          <Card className="border-primary/20 shadow-lg">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-2xl">{startupData?.name || startup.name}</CardTitle>
-                  <p className="text-primary font-medium">{startupData?.industry || startup.industry}</p>
-                </div>
-                <Badge>{startupData?.stage || startup.stage}</Badge>
+        <Card className="border-primary/20 shadow-lg">
+          <CardHeader>
+            <div className="flex justify-between items-start">
+              <CardTitle className="text-2xl">{startupData?.name}</CardTitle>
+              <Badge>{startupData?.stage}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-lg">{startupData?.shortDescription}</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <MapPin className="h-4 w-4" /> {startupData?.location || 'Remote'}
               </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <p className="text-lg">{startupData?.shortDescription || startup.shortDescription}</p>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <MapPin className="h-4 w-4" />
-                  {startupData?.location || startup.location || 'Remote'}
-                </div>
-                {(startupData?.website || startup.website) && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Globe className="h-4 w-4" />
-                    <a href={startupData?.website || startup.website} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                      {(startupData?.website || startup.website)?.replace(/^https?:\/\//, '')}
-                    </a>
-                  </div>
-                )}
-                <div className="flex items-center gap-2 text-sm text-muted-foreground font-semibold">
-                  Goal: ${startupData?.fundingNeed || startup.fundingNeed || '0'}
-                </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Globe className="h-4 w-4" /> {startupData?.website || 'No website'}
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                {(startupData?.tags || (startup.tags ? startup.tags.split(',') : []))?.map((tag: string) => (
-                  <Badge key={tag} variant="secondary" className="flex items-center gap-1">
-                    <Tag className="h-3 w-3" />
-                    {tag.trim()}
-                  </Badge>
-                ))}
-                {(!startupData?.tags && !startup.tags) && <span className="text-xs text-muted-foreground italic">No tags added</span>}
-              </div>
-            </CardContent>
-          </Card>
-          
-          <div className="bg-muted/30 rounded-lg p-6 border text-center">
-            <Rocket className="h-8 w-8 text-primary mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">
-              Your startup listing is now visible to investors in the ecosystem.
-            </p>
-          </div>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

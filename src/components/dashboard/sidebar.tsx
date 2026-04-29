@@ -1,6 +1,6 @@
-
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { 
@@ -16,8 +16,8 @@ import {
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
-import { useAuth, initiateSignOut, useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useAuth, initiateSignOut, useUser, useFirestore } from '@/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 export function DashboardSidebar() {
   const pathname = usePathname();
@@ -26,12 +26,22 @@ export function DashboardSidebar() {
   const { user } = useUser();
   const firestore = useFirestore();
 
-  const userRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
+  const [profile, setProfile] = useState<any>(null);
 
-  const { data: profile } = useDoc(userRef);
+  useEffect(() => {
+    async function loadProfile() {
+      if (!firestore || !user?.uid) return;
+      try {
+        const snap = await getDoc(doc(firestore, 'users', user.uid));
+        if (snap.exists()) {
+          setProfile(snap.data());
+        }
+      } catch (error) {
+        console.error("Error loading sidebar profile:", error);
+      }
+    }
+    loadProfile();
+  }, [firestore, user?.uid]);
 
   const handleLogout = () => {
     initiateSignOut(auth);
