@@ -19,7 +19,8 @@ import {
   Eye,
   Users,
   MessageSquare,
-  TrendingUp
+  TrendingUp,
+  FileText
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -215,6 +216,34 @@ export default function DashboardOverviewPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Quick Actions Section */}
+      <Card className="border-primary/10 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg">Quick Actions</CardTitle>
+          <CardDescription>Common tasks you might want to perform.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          <Button variant="outline" className="gap-2" asChild>
+            <Link href="/dashboard/fundraising">
+              <HandCoins className="h-4 w-4" /> Launch / Edit Fundraising
+            </Link>
+          </Button>
+          <Button variant="outline" className="gap-2" asChild>
+            <Link href="/dashboard/fundraising">
+              <FileText className="h-4 w-4" /> Upload Pitch Deck
+            </Link>
+          </Button>
+          <Button variant="outline" className="gap-2" asChild>
+            <Link href="/dashboard/startup">
+              <Rocket className="h-4 w-4" /> Edit Startup Profile
+            </Link>
+          </Button>
+          <Button variant="outline" className="gap-2">
+            <MessageSquare className="h-4 w-4" /> Open Messages
+          </Button>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="lg:col-span-2">
