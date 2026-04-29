@@ -5,7 +5,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { User as UserIcon, Rocket, Target, ArrowRight, Loader2, CheckCircle2, Share2, ExternalLink, Copy, HandCoins } from 'lucide-react';
+import { 
+  User as UserIcon, 
+  Rocket, 
+  Target, 
+  ArrowRight, 
+  Loader2, 
+  CheckCircle2, 
+  Share2, 
+  ExternalLink, 
+  Copy, 
+  HandCoins,
+  Eye,
+  Users,
+  MessageSquare,
+  TrendingUp
+} from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
@@ -155,6 +170,50 @@ export default function DashboardOverviewPage() {
             </CardContent>
           </Card>
         )}
+      </div>
+
+      {/* Metrics Row Section */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-primary/10 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Startup Views</CardTitle>
+            <Eye className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-bold">1,284</div>
+            <p className="text-[10px] text-muted-foreground mt-1">+12% from last month</p>
+          </CardContent>
+        </Card>
+        <Card className="border-primary/10 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Investor Interests</CardTitle>
+            <Users className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-bold">12</div>
+            <p className="text-[10px] text-muted-foreground mt-1">3 new this week</p>
+          </CardContent>
+        </Card>
+        <Card className="border-primary/10 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Unread Messages</CardTitle>
+            <MessageSquare className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-bold">5</div>
+            <p className="text-[10px] text-muted-foreground mt-1">Check your inbox</p>
+          </CardContent>
+        </Card>
+        <Card className="border-primary/10 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Funding Progress</CardTitle>
+            <TrendingUp className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-bold">45%</div>
+            <Progress value={45} className="mt-2 h-1" />
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
