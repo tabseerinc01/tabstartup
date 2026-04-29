@@ -158,14 +158,37 @@ export default function DashboardOverviewPage() {
               <div className="text-2xl font-bold">
                 {startup?.fundraisingStatus || 'Inactive'}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-1 mb-4">
                 Goal: {startup?.fundingNeed || '$0'}
               </p>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between text-[10px] font-medium">
+                  <span>Funding Progress</span>
+                  <span>45%</span>
+                </div>
+                <Progress value={45} className="h-1.5" />
+                
+                <div className="grid grid-cols-2 gap-2 py-2 border-t border-b border-dashed border-primary/10 mt-2">
+                  <div className="text-center border-r border-dashed border-primary/10">
+                    <p className="text-[10px] text-muted-foreground uppercase">Investors</p>
+                    <p className="text-sm font-bold text-primary">12</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase">Interest</p>
+                    <p className="text-sm font-bold text-primary">$22.5k</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex gap-2 mt-4">
                 <Button size="sm" variant="outline" asChild className="flex-1">
                   <Link href="/dashboard/fundraising">
-                    Manage Round
+                    Edit Campaign
                   </Link>
+                </Button>
+                <Button size="sm" variant="ghost" className="flex-1">
+                  View Campaign
                 </Button>
               </div>
             </CardContent>
