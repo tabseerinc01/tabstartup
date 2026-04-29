@@ -6,19 +6,32 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { User, Rocket, Target, ArrowRight } from 'lucide-react';
+import { User as UserIcon, Rocket, Target, ArrowRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useUser } from '@/firebase';
 
 export default function DashboardOverviewPage() {
-  const user = mockFounders[0]; // Ahmed Rafiq (demo)
+  const { user, isUserLoading } = useUser();
+  const demoUser = mockFounders[0]; // Ahmed Rafiq (demo fallback)
+
+  if (isUserLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const displayName = user?.email?.split('@')[0] || demoUser.name;
+  const headline = user ? "Welcome back to your workspace." : demoUser.headline;
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome, {user.name}</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Welcome, {displayName}</h1>
         <p className="text-muted-foreground">
-          Founder (demo) • {user.headline}
+          {user ? `Logged in as ${user.email}` : `Founder (demo) • ${demoUser.headline}`}
         </p>
       </div>
 
@@ -26,7 +39,7 @@ export default function DashboardOverviewPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Profile Completeness</CardTitle>
-            <User className="h-4 w-4 text-muted-foreground" />
+            <UserIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">60%</div>
@@ -77,7 +90,7 @@ export default function DashboardOverviewPage() {
           <CardContent className="space-y-4">
             <div className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
               <div className="bg-primary/10 p-2 rounded-full">
-                <User className="h-4 w-4 text-primary" />
+                <UserIcon className="h-4 w-4 text-primary" />
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold">Complete your bio</p>
@@ -110,19 +123,21 @@ export default function DashboardOverviewPage() {
           <CardContent>
             <div className="flex items-center gap-4 mb-4">
               <div className="relative h-16 w-16 rounded-full overflow-hidden bg-muted">
-                <Image src={user.imageUrl} alt={user.name} fill className="object-cover" />
+                <Image src={demoUser.imageUrl} alt={displayName} fill className="object-cover" />
               </div>
               <div>
-                <p className="font-bold">{user.name}</p>
-                <Badge variant="secondary">{user.stage} Stage</Badge>
+                <p className="font-bold">{user?.email || demoUser.name}</p>
+                <Badge variant="secondary">{user ? "Active" : demoUser.stage + " Stage"}</Badge>
               </div>
             </div>
             <p className="text-sm italic text-muted-foreground mb-4">
-              &quot;{user.headline}&quot;
+              &quot;{user ? "Founder at TabStartup" : demoUser.headline}&quot;
             </p>
-            <div className="flex flex-wrap gap-1">
-              {user.skills.map(s => <Badge key={s} variant="outline" className="text-[10px]">{s}</Badge>)}
-            </div>
+            {!user && (
+              <div className="flex flex-wrap gap-1">
+                {demoUser.skills.map(s => <Badge key={s} variant="outline" className="text-[10px]">{s}</Badge>)}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

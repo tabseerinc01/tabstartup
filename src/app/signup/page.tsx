@@ -1,6 +1,8 @@
+
 'use client';
 
-import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -9,16 +11,57 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth, useUser, initiateEmailSignUp } from '@/firebase';
+import { Loader2 } from 'lucide-react';
 
 export default function SignupPage() {
   const searchParams = useSearchParams();
-  const roleParam = searchParams.get('role');
+  const router = useRouter();
   const { toast } = useToast();
+  const auth = useAuth();
+  const { user, isUserLoading } = useUser();
+  
+  const roleParam = searchParams.get('role');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [role, setRole] = useState(roleParam || 'founder');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user && !isUserLoading) {
+      router.push('/dashboard');
+    }
+  }, [user, isUserLoading, router]);
 
   const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
-    toast({ title: "Signup Preview", description: "Account creation will be enabled in the next step." });
+    setIsSubmitting(true);
+    
+    try {
+      initiateEmailSignUp(auth, email, password);
+      toast({ 
+        title: "Creating account...", 
+        description: "You will be redirected to your dashboard shortly." 
+      });
+    } catch (error: any) {
+      setIsSubmitting(false);
+      toast({ 
+        variant: "destructive",
+        title: "Signup failed", 
+        description: error.message || "An error occurred during signup." 
+      });
+    }
   };
+
+  if (isUserLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/20">
@@ -32,19 +75,37 @@ export default function SignupPage() {
           <form onSubmit={handleSignup} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
-              <Input id="name" placeholder="John Doe" required />
+              <Input 
+                id="name" 
+                placeholder="John Doe" 
+                required 
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required />
+              <Input 
+                id="email" 
+                type="email" 
+                required 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" required />
+              <Input 
+                id="password" 
+                type="password" 
+                required 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">Your Role</Label>
-              <Select defaultValue={roleParam || undefined}>
+              <Select value={role} onValueChange={setRole}>
                 <SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="founder">Founder</SelectItem>
@@ -53,7 +114,10 @@ export default function SignupPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" className="w-full">Create account</Button>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Create account
+            </Button>
           </form>
         </CardContent>
         <CardFooter>
