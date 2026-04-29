@@ -31,7 +31,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
-import { doc, collection, query, where, limit, orderBy } from 'firebase/firestore';
+import { doc, collection, query, where, limit, orderBy, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
 
@@ -60,6 +60,7 @@ export default function DashboardOverviewPage() {
     return collection(firestore, 'startups', user.uid, 'interests');
   }, [firestore, user?.uid]);
 
+  // SECURE QUERY: Must filter by receiverId to comply with security rules
   const unreadMessagesQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
@@ -69,6 +70,7 @@ export default function DashboardOverviewPage() {
     );
   }, [firestore, user?.uid]);
 
+  // SECURE QUERY: Must filter by receiverId to comply with security rules
   const latestMessagesQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
@@ -117,6 +119,14 @@ export default function DashboardOverviewPage() {
 
   const completeness = getCompleteness();
 
+  const handleMessageClick = (messageId: string) => {
+    if (!firestore) return;
+    updateDoc(doc(firestore, 'messages', messageId), {
+      read: true,
+      updatedAt: new Date().toISOString()
+    }).catch(err => console.error("Failed to mark as read:", err));
+  };
+
   const copyToClipboard = (path: string, type: string) => {
     const url = `${window.location.origin}${path}`;
     navigator.clipboard.writeText(url);
@@ -127,9 +137,9 @@ export default function DashboardOverviewPage() {
   };
 
   const activities = [
-    { id: 1, type: 'view', text: 'Someone viewed your startup', time: 'Recently', icon: Eye, color: 'text-blue-500' },
-    { id: 2, type: 'interest', text: 'An investor expressed interest', time: 'Recently', icon: Users, color: 'text-green-500' },
-    { id: 3, type: 'message', text: 'New message received', time: 'Recently', icon: MessageSquare, color: 'text-purple-500' },
+    { id: 1, type: 'view', text: 'Someone viewed your startup', time: viewsCount > 0 ? 'Recently' : 'No views yet', icon: Eye, color: 'text-blue-500' },
+    { id: 2, type: 'interest', text: 'An investor expressed interest', time: interestsCount > 0 ? 'Recently' : 'No interest yet', icon: Users, color: 'text-green-500' },
+    { id: 3, type: 'message', text: 'New message received', time: unreadCount > 0 ? 'Recently' : 'No new messages', icon: MessageSquare, color: 'text-purple-500' },
   ];
 
   return (
@@ -242,9 +252,9 @@ export default function DashboardOverviewPage() {
               <div className="space-y-3">
                 <div className="flex justify-between text-[10px] font-medium">
                   <span>Funding Progress</span>
-                  <span>45%</span>
+                  <span>0%</span>
                 </div>
-                <Progress value={45} className="h-1.5" />
+                <Progress value={0} className="h-1.5" />
                 
                 <div className="grid grid-cols-2 gap-2 py-2 border-t border-b border-dashed border-primary/10 mt-2">
                   <div className="text-center border-r border-dashed border-primary/10">
@@ -307,8 +317,8 @@ export default function DashboardOverviewPage() {
             <TrendingUp className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl font-bold">45%</div>
-            <Progress value={45} className="mt-2 h-1" />
+            <div className="text-xl font-bold">0%</div>
+            <Progress value={0} className="mt-2 h-1" />
           </CardContent>
         </Card>
       </div>
@@ -478,7 +488,11 @@ export default function DashboardOverviewPage() {
                 <div className="flex justify-center p-4"><Loader2 className="h-4 w-4 animate-spin" /></div>
               ) : latestMessages && latestMessages.length > 0 ? (
                 latestMessages.map((message) => (
-                  <div key={message.id} className="flex items-start gap-4 group cursor-pointer hover:bg-muted/30 p-2 rounded-lg transition-colors">
+                  <div 
+                    key={message.id} 
+                    className="flex items-start gap-4 group cursor-pointer hover:bg-muted/30 p-2 rounded-lg transition-colors"
+                    onClick={() => handleMessageClick(message.id)}
+                  >
                     <Avatar className="h-10 w-10 border">
                       <AvatarImage src={`https://picsum.photos/seed/${message.senderId}/40/40`} alt={message.senderName} />
                       <AvatarFallback>{message.senderName?.charAt(0)}</AvatarFallback>

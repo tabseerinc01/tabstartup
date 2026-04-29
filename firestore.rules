@@ -53,15 +53,16 @@ service cloud.firestore {
     }
 
     match /messages/{messageId} {
+      // Allow create if authenticated. Enforce senderId matches auth UID.
       allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
-      allow get: if isSignedIn() && (
+      
+      // Allow read (get/list) only if user is sender or receiver.
+      allow read: if isSignedIn() && (
         resource.data.senderId == request.auth.uid || 
         resource.data.receiverId == request.auth.uid
       );
-      allow list: if isSignedIn() && (
-        resource.data.senderId == request.auth.uid || 
-        resource.data.receiverId == request.auth.uid
-      );
+      
+      // Allow update ONLY for receiver to mark as read.
       allow update: if isSignedIn() && 
         resource.data.receiverId == request.auth.uid && 
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
