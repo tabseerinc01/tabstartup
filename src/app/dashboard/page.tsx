@@ -27,7 +27,7 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore } from '@/firebase';
-import { doc, collection, query, where, limit, orderBy, updateDoc, getDoc, getDocs } from 'firebase/firestore';
+import { doc, collection, query, where, limit, orderBy, updateDoc, getDoc, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 
 export default function DashboardOverviewPage() {
@@ -124,10 +124,41 @@ export default function DashboardOverviewPage() {
   const isInvestor = profile?.role === 'investor';
   const interestsCount = interests.length;
 
-  const handlePitchStatus = async (pitchId: string, status: 'accepted' | 'rejected') => {
-    if (!firestore) return;
+  const handlePitchStatus = async (pitch: any, status: 'accepted' | 'rejected') => {
+    if (!firestore || !user?.uid) return;
+    const pitchId = pitch.id;
     try {
+      // 1. Update pitch status
       await updateDoc(doc(firestore, 'pitches', pitchId), { status });
+      
+      // 2. If connected, ensure a chat exists
+      if (status === 'accepted') {
+        const otherUid = user.uid === pitch.fromInvestorUid ? pitch.toFounderUid : pitch.fromInvestorUid;
+        
+        // Check if chat already exists
+        const q = query(
+          collection(firestore, "chats"),
+          where("participants", "array-contains", user.uid)
+        );
+        const snap = await getDocs(q);
+        let existingChatId = null;
+        snap.forEach(doc => {
+          const data = doc.data();
+          if (data.participants && data.participants.includes(otherUid)) {
+            existingChatId = doc.id;
+          }
+        });
+
+        // Create new chat if missing
+        if (!existingChatId) {
+          await addDoc(collection(firestore, 'chats'), {
+            participants: [user.uid, otherUid],
+            lastMessage: "You are now connected!",
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
       setIncomingPitches(prev => prev.map(p => p.id === pitchId ? { ...p, status } : p));
       toast({
         title: `Request ${status === 'accepted' ? 'Connected' : 'Declined'}`,
@@ -347,10 +378,10 @@ export default function DashboardOverviewPage() {
                       </p>
                       {pitch.status === 'pending' && (
                         <div className="flex gap-2 justify-end">
-                          <Button size="sm" variant="outline" onClick={() => handlePitchStatus(pitch.id, 'rejected')} className="text-destructive">
+                          <Button size="sm" variant="outline" onClick={() => handlePitchStatus(pitch, 'rejected')} className="text-destructive">
                             <X className="h-4 w-4 mr-1" /> Decline
                           </Button>
-                          <Button size="sm" onClick={() => handlePitchStatus(pitch.id, 'accepted')}>
+                          <Button size="sm" onClick={() => handlePitchStatus(pitch, 'accepted')}>
                             <Check className="h-4 w-4 mr-1" /> Connect
                           </Button>
                         </div>
