@@ -11,7 +11,8 @@ import {
   Settings,
   LogOut,
   ChevronRight,
-  HandCoins
+  HandCoins,
+  MessageSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -54,6 +55,7 @@ export function DashboardSidebar() {
     { href: '/dashboard', label: 'Overview', icon: Home },
     { href: '/dashboard/profile', label: 'My Profile', icon: User },
     { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
+    { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
     ...(isFounder ? [{ href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }] : []),
     { href: '#', label: 'Connections', icon: Users, disabled: true },
     { href: '#', label: 'Settings', icon: Settings, disabled: true },
