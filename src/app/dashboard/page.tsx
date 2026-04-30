@@ -23,19 +23,20 @@ import {
   Check,
   X,
   FileSignature,
-  Heart
+  Heart,
+  MessageCircle
 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, collection, query, where, limit, orderBy, updateDoc, getDoc, getDocs } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { Separator } from '@/components/ui/separator';
 
 export default function DashboardOverviewPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const router = useRouter();
 
   const [profile, setProfile] = useState<any>(null);
   const [startup, setStartup] = useState<any>(null);
@@ -135,6 +136,45 @@ export default function DashboardOverviewPage() {
       });
     }
   };
+
+  async function openChat(pitch: any) {
+    if (!firestore) return;
+    try {
+      // Find chat using participants
+      const q = query(
+        collection(firestore, "chats"),
+        where("participants", "array-contains", pitch.fromInvestorUid)
+      );
+
+      const snap = await getDocs(q);
+      let chatId = null;
+
+      snap.forEach(doc => {
+        const data = doc.data();
+        // Ensure both users are in chat
+        if (data.participants && data.participants.includes(pitch.toFounderUid)) {
+          chatId = doc.id;
+        }
+      });
+
+      if (chatId) {
+        router.push(`/chats/${chatId}`);
+      } else {
+        toast({
+          title: "Chat not found",
+          description: "A formal chat room hasn't been created yet for this connection.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error("Error opening chat:", error);
+      toast({
+        title: "Error",
+        description: "Failed to open chat. Please try again later.",
+        variant: "destructive"
+      });
+    }
+  }
 
   const completeness = (() => {
     if (!profile) return 0;
@@ -283,9 +323,16 @@ export default function DashboardOverviewPage() {
                             <p className="text-xs text-muted-foreground">{pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Just now'}</p>
                           </div>
                         </div>
-                        <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
-                          {getStatusDisplay(pitch.status)}
-                        </Badge>
+                        <div className="flex flex-col items-end gap-2">
+                          <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
+                            {getStatusDisplay(pitch.status)}
+                          </Badge>
+                          {pitch.status === 'accepted' && (
+                            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => openChat(pitch)}>
+                              <MessageCircle className="h-3 w-3" /> Open Chat
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <p className="text-sm italic text-muted-foreground">
                         {pitch.message ? `"${pitch.message}"` : "Expressed interest in connecting."}
@@ -332,9 +379,16 @@ export default function DashboardOverviewPage() {
                         <p className="text-xs font-bold text-muted-foreground uppercase">
                           Sent on {pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Just now'}
                         </p>
-                        <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
-                          {getStatusDisplay(pitch.status)}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
+                            {getStatusDisplay(pitch.status)}
+                          </Badge>
+                          {pitch.status === 'accepted' && (
+                            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => openChat(pitch)}>
+                              <MessageCircle className="h-3 w-3" /> Open Chat
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <p className="text-sm line-clamp-2">
                         {pitch.message ? `"${pitch.message}"` : "Sent interest request."}
