@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -46,64 +45,62 @@ export default function DashboardOverviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isOpeningChat, setIsOpeningChat] = useState(false);
 
-  useEffect(() => {
-    async function loadDashboardData() {
-      if (!firestore || !user?.uid) return;
-      setIsLoading(true);
+  async function loadDashboardData() {
+    if (!firestore || !user?.uid) return;
+    setIsLoading(true);
 
-      try {
-        // 1. Load Profile
-        const profileSnap = await getDoc(doc(firestore, 'users', user.uid));
-        const profileData = profileSnap.exists() ? profileSnap.data() : null;
-        setProfile(profileData);
+    try {
+      const profileSnap = await getDoc(doc(firestore, 'users', user.uid));
+      const profileData = profileSnap.exists() ? profileSnap.data() : null;
+      setProfile(profileData);
 
-        // 2. Load Startup
-        const startupSnap = await getDoc(doc(firestore, 'startups', user.uid));
-        const startupData = startupSnap.exists() ? startupSnap.data() : null;
-        setStartup(startupData);
+      const startupSnap = await getDoc(doc(firestore, 'startups', user.uid));
+      const startupData = startupSnap.exists() ? startupSnap.data() : null;
+      setStartup(startupData);
 
-        if (profileData?.role === 'founder') {
-          try {
-            const viewsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'views'));
-            setViewsCount(viewsSnap.size);
-          } catch (e) {
-            console.warn("Could not load views:", e);
-          }
-
-          try {
-            const interestsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'interests'));
-            setInterests(interestsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-          } catch (e) {
-            console.warn("Could not load interests:", e);
-          }
-
-          const incomingQ = query(
-            collection(firestore, 'pitches'),
-            where('toFounderUid', '==', user.uid),
-            orderBy('createdAt', 'desc'),
-            limit(10)
-          );
-          const incomingSnap = await getDocs(incomingQ);
-          setIncomingPitches(incomingSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      if (profileData?.role === 'founder') {
+        try {
+          const viewsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'views'));
+          setViewsCount(viewsSnap.size);
+        } catch (e) {
+          console.warn("Could not load views:", e);
         }
 
-        if (profileData?.role === 'investor') {
-          const sentQ = query(
-            collection(firestore, 'pitches'),
-            where('fromInvestorUid', '==', user.uid),
-            orderBy('createdAt', 'desc'),
-            limit(10)
-          );
-          const sentSnap = await getDocs(sentQ);
-          setSentPitches(sentSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        try {
+          const interestsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'interests'));
+          setInterests(interestsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        } catch (e) {
+          console.warn("Could not load interests:", e);
         }
-      } catch (error) {
-        console.error("Error loading dashboard data:", error);
-      } finally {
-        setIsLoading(false);
+
+        const incomingQ = query(
+          collection(firestore, 'pitches'),
+          where('toFounderUid', '==', user.uid),
+          orderBy('createdAt', 'desc'),
+          limit(10)
+        );
+        const incomingSnap = await getDocs(incomingQ);
+        setIncomingPitches(incomingSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       }
-    }
 
+      if (profileData?.role === 'investor') {
+        const sentQ = query(
+          collection(firestore, 'pitches'),
+          where('fromInvestorUid', '==', user.uid),
+          orderBy('createdAt', 'desc'),
+          limit(10)
+        );
+        const sentSnap = await getDocs(sentQ);
+        setSentPitches(sentSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }
+    } catch (error) {
+      console.error("Error loading dashboard data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
     loadDashboardData();
   }, [firestore, user?.uid]);
 
@@ -191,7 +188,6 @@ export default function DashboardOverviewPage() {
       if (chatId) {
         router.push(`/chats/${chatId}`);
       } else if (pitch.status === 'accepted') {
-        // Fallback: Create chat room if missing for an accepted request
         const newChatRef = await addDoc(collection(firestore, 'chats'), {
           participants: [user.uid, otherUid],
           lastMessage: "Conversation started",
