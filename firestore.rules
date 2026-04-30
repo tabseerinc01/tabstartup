@@ -2,22 +2,30 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // USERS: Public read for profiles, owner-only write
     match /users/{userId} {
-      allow read, write: if request.auth != null;
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // STARTUPS: Public read for listings, owner-only write
     match /startups/{startupId} {
-      allow read, write: if request.auth != null;
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == startupId;
     }
     
+    // STARTUPS SUB-COLLECTIONS
     match /startups/{startupId}/views/{viewId} {
-      allow read, write: if request.auth != null;
+      allow create: if true;
+      allow read: if request.auth != null && request.auth.uid == startupId;
     }
     
     match /startups/{startupId}/interests/{investorId} {
-      allow read, write: if request.auth != null;
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && request.auth.uid == startupId;
     }
 
+    // PITCHES: Secure access between sender and receiver
     match /pitches/{pitchId} {
       allow create: if request.auth != null;
       allow read: if request.auth != null && (request.auth.uid == resource.data.toFounderUid
@@ -25,6 +33,7 @@ service cloud.firestore {
       allow update: if request.auth != null && request.auth.uid == resource.data.toFounderUid;
     }
 
+    // MESSAGES: Secure access between sender and receiver
     match /messages/{messageId} {
       allow create: if request.auth != null;
       allow read: if request.auth != null && (request.auth.uid == resource.data.receiverId || request.auth.uid == resource.data.senderId);

@@ -151,6 +151,10 @@ function FounderCard({ founder }: { founder: any }) {
               <Button className="flex-1">View Full Profile</Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[700px] max-h-[90vh] p-0 overflow-hidden">
+              <DialogHeader className="sr-only">
+                <DialogTitle>{displayName}'s Profile</DialogTitle>
+                <DialogDescription>Detailed view of founder expertise and journey.</DialogDescription>
+              </DialogHeader>
               <ScrollArea className="max-h-[90vh]">
                 <div className="p-0">
                   <div className="h-32 bg-gradient-to-r from-primary/20 to-accent/20" />
@@ -175,7 +179,9 @@ function FounderCard({ founder }: { founder: any }) {
                     </div>
 
                     <div className="flex gap-3 mb-8">
-                      <Button className="flex-1 gap-2"><MessageSquare className="h-4 w-4" /> Message</Button>
+                      <Button className="flex-1 gap-2" asChild>
+                        <Link href={`/founders/${founder.uid || founder.id}`}><MessageSquare className="h-4 w-4" /> Message</Link>
+                      </Button>
                       <Button variant="outline" className="flex-1 gap-2"><Calendar className="h-4 w-4" /> Request Meeting</Button>
                     </div>
                   </div>
