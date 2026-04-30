@@ -171,6 +171,21 @@
       },
       "required": ["ownerUid", "name", "createdAt", "updatedAt"]
     },
+    "Chat": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Chat",
+      "type": "object",
+      "description": "A conversation between two users.",
+      "properties": {
+        "participants": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "lastMessage": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participants"]
+    },
     "View": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "View",
@@ -201,16 +216,13 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Message",
       "type": "object",
-      "description": "A private message between users.",
+      "description": "A private message within a chat.",
       "properties": {
         "senderId": { "type": "string" },
-        "receiverId": { "type": "string" },
-        "senderName": { "type": "string" },
         "text": { "type": "string" },
-        "read": { "type": "boolean", "default": false },
         "timestamp": { "type": "string", "format": "date-time" }
       },
-      "required": ["senderId", "receiverId", "text", "timestamp"]
+      "required": ["senderId", "text", "timestamp"]
     },
     "Pitch": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -237,7 +249,7 @@
         "definition": {
           "entityName": "User",
           "schema": { "$ref": "#/backend/entities/User" },
-          "description": "Main user profile collection. Stores personal info and roles."
+          "description": "Main user profile collection."
         }
       },
       {
@@ -245,31 +257,23 @@
         "definition": {
           "entityName": "Startup",
           "schema": { "$ref": "#/backend/entities/Startup" },
-          "description": "Startup listings. Each founder has one startup, where startupId is the ownerUid."
+          "description": "Startup listings."
         }
       },
       {
-        "path": "/startups/{startupId}/views/{viewId}",
+        "path": "/chats/{chatId}",
         "definition": {
-          "entityName": "View",
-          "schema": { "$ref": "#/backend/entities/View" },
-          "description": "Tracks views for a specific startup."
+          "entityName": "Chat",
+          "schema": { "$ref": "#/backend/entities/Chat" },
+          "description": "Conversations between users."
         }
       },
       {
-        "path": "/startups/{startupId}/interests/{investorId}",
-        "definition": {
-          "entityName": "Interest",
-          "schema": { "$ref": "#/backend/entities/Interest" },
-          "description": "Tracks specific investor interest in a startup."
-        }
-      },
-      {
-        "path": "/messages/{messageId}",
+        "path": "/chats/{chatId}/messages/{messageId}",
         "definition": {
           "entityName": "Message",
           "schema": { "$ref": "#/backend/entities/Message" },
-          "description": "Private messages between users."
+          "description": "Messages within a chat."
         }
       },
       {
@@ -277,7 +281,7 @@
         "definition": {
           "entityName": "Pitch",
           "schema": { "$ref": "#/backend/entities/Pitch" },
-          "description": "Investment pitches from investors to founders."
+          "description": "Investment interest requests."
         }
       }
     ]

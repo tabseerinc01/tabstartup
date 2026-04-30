@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -138,21 +139,23 @@ export default function DashboardOverviewPage() {
   };
 
   async function openChat(pitch: any) {
-    if (!firestore) return;
+    if (!firestore || !user?.uid) return;
     try {
-      // Find chat using participants
+      // Find chat using the current user's UID in participants to satisfy security rules
       const q = query(
         collection(firestore, "chats"),
-        where("participants", "array-contains", pitch.fromInvestorUid)
+        where("participants", "array-contains", user.uid)
       );
 
       const snap = await getDocs(q);
       let chatId = null;
 
+      const otherUid = user.uid === pitch.fromInvestorUid ? pitch.toFounderUid : pitch.fromInvestorUid;
+
       snap.forEach(doc => {
         const data = doc.data();
         // Ensure both users are in chat
-        if (data.participants && data.participants.includes(pitch.toFounderUid)) {
+        if (data.participants && data.participants.includes(otherUid)) {
           chatId = doc.id;
         }
       });

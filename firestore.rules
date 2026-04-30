@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -14,30 +15,22 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == startupId;
     }
     
-    // STARTUPS SUB-COLLECTIONS
-    match /startups/{startupId}/views/{viewId} {
-      allow create: if true;
-      allow read: if request.auth != null && request.auth.uid == startupId;
-    }
-    
-    match /startups/{startupId}/interests/{investorId} {
-      allow create: if request.auth != null;
-      allow read: if request.auth != null && request.auth.uid == startupId;
+    // CHATS: Only participants can access
+    match /chats/{chatId} {
+      allow read, write: if request.auth != null && request.auth.uid in resource.data.participants;
+      allow create: if request.auth != null && request.auth.uid in request.resource.data.participants;
+      
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+      }
     }
 
-    // PITCHES: Secure access between sender and receiver
+    // PITCHES (Interest Requests)
     match /pitches/{pitchId} {
       allow create: if request.auth != null;
       allow read: if request.auth != null && (request.auth.uid == resource.data.toFounderUid
                || request.auth.uid == resource.data.fromInvestorUid);
       allow update: if request.auth != null && request.auth.uid == resource.data.toFounderUid;
-    }
-
-    // MESSAGES: Secure access between sender and receiver
-    match /messages/{messageId} {
-      allow create: if request.auth != null;
-      allow read: if request.auth != null && (request.auth.uid == resource.data.receiverId || request.auth.uid == resource.data.senderId);
-      allow update: if request.auth != null && request.auth.uid == resource.data.receiverId;
     }
   }
 }
