@@ -7,21 +7,22 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
-  Rocket, 
-  Target, 
-  Loader2, 
-  CheckCircle2, 
-  Share2, 
-  ExternalLink, 
-  HandCoins,
-  Eye,
-  Users,
-  Clock,
-  Send,
-  Check,
-  X,
-  Heart,
-  MessageCircle
+   Rocket, 
+   Target, 
+   Loader2, 
+   CheckCircle2, 
+   Share2, 
+   ExternalLink, 
+   HandCoins,
+   Eye,
+   Users,
+   Clock,
+   Send,
+   Check,
+   X,
+   Heart,
+   MessageCircle,
+   MessageSquare
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -84,12 +85,11 @@ export default function DashboardOverviewPage() {
       }
 
       if (profileData?.role === 'investor') {
-        // Improved query for sent requests
         const sentQ = query(
           collection(firestore, 'pitches'),
           where('fromInvestorUid', '==', user.uid),
           orderBy('createdAt', 'desc'),
-          limit(10)
+          limit(20)
         );
         const sentSnap = await getDocs(sentQ);
         setSentPitches(sentSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -118,6 +118,8 @@ export default function DashboardOverviewPage() {
   const isFounder = profile?.role === 'founder';
   const isInvestor = profile?.role === 'investor';
   const interestsCount = interests.length;
+
+  const connectedFounders = sentPitches.filter(p => p.status === 'accepted');
 
   const handlePitchStatus = async (pitch: any, status: 'accepted' | 'rejected') => {
     if (!firestore || !user?.uid) return;
@@ -399,58 +401,99 @@ export default function DashboardOverviewPage() {
         )}
 
         {isInvestor && (
-          <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Send className="h-5 w-5 text-primary" /> Sent Requests
-                </CardTitle>
-                <CardDescription>Track the status of your interest requests.</CardDescription>
-              </div>
-              <Badge variant="outline" className="bg-primary/5">{sentPitches.length}</Badge>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {sentPitches.length > 0 ? (
-                  sentPitches.map((pitch: any) => (
-                    <div key={pitch.id} className="p-4 border rounded-2xl bg-muted/20 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-bold text-muted-foreground uppercase">
-                          Sent on {pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Just now'}
+          <>
+            <Card className="lg:col-span-2">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Send className="h-5 w-5 text-primary" /> Sent Requests
+                  </CardTitle>
+                  <CardDescription>Track the status of your interest requests.</CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-primary/5">{sentPitches.length}</Badge>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {sentPitches.length > 0 ? (
+                    sentPitches.map((pitch: any) => (
+                      <div key={pitch.id} className="p-4 border rounded-2xl bg-muted/20 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <p className="text-xs font-bold text-muted-foreground uppercase">
+                            Sent on {pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Just now'}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
+                              {getStatusDisplay(pitch.status)}
+                            </Badge>
+                            {pitch.status === 'accepted' && (
+                              <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => openChat(pitch)} disabled={isOpeningChat}>
+                                {isOpeningChat ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageCircle className="h-3 w-3" />}
+                                Open Chat
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-sm line-clamp-2">
+                          {pitch.message ? `"${pitch.message}"` : "Sent interest request."}
                         </p>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
-                            {getStatusDisplay(pitch.status)}
-                          </Badge>
-                          {pitch.status === 'accepted' && (
-                            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => openChat(pitch)} disabled={isOpeningChat}>
-                              {isOpeningChat ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageCircle className="h-3 w-3" />}
-                              Open Chat
-                            </Button>
-                          )}
+                        <div className="flex justify-end">
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href={`/founders/${pitch.toFounderUid}`}>View Founder Profile</Link>
+                          </Button>
                         </div>
                       </div>
-                      <p className="text-sm line-clamp-2">
-                        {pitch.message ? `"${pitch.message}"` : "Sent interest request."}
-                      </p>
-                      <div className="flex justify-end">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/founders/${pitch.toFounderUid}`}>View Founder Profile</Link>
+                    ))
+                  ) : (
+                    <div className="text-center py-12 border-2 border-dashed rounded-3xl">
+                      <p className="text-sm text-muted-foreground">No requests sent yet</p>
+                      <Button variant="outline" className="mt-4" asChild>
+                        <Link href="/founders">Browse Founders</Link>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Rocket className="h-5 w-5 text-primary" /> Connected Founders
+                  </CardTitle>
+                  <CardDescription>Founders you are officially connected with.</CardDescription>
+                </div>
+                <Badge variant="outline" className="bg-primary/5">{connectedFounders.length}</Badge>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {connectedFounders.length > 0 ? (
+                    connectedFounders.map((pitch: any) => (
+                      <div key={pitch.id} className="flex items-center justify-between p-4 border rounded-2xl bg-background shadow-sm">
+                        <div className="flex items-center gap-4">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={`https://picsum.photos/seed/${pitch.toFounderUid}/40/40`} />
+                            <AvatarFallback>F</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-bold">{pitch.toFounderName || "Founder"}</p>
+                            <p className="text-xs text-muted-foreground">Status: Connected</p>
+                          </div>
+                        </div>
+                        <Button size="sm" variant="outline" className="gap-2" onClick={() => openChat(pitch)}>
+                          <MessageSquare className="h-4 w-4" /> Message
                         </Button>
                       </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12 border-2 border-dashed rounded-3xl">
+                      <p className="text-sm text-muted-foreground">No connections yet</p>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-12 border-2 border-dashed rounded-3xl">
-                    <p className="text-sm text-muted-foreground">No requests sent yet</p>
-                    <Button variant="outline" className="mt-4" asChild>
-                      <Link href="/founders">Browse Founders</Link>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </>
         )}
 
         {isFounder && (
@@ -472,7 +515,7 @@ export default function DashboardOverviewPage() {
                         <p className="text-xs font-bold leading-none">{interest.investorName}</p>
                         <p className="text-[10px] text-muted-foreground truncate">{interest.investorHeadline}</p>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" onClick={() => openChat({ fromInvestorUid: interest.investorId, toFounderUid: user?.uid, status: 'accepted' })}>
                         <Send className="h-3 w-3" />
                       </Button>
                     </div>
