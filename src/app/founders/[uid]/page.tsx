@@ -58,6 +58,26 @@ export default function FounderPublicProfilePage() {
   const handleSendInterest = async () => {
     if (!user || !firestore || !uid) return;
     
+    // Safety checks
+    if (currentUserProfile?.role !== 'investor') {
+      toast({ 
+        title: "Access Denied", 
+        description: "Only users with the investor role can express interest.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    if (user.uid === uid) {
+      toast({ 
+        title: "Invalid Request", 
+        description: "You cannot express interest in your own profile.", 
+        variant: "destructive" 
+      });
+      setIsDialogOpen(false);
+      return;
+    }
+
     setIsSendingRequest(true);
     try {
       await addDoc(collection(firestore, 'pitches'), {
@@ -107,6 +127,7 @@ export default function FounderPublicProfilePage() {
   const displayName = founder.fullName || founder.name;
   const imageId = founder.uid || founder.id || 'user';
   const isInvestor = currentUserProfile?.role === 'investor';
+  const isOwnProfile = user?.uid === uid;
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
@@ -143,7 +164,7 @@ export default function FounderPublicProfilePage() {
               </div>
 
               <div className="flex flex-wrap gap-4 mb-12">
-                {isInvestor ? (
+                {isInvestor && !isOwnProfile && (
                   <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogTrigger asChild>
                       <Button className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base bg-primary hover:bg-primary/90">
@@ -174,11 +195,19 @@ export default function FounderPublicProfilePage() {
                       </DialogFooter>
                     </DialogContent>
                   </Dialog>
-                ) : (
-                  <Button className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base"><MessageSquare className="h-5 w-5" /> Message Founder</Button>
                 )}
                 
-                <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base"><Calendar className="h-5 w-5" /> Schedule Meeting</Button>
+                {isOwnProfile ? (
+                  <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base" asChild>
+                    <Link href="/dashboard/profile">Edit My Profile</Link>
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base"><MessageSquare className="h-5 w-5" /> Message Founder</Button>
+                    <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base"><Calendar className="h-5 w-5" /> Schedule Meeting</Button>
+                  </>
+                )}
+
                 <div className="flex gap-2">
                   {founder.socialLinks?.linkedin && (
                     <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl" asChild>
