@@ -22,7 +22,8 @@ import {
   Send,
   Check,
   X,
-  FileSignature
+  FileSignature,
+  Heart
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -70,7 +71,7 @@ export default function DashboardOverviewPage() {
           const interestsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'interests'));
           setInterests(interestsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-          // 5. Load Incoming Pitches
+          // 5. Load Incoming Requests
           const incomingQ = query(
             collection(firestore, 'pitches'),
             where('toFounderUid', '==', user.uid),
@@ -82,7 +83,7 @@ export default function DashboardOverviewPage() {
         }
 
         if (profileData?.role === 'investor') {
-          // 6. Load Sent Pitches
+          // 6. Load Sent Requests
           const sentQ = query(
             collection(firestore, 'pitches'),
             where('fromInvestorUid', '==', user.uid),
@@ -122,14 +123,14 @@ export default function DashboardOverviewPage() {
       await updateDoc(doc(firestore, 'pitches', pitchId), { status });
       setIncomingPitches(prev => prev.map(p => p.id === pitchId ? { ...p, status } : p));
       toast({
-        title: `Pitch ${status.charAt(0).toUpperCase() + status.slice(1)}`,
-        description: `You have ${status} this investment pitch.`,
+        title: `Request ${status === 'accepted' ? 'Connected' : 'Declined'}`,
+        description: `You have ${status === 'accepted' ? 'accepted' : 'declined'} this interest request.`,
       });
     } catch (error) {
-      console.error("Error updating pitch status:", error);
+      console.error("Error updating status:", error);
       toast({
         title: "Error",
-        description: "Failed to update pitch status.",
+        description: "Failed to update status.",
         variant: "destructive",
       });
     }
@@ -153,6 +154,15 @@ export default function DashboardOverviewPage() {
       title: "Link Copied!",
       description: `${type} link has been copied to your clipboard.`,
     });
+  };
+
+  const getStatusDisplay = (status: string) => {
+    switch(status) {
+      case 'accepted': return 'Connected';
+      case 'rejected': return 'Declined';
+      case 'pending': return 'Waiting for response';
+      default: return status;
+    }
   };
 
   const activities = [
@@ -208,7 +218,7 @@ export default function DashboardOverviewPage() {
             <CardContent>
               <div className="text-2xl font-bold truncate">{startup ? startup.name : "Unlisted"}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {startup ? `${startup.industry} • ${startup.stage}` : "Pitch your venture to the community."}
+                {startup ? `${startup.industry} • ${startup.stage}` : "Share your venture with the community."}
               </p>
               <div className="flex gap-2 mt-4">
                 <Button size="sm" variant="ghost" asChild className="flex-1 border border-dashed border-primary/20 hover:bg-primary/5">
@@ -251,9 +261,9 @@ export default function DashboardOverviewPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <FileSignature className="h-5 w-5 text-primary" /> Incoming Pitches
+                  <Heart className="h-5 w-5 text-primary" /> Incoming Requests
                 </CardTitle>
-                <CardDescription>Review proposals from interested investors.</CardDescription>
+                <CardDescription>Review interest requests from potential investors.</CardDescription>
               </div>
               <Badge variant="outline" className="bg-primary/5">{incomingPitches.length}</Badge>
             </CardHeader>
@@ -269,22 +279,24 @@ export default function DashboardOverviewPage() {
                             <AvatarFallback>I</AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="text-sm font-bold">Investor</p>
+                            <p className="text-sm font-bold">Potential Investor</p>
                             <p className="text-xs text-muted-foreground">{pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Just now'}</p>
                           </div>
                         </div>
                         <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
-                          {pitch.status?.toUpperCase()}
+                          {getStatusDisplay(pitch.status)}
                         </Badge>
                       </div>
-                      <p className="text-sm italic text-muted-foreground">"{pitch.message}"</p>
+                      <p className="text-sm italic text-muted-foreground">
+                        {pitch.message ? `"${pitch.message}"` : "Expressed interest in connecting."}
+                      </p>
                       {pitch.status === 'pending' && (
                         <div className="flex gap-2 justify-end">
                           <Button size="sm" variant="outline" onClick={() => handlePitchStatus(pitch.id, 'rejected')} className="text-destructive">
-                            <X className="h-4 w-4 mr-1" /> Reject
+                            <X className="h-4 w-4 mr-1" /> Decline
                           </Button>
                           <Button size="sm" onClick={() => handlePitchStatus(pitch.id, 'accepted')}>
-                            <Check className="h-4 w-4 mr-1" /> Accept
+                            <Check className="h-4 w-4 mr-1" /> Connect
                           </Button>
                         </div>
                       )}
@@ -292,7 +304,7 @@ export default function DashboardOverviewPage() {
                   ))
                 ) : (
                   <div className="text-center py-12 border-2 border-dashed rounded-3xl">
-                    <p className="text-sm text-muted-foreground">No incoming pitches yet.</p>
+                    <p className="text-sm text-muted-foreground">No requests yet.</p>
                   </div>
                 )}
               </div>
@@ -305,9 +317,9 @@ export default function DashboardOverviewPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Send className="h-5 w-5 text-primary" /> Sent Pitches
+                  <Send className="h-5 w-5 text-primary" /> Sent Requests
                 </CardTitle>
-                <CardDescription>Track the status of your investment proposals.</CardDescription>
+                <CardDescription>Track the status of your interest requests.</CardDescription>
               </div>
               <Badge variant="outline" className="bg-primary/5">{sentPitches.length}</Badge>
             </CardHeader>
@@ -321,10 +333,12 @@ export default function DashboardOverviewPage() {
                           Sent on {pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Just now'}
                         </p>
                         <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
-                          {pitch.status?.toUpperCase()}
+                          {getStatusDisplay(pitch.status)}
                         </Badge>
                       </div>
-                      <p className="text-sm line-clamp-2">"{pitch.message}"</p>
+                      <p className="text-sm line-clamp-2">
+                        {pitch.message ? `"${pitch.message}"` : "Sent interest request."}
+                      </p>
                       <div className="flex justify-end">
                         <Button variant="ghost" size="sm" asChild>
                           <Link href={`/founders/${pitch.toFounderUid}`}>View Founder Profile</Link>
@@ -334,7 +348,7 @@ export default function DashboardOverviewPage() {
                   ))
                 ) : (
                   <div className="text-center py-12 border-2 border-dashed rounded-3xl">
-                    <p className="text-sm text-muted-foreground">You haven't sent any pitches yet.</p>
+                    <p className="text-sm text-muted-foreground">No requests sent yet.</p>
                     <Button variant="outline" className="mt-4" asChild>
                       <Link href="/founders">Browse Founders</Link>
                     </Button>
@@ -348,7 +362,7 @@ export default function DashboardOverviewPage() {
         {isFounder && (
           <Card className="border-primary/10 shadow-sm">
             <CardHeader>
-              <CardTitle className="text-lg">Investor Leads</CardTitle>
+              <CardTitle className="text-lg">Lead Connections</CardTitle>
               <CardDescription>Investors tracking your venture.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">

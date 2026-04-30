@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { MapPin, Briefcase, Award, CheckCircle2, MessageSquare, Calendar, Globe, Linkedin, GraduationCap, ArrowLeft, Loader2, Send } from 'lucide-react';
+import { MapPin, Briefcase, Award, CheckCircle2, MessageSquare, Calendar, Globe, Linkedin, GraduationCap, ArrowLeft, Loader2, Send, Heart } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -26,8 +26,8 @@ export default function FounderPublicProfilePage() {
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [pitchMessage, setPitchMessage] = useState('');
-  const [isSendingPitch, setIsSendingPitch] = useState(false);
+  const [interestMessage, setInterestMessage] = useState('');
+  const [isSendingRequest, setIsSendingRequest] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -55,31 +55,27 @@ export default function FounderPublicProfilePage() {
     loadData();
   }, [firestore, uid, user?.uid]);
 
-  const handleSendPitch = async () => {
+  const handleSendInterest = async () => {
     if (!user || !firestore || !uid) return;
-    if (!pitchMessage.trim()) {
-      toast({ title: "Message Required", description: "Please enter a message for your pitch.", variant: "destructive" });
-      return;
-    }
-
-    setIsSendingPitch(true);
+    
+    setIsSendingRequest(true);
     try {
       await addDoc(collection(firestore, 'pitches'), {
         fromInvestorUid: user.uid,
         toFounderUid: uid,
-        message: pitchMessage,
+        message: interestMessage,
         status: 'pending',
         createdAt: serverTimestamp(),
       });
 
-      toast({ title: "Pitch Sent!", description: "Your pitch has been delivered to the founder." });
-      setPitchMessage('');
+      toast({ title: "Interest Sent!", description: "Your request has been delivered to the founder." });
+      setInterestMessage('');
       setIsDialogOpen(false);
     } catch (error) {
-      console.error("Error sending pitch:", error);
-      toast({ title: "Error", description: "Failed to send pitch. Please try again.", variant: "destructive" });
+      console.error("Error sending interest:", error);
+      toast({ title: "Error", description: "Failed to send request. Please try again.", variant: "destructive" });
     } finally {
-      setIsSendingPitch(false);
+      setIsSendingRequest(false);
     }
   };
 
@@ -151,29 +147,29 @@ export default function FounderPublicProfilePage() {
                   <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogTrigger asChild>
                       <Button className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base bg-primary hover:bg-primary/90">
-                        <Send className="h-5 w-5" /> Send Pitch
+                        <Heart className="h-5 w-5" /> Express Interest
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-md">
                       <DialogHeader>
-                        <DialogTitle>Pitch to {displayName}</DialogTitle>
+                        <DialogTitle>Express Interest in {displayName}</DialogTitle>
                         <DialogDescription>
-                          Share your investment proposal or express interest in collaborating.
+                          Share why you're interested in this founder and their venture.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
                         <Textarea 
-                          placeholder="Tell the founder why you're interested and what you can offer..."
+                          placeholder="Write a short message (optional)..."
                           className="min-h-[150px] rounded-xl"
-                          value={pitchMessage}
-                          onChange={(e) => setPitchMessage(e.target.value)}
+                          value={interestMessage}
+                          onChange={(e) => setInterestMessage(e.target.value)}
                         />
                       </div>
                       <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSendingPitch}>Cancel</Button>
-                        <Button onClick={handleSendPitch} disabled={isSendingPitch}>
-                          {isSendingPitch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                          Send Pitch
+                        <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSendingRequest}>Cancel</Button>
+                        <Button onClick={handleSendInterest} disabled={isSendingRequest}>
+                          {isSendingRequest ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                          Send Request
                         </Button>
                       </DialogFooter>
                     </DialogContent>
