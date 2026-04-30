@@ -10,7 +10,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   Rocket, 
   Target, 
-  ArrowRight, 
   Loader2, 
   CheckCircle2, 
   Share2, 
@@ -19,11 +18,9 @@ import {
   Eye,
   Users,
   Clock,
-  Plus,
   Send,
   Check,
   X,
-  FileSignature,
   Heart,
   MessageCircle
 } from 'lucide-react';
@@ -65,13 +62,21 @@ export default function DashboardOverviewPage() {
         setStartup(startupData);
 
         if (profileData?.role === 'founder') {
-          // 3. Load Views
-          const viewsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'views'));
-          setViewsCount(viewsSnap.size);
+          // 3. Load Views (Try-catch locally to prevent entire page crash if subcollection rules fail)
+          try {
+            const viewsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'views'));
+            setViewsCount(viewsSnap.size);
+          } catch (e) {
+            console.warn("Could not load views:", e);
+          }
 
           // 4. Load Interests
-          const interestsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'interests'));
-          setInterests(interestsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          try {
+            const interestsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'interests'));
+            setInterests(interestsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          } catch (e) {
+            console.warn("Could not load interests:", e);
+          }
 
           // 5. Load Incoming Requests
           const incomingQ = query(
@@ -113,7 +118,7 @@ export default function DashboardOverviewPage() {
     );
   }
 
-  const displayName = profile?.fullName || user?.email?.split('@')[0] || "Founder";
+  const displayName = profile?.fullName || user?.email?.split('@')[0] || "User";
   const roleDisplay = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : "Founder";
   const isFounder = profile?.role === 'founder';
   const isInvestor = profile?.role === 'investor';
@@ -132,7 +137,7 @@ export default function DashboardOverviewPage() {
       console.error("Error updating status:", error);
       toast({
         title: "Error",
-        description: "Failed to update status.",
+        description: "Failed to update status. You may not have permission.",
         variant: "destructive",
       });
     }
@@ -173,7 +178,7 @@ export default function DashboardOverviewPage() {
       console.error("Error opening chat:", error);
       toast({
         title: "Error",
-        description: "Failed to open chat. Please try again later.",
+        description: "Failed to access conversation. Please try again.",
         variant: "destructive"
       });
     }
@@ -299,7 +304,7 @@ export default function DashboardOverviewPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {isFounder && (
+        {(isFounder || profile?.role === 'mentor') && (
           <Card className="lg:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
