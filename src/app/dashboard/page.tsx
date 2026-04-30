@@ -44,6 +44,7 @@ export default function DashboardOverviewPage() {
   const [sentPitches, setSentPitches] = useState<any[]>([]);
   
   const [isLoading, setIsLoading] = useState(true);
+  const [isOpeningChat, setIsOpeningChat] = useState(false);
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -62,7 +63,6 @@ export default function DashboardOverviewPage() {
         setStartup(startupData);
 
         if (profileData?.role === 'founder') {
-          // 3. Load Views (Try-catch locally to prevent entire page crash if subcollection rules fail)
           try {
             const viewsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'views'));
             setViewsCount(viewsSnap.size);
@@ -70,7 +70,6 @@ export default function DashboardOverviewPage() {
             console.warn("Could not load views:", e);
           }
 
-          // 4. Load Interests
           try {
             const interestsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'interests'));
             setInterests(interestsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -78,7 +77,6 @@ export default function DashboardOverviewPage() {
             console.warn("Could not load interests:", e);
           }
 
-          // 5. Load Incoming Requests
           const incomingQ = query(
             collection(firestore, 'pitches'),
             where('toFounderUid', '==', user.uid),
@@ -90,7 +88,6 @@ export default function DashboardOverviewPage() {
         }
 
         if (profileData?.role === 'investor') {
-          // 6. Load Sent Requests
           const sentQ = query(
             collection(firestore, 'pitches'),
             where('fromInvestorUid', '==', user.uid),
@@ -128,14 +125,11 @@ export default function DashboardOverviewPage() {
     if (!firestore || !user?.uid) return;
     const pitchId = pitch.id;
     try {
-      // 1. Update pitch status
       await updateDoc(doc(firestore, 'pitches', pitchId), { status });
       
-      // 2. If connected, ensure a chat exists
       if (status === 'accepted') {
         const otherUid = user.uid === pitch.fromInvestorUid ? pitch.toFounderUid : pitch.fromInvestorUid;
         
-        // Check if chat already exists
         const q = query(
           collection(firestore, "chats"),
           where("participants", "array-contains", user.uid)
@@ -149,7 +143,6 @@ export default function DashboardOverviewPage() {
           }
         });
 
-        // Create new chat if missing
         if (!existingChatId) {
           await addDoc(collection(firestore, 'chats'), {
             participants: [user.uid, otherUid],
@@ -175,9 +168,11 @@ export default function DashboardOverviewPage() {
   };
 
   async function openChat(pitch: any) {
-    if (!firestore || !user?.uid) return;
+    if (!firestore || !user?.uid || isOpeningChat) return;
+    setIsOpeningChat(true);
     try {
-      // Find chat using the current user's UID in participants to satisfy security rules
+      const otherUid = user.uid === pitch.fromInvestorUid ? pitch.toFounderUid : pitch.fromInvestorUid;
+      
       const q = query(
         collection(firestore, "chats"),
         where("participants", "array-contains", user.uid)
@@ -186,11 +181,8 @@ export default function DashboardOverviewPage() {
       const snap = await getDocs(q);
       let chatId = null;
 
-      const otherUid = user.uid === pitch.fromInvestorUid ? pitch.toFounderUid : pitch.fromInvestorUid;
-
       snap.forEach(doc => {
         const data = doc.data();
-        // Ensure both users are in chat
         if (data.participants && data.participants.includes(otherUid)) {
           chatId = doc.id;
         }
@@ -198,6 +190,14 @@ export default function DashboardOverviewPage() {
 
       if (chatId) {
         router.push(`/chats/${chatId}`);
+      } else if (pitch.status === 'accepted') {
+        // Fallback: Create chat room if missing for an accepted request
+        const newChatRef = await addDoc(collection(firestore, 'chats'), {
+          participants: [user.uid, otherUid],
+          lastMessage: "Conversation started",
+          updatedAt: serverTimestamp(),
+        });
+        router.push(`/chats/${newChatRef.id}`);
       } else {
         toast({
           title: "Chat not found",
@@ -212,6 +212,8 @@ export default function DashboardOverviewPage() {
         description: "Failed to access conversation. Please try again.",
         variant: "destructive"
       });
+    } finally {
+      setIsOpeningChat(false);
     }
   }
 
@@ -367,8 +369,9 @@ export default function DashboardOverviewPage() {
                             {getStatusDisplay(pitch.status)}
                           </Badge>
                           {pitch.status === 'accepted' && (
-                            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => openChat(pitch)}>
-                              <MessageCircle className="h-3 w-3" /> Open Chat
+                            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => openChat(pitch)} disabled={isOpeningChat}>
+                              {isOpeningChat ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageCircle className="h-3 w-3" />}
+                              Open Chat
                             </Button>
                           )}
                         </div>
@@ -423,8 +426,9 @@ export default function DashboardOverviewPage() {
                             {getStatusDisplay(pitch.status)}
                           </Badge>
                           {pitch.status === 'accepted' && (
-                            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => openChat(pitch)}>
-                              <MessageCircle className="h-3 w-3" /> Open Chat
+                            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => openChat(pitch)} disabled={isOpeningChat}>
+                              {isOpeningChat ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageCircle className="h-3 w-3" />}
+                              Open Chat
                             </Button>
                           )}
                         </div>
