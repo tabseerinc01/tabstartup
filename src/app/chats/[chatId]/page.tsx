@@ -9,6 +9,7 @@ import {
   collection, 
   getDocs, 
   addDoc, 
+  updateDoc,
   query, 
   orderBy, 
   serverTimestamp 
@@ -51,7 +52,7 @@ export default function ChatPage() {
       }
 
       const chatData = chatSnap.data();
-      if (!chatData.participants.includes(user.uid)) {
+      if (!chatData.participants || !chatData.participants.includes(user.uid)) {
         toast({ title: "Access denied", variant: "destructive" });
         router.push('/dashboard');
         return;
@@ -113,22 +114,27 @@ export default function ChatPage() {
     setNewMessage('');
 
     try {
+      // 1. Add message to subcollection
       await addDoc(collection(firestore, 'chats', chatId as string, 'messages'), {
         senderId: user.uid,
         text: messageText,
         timestamp: serverTimestamp(),
       });
 
-      // Update last message in chat record
-      await addDoc(collection(firestore, 'chats'), {
+      // 2. Update last message in the existing chat document
+      await updateDoc(doc(firestore, 'chats', chatId as string), {
         lastMessage: messageText,
         updatedAt: serverTimestamp()
       });
 
       await loadMessages();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending message:", error);
-      toast({ title: "Error", description: "Failed to send message", variant: "destructive" });
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to send message", 
+        variant: "destructive" 
+      });
     } finally {
       setIsSending(false);
     }
