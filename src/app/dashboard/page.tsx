@@ -84,6 +84,7 @@ export default function DashboardOverviewPage() {
       }
 
       if (profileData?.role === 'investor') {
+        // Improved query for sent requests
         const sentQ = query(
           collection(firestore, 'pitches'),
           where('fromInvestorUid', '==', user.uid),
@@ -237,7 +238,7 @@ export default function DashboardOverviewPage() {
     switch(status) {
       case 'accepted': return 'Connected';
       case 'rejected': return 'Declined';
-      case 'pending': return 'Waiting for response';
+      case 'pending': return 'Waiting';
       default: return status;
     }
   };
@@ -441,7 +442,7 @@ export default function DashboardOverviewPage() {
                   ))
                 ) : (
                   <div className="text-center py-12 border-2 border-dashed rounded-3xl">
-                    <p className="text-sm text-muted-foreground">No requests sent yet.</p>
+                    <p className="text-sm text-muted-foreground">No requests sent yet</p>
                     <Button variant="outline" className="mt-4" asChild>
                       <Link href="/founders">Browse Founders</Link>
                     </Button>
