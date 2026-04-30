@@ -7,7 +7,7 @@ import {
   doc, 
   getDoc, 
   collection, 
-  getDocs, 
+  onSnapshot,
   addDoc, 
   updateDoc,
   query, 
@@ -40,6 +40,7 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Load chat metadata once
   async function loadChatData() {
     if (!firestore || !chatId || !user?.uid) return;
     
@@ -67,29 +68,10 @@ export default function ChatPage() {
           setOtherUser(otherSnap.data());
         }
       }
-
-      await loadMessages();
     } catch (error) {
-      console.error("Error loading chat:", error);
+      console.error("Error loading chat metadata:", error);
     } finally {
       setIsLoading(false);
-    }
-  }
-
-  async function loadMessages() {
-    if (!firestore || !chatId) return;
-    setIsRefreshing(true);
-    try {
-      const msgsQ = query(
-        collection(firestore, 'chats', chatId as string, 'messages'),
-        orderBy('timestamp', 'asc')
-      );
-      const msgsSnap = await getDocs(msgsQ);
-      setMessages(msgsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (error) {
-      console.error("Error loading messages:", error);
-    } finally {
-      setIsRefreshing(false);
     }
   }
 
@@ -98,6 +80,33 @@ export default function ChatPage() {
       loadChatData();
     }
   }, [firestore, chatId, user, isUserLoading]);
+
+  // Set up real-time message listener
+  useEffect(() => {
+    if (!firestore || !chatId || !user) return;
+
+    const msgsQ = query(
+      collection(firestore, 'chats', chatId as string, 'messages'),
+      orderBy('timestamp', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(msgsQ, (snapshot) => {
+      const msgs = snapshot.docs.map(d => ({ 
+        id: d.id, 
+        ...d.data() 
+      }));
+      setMessages(msgs);
+    }, (error) => {
+      console.error("Message listener error:", error);
+      toast({
+        title: "Connection Error",
+        description: "Failed to sync messages in real-time.",
+        variant: "destructive"
+      });
+    });
+
+    return () => unsubscribe();
+  }, [firestore, chatId, user]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -126,8 +135,6 @@ export default function ChatPage() {
         lastMessage: messageText,
         updatedAt: serverTimestamp()
       });
-
-      await loadMessages();
     } catch (error: any) {
       console.error("Error sending message:", error);
       toast({ 
@@ -173,9 +180,7 @@ export default function ChatPage() {
                 <p className="text-xs text-muted-foreground">Direct Message</p>
               </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={loadMessages} disabled={isRefreshing}>
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            </Button>
+            <div className="w-10" /> {/* Spacer */}
           </div>
 
           <Card className="flex-1 flex flex-col overflow-hidden rounded-3xl border-none shadow-xl">
