@@ -1,8 +1,9 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { doc } from 'firebase/firestore';
-import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { useFirestore } from '@/firebase';
 import {
   Card,
   CardHeader,
@@ -24,12 +25,26 @@ export default function InvestorPublicProfilePage() {
   const firestore = useFirestore();
   const uid = params?.uid as string;
 
-  const investorRef = useMemoFirebase(() => {
-    if (!firestore || !uid) return null;
-    return doc(firestore, 'users', uid);
-  }, [firestore, uid]);
+  const [investor, setInvestor] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const { data: investor, isLoading } = useDoc(investorRef);
+  useEffect(() => {
+    async function loadInvestor() {
+      if (!firestore || !uid) return;
+      setIsLoading(true);
+      try {
+        const snap = await getDoc(doc(firestore, 'users', uid));
+        if (snap.exists()) {
+          setInvestor({ id: snap.id, ...snap.data() });
+        }
+      } catch (error) {
+        console.error("Error loading investor profile:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadInvestor();
+  }, [firestore, uid]);
 
   if (isLoading) {
     return (
@@ -60,7 +75,7 @@ export default function InvestorPublicProfilePage() {
 
   const initials = (investor.fullName || investor.name || '')
     .split(' ')
-    .map((p) => p[0])
+    .map((p: string) => p[0])
     .join('')
     .slice(0, 2)
     .toUpperCase() || 'I';

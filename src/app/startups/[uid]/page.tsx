@@ -1,10 +1,9 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useFirestore, useDoc, useMemoFirebase, useUser } from '@/firebase';
-import { doc, collection, addDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useFirestore, useUser } from '@/firebase';
+import { doc, collection, addDoc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,38 +19,49 @@ export default function StartupPublicProfilePage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const userRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
-
-  const startupRef = useMemoFirebase(() => {
-    if (!firestore || !uid) return null;
-    return doc(firestore, 'startups', uid as string);
-  }, [firestore, uid]);
-
-  const interestRef = useMemoFirebase(() => {
-    if (!firestore || !uid || !user) return null;
-    return doc(firestore, 'startups', uid as string, 'interests', user.uid);
-  }, [firestore, uid, user]);
-
-  const { data: startup, isLoading } = useDoc(startupRef);
-  const { data: currentUserProfile } = useDoc(userRef);
-  const { data: existingInterest } = useDoc(interestRef);
-  
+  const [startup, setStartup] = useState<any>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+  const [existingInterest, setExistingInterest] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingInterest, setIsSubmittingInterest] = useState(false);
 
   useEffect(() => {
-    if (!firestore || !uid) return;
+    async function loadData() {
+      if (!firestore || !uid) return;
+      setIsLoading(true);
+      try {
+        const startupSnap = await getDoc(doc(firestore, 'startups', uid as string));
+        if (startupSnap.exists()) {
+          setStartup({ id: startupSnap.id, ...startupSnap.data() });
+        }
 
-    // Record the view
-    const viewsRef = collection(firestore, 'startups', uid as string, 'views');
-    addDoc(viewsRef, {
-      startupId: uid,
-      viewerId: user?.uid || 'anonymous',
-      timestamp: serverTimestamp(),
-    }).catch(err => console.error("Failed to record view:", err));
-  }, [firestore, uid, user]);
+        if (user?.uid) {
+          const userSnap = await getDoc(doc(firestore, 'users', user.uid));
+          if (userSnap.exists()) {
+            setCurrentUserProfile(userSnap.data());
+          }
+
+          const interestSnap = await getDoc(doc(firestore, 'startups', uid as string, 'interests', user.uid));
+          if (interestSnap.exists()) {
+            setExistingInterest(interestSnap.data());
+          }
+        }
+
+        // Record view
+        const viewsRef = collection(firestore, 'startups', uid as string, 'views');
+        addDoc(viewsRef, {
+          startupId: uid,
+          viewerId: user?.uid || 'anonymous',
+          timestamp: serverTimestamp(),
+        });
+      } catch (error) {
+        console.error("Error loading startup data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadData();
+  }, [firestore, uid, user?.uid]);
 
   const handleExpressInterest = async () => {
     if (!user || !firestore || !uid || !currentUserProfile) {
@@ -83,6 +93,7 @@ export default function StartupPublicProfilePage() {
       };
 
       await setDoc(doc(firestore, 'startups', uid as string, 'interests', user.uid), interestData);
+      setExistingInterest(interestData);
       
       toast({
         title: "Interest Noted!",
@@ -96,7 +107,7 @@ export default function StartupPublicProfilePage() {
         variant: "destructive"
       });
     } finally {
-      setIsSubmittingInterest(true); // Keep disabled after success
+      setIsSubmittingInterest(false);
     }
   };
 
@@ -113,7 +124,7 @@ export default function StartupPublicProfilePage() {
     return (
       <div className="flex min-h-screen flex-col">
         <PublicHeader />
-        <main className="flex-1 flex items-center justify-center">
+        <main className="flex-1 items-center justify-center flex">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </main>
         <PublicFooter />

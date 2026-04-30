@@ -1,10 +1,9 @@
-
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { useFirestore, useDoc, useMemoFirebase, useUser } from '@/firebase';
-import { doc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useFirestore, useUser } from '@/firebase';
+import { doc, collection, addDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,24 +22,38 @@ export default function FounderPublicProfilePage() {
   const { user } = useUser();
   const { toast } = useToast();
 
-  const userRef = useMemoFirebase(() => {
-    if (!firestore || !uid) return null;
-    return doc(firestore, 'users', uid as string);
-  }, [firestore, uid]);
-
-  const { data: founder, isLoading } = useDoc(userRef);
-  
-  // Current user's profile to check role
-  const currentUserRef = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [firestore, user?.uid]);
-  
-  const { data: currentUserProfile } = useDoc(currentUserRef);
+  const [founder, setFounder] = useState<any>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [pitchMessage, setPitchMessage] = useState('');
   const [isSendingPitch, setIsSendingPitch] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  useEffect(() => {
+    async function loadData() {
+      if (!firestore || !uid) return;
+      setIsLoading(true);
+      try {
+        const founderSnap = await getDoc(doc(firestore, 'users', uid as string));
+        if (founderSnap.exists()) {
+          setFounder({ id: founderSnap.id, ...founderSnap.data() });
+        }
+
+        if (user?.uid) {
+          const userSnap = await getDoc(doc(firestore, 'users', user.uid));
+          if (userSnap.exists()) {
+            setCurrentUserProfile(userSnap.data());
+          }
+        }
+      } catch (error) {
+        console.error("Error loading founder profile:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadData();
+  }, [firestore, uid, user?.uid]);
 
   const handleSendPitch = async () => {
     if (!user || !firestore || !uid) return;
