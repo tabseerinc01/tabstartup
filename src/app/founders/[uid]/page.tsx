@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -58,7 +59,6 @@ export default function FounderPublicProfilePage() {
   const handleSendInterest = async () => {
     if (!user || !firestore || !uid) return;
     
-    // Safety checks
     if (currentUserProfile?.role !== 'investor') {
       toast({ 
         title: "Access Denied", 
@@ -129,6 +129,19 @@ export default function FounderPublicProfilePage() {
   const isInvestor = currentUserProfile?.role === 'investor';
   const isOwnProfile = user?.uid === uid;
 
+  // Validate image URL to prevent crashes from profile links
+  const isValidImage = (url?: string) => {
+    if (!url) return false;
+    if (url.includes('linkedin.com/in')) return false;
+    if (url.includes('facebook.com/')) return false;
+    if (url.includes('twitter.com/')) return false;
+    return url.startsWith('http');
+  };
+
+  const profileImageUrl = isValidImage(founder.imageUrl) 
+    ? founder.imageUrl 
+    : `https://picsum.photos/seed/${imageId}/400/400`;
+
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
@@ -144,7 +157,7 @@ export default function FounderPublicProfilePage() {
               <div className="flex flex-col md:flex-row gap-8 items-end mb-10">
                 <div className="relative h-40 w-40 rounded-3xl overflow-hidden border-8 border-background bg-muted shrink-0 shadow-2xl">
                   <Image 
-                    src={founder.imageUrl || `https://picsum.photos/seed/${imageId}/400/400`} 
+                    src={profileImageUrl} 
                     alt={displayName} 
                     fill 
                     className="object-cover" 
