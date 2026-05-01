@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -16,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
-import { Loader2, ArrowLeft, MapPin, Mail, Globe, Briefcase, TrendingUp } from 'lucide-react';
+import { Loader2, ArrowLeft, MapPin, Mail, Globe, Briefcase, TrendingUp, Linkedin } from 'lucide-react';
 import Link from 'next/link';
 
 export default function InvestorPublicProfilePage() {
@@ -80,6 +81,11 @@ export default function InvestorPublicProfilePage() {
     .slice(0, 2)
     .toUpperCase() || 'I';
 
+  const displayName = investor.fullName || investor.name;
+  const headline = investor.investorHeadline || investor.headline;
+  const bio = investor.investorBio || investor.bio;
+  const linkedin = investor.linkedinUrl || investor.socialLinks?.linkedin;
+
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
@@ -96,16 +102,16 @@ export default function InvestorPublicProfilePage() {
             <div className="px-6 md:px-12 pb-12 -mt-20">
               <div className="flex flex-col md:flex-row gap-8 items-end mb-10">
                 <Avatar className="h-40 w-40 rounded-3xl border-8 border-background bg-muted shrink-0 shadow-2xl">
-                  <AvatarImage src={investor.imageUrl} alt={investor.fullName} className="object-cover" />
+                  <AvatarImage src={investor.imageUrl} alt={displayName} className="object-cover" />
                   <AvatarFallback className="text-4xl">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 space-y-3">
                   <div className="flex items-center gap-2">
                     <h1 className="text-4xl font-extrabold tracking-tight">
-                      {investor.fullName || investor.name}
+                      {displayName}
                     </h1>
                   </div>
-                  <p className="text-xl text-primary font-semibold">{investor.headline}</p>
+                  <p className="text-xl text-primary font-semibold">{headline}</p>
                   <div className="flex flex-wrap gap-6 text-sm text-muted-foreground font-medium">
                     {investor.location && (
                       <span className="flex items-center gap-1.5">
@@ -113,7 +119,7 @@ export default function InvestorPublicProfilePage() {
                       </span>
                     )}
                     <Badge variant={investor.isOpenToPitches ? 'default' : 'secondary'} className="rounded-lg h-7">
-                      {investor.isOpenToPitches ? 'Accepting Pitches' : 'Consulting Only'}
+                      {investor.isOpenToPitches ? 'Accepting Pitches' : 'Reviewing Strategies'}
                     </Badge>
                   </div>
                 </div>
@@ -121,41 +127,36 @@ export default function InvestorPublicProfilePage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
                 <div className="lg:col-span-2 space-y-12">
-                  {(investor.bio || investor.investorNote) && (
+                  {bio && (
                     <section>
                       <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                        <TrendingUp className="h-6 w-6 text-primary" /> Investment Focus
+                        <TrendingUp className="h-6 w-6 text-primary" /> Investment Vision
                       </h3>
                       <div className="bg-primary/5 p-8 rounded-3xl border border-primary/10 relative">
                         <span className="absolute -top-4 -left-2 text-6xl text-primary/20 font-serif">“</span>
                         <p className="text-primary text-lg font-medium italic leading-relaxed">
-                          {investor.investorNote || investor.bio}
+                          {bio}
                         </p>
                       </div>
                     </section>
                   )}
 
                   <section className="bg-muted/30 p-8 rounded-3xl border border-dashed border-primary/20">
-                    <h3 className="text-xl font-bold mb-4">Contact Details</h3>
-                    <div className="space-y-3">
-                      {investor.email && (
-                        <div className="flex items-center gap-3 text-muted-foreground">
-                          <Mail className="h-5 w-5 text-primary" />
-                          <span className="text-sm font-medium">{investor.email}</span>
-                        </div>
+                    <h3 className="text-xl font-bold mb-6">Contact & Social</h3>
+                    <div className="flex flex-wrap gap-4">
+                      {linkedin && (
+                        <Button variant="outline" className="gap-2 rounded-xl" asChild>
+                          <a href={linkedin} target="_blank" rel="noopener noreferrer">
+                            <Linkedin className="h-4 w-4" /> LinkedIn
+                          </a>
+                        </Button>
                       )}
                       {investor.socialLinks?.website && (
-                        <div className="flex items-center gap-3 text-muted-foreground">
-                          <Globe className="h-5 w-5 text-primary" />
-                          <a
-                            href={investor.socialLinks.website}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm font-medium hover:underline text-primary"
-                          >
-                            {investor.socialLinks.website.replace(/^https?:\/\//, '')}
+                        <Button variant="outline" className="gap-2 rounded-xl" asChild>
+                          <a href={investor.socialLinks.website} target="_blank" rel="noopener noreferrer">
+                            <Globe className="h-4 w-4" /> Website
                           </a>
-                        </div>
+                        </Button>
                       )}
                     </div>
                   </section>
@@ -170,9 +171,17 @@ export default function InvestorPublicProfilePage() {
                           Preferred Stage
                         </p>
                         <div className="flex flex-wrap gap-2">
-                          <Badge variant="secondary" className="rounded-xl">
-                            {investor.preferredStage || 'Early Stage'}
-                          </Badge>
+                          {Array.isArray(investor.preferredStage) ? (
+                            investor.preferredStage.map((s: string) => (
+                              <Badge key={s} variant="secondary" className="rounded-xl">
+                                {s}
+                              </Badge>
+                            ))
+                          ) : (
+                            <Badge variant="secondary" className="rounded-xl">
+                              {investor.preferredStage || 'Early Stage'}
+                            </Badge>
+                          )}
                         </div>
                       </div>
 
@@ -185,12 +194,22 @@ export default function InvestorPublicProfilePage() {
                         </div>
                       )}
 
-                      {investor.focusSectors && (
+                      {investor.investmentFocus && (
                         <div>
                           <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">
                             Focus Sectors
                           </p>
-                          <p className="text-sm font-medium leading-relaxed">{investor.focusSectors}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {Array.isArray(investor.investmentFocus) ? (
+                              investor.investmentFocus.map((f: string) => (
+                                <Badge key={f} variant="outline" className="rounded-xl text-[10px]">
+                                  {f}
+                                </Badge>
+                              ))
+                            ) : (
+                              <p className="text-sm font-medium">{investor.investmentFocus}</p>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -199,7 +218,7 @@ export default function InvestorPublicProfilePage() {
                   {investor.experience && investor.experience.length > 0 && (
                     <section>
                       <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <Briefcase className="h-5 w-5 text-primary" /> Background
+                        <Briefcase className="h-5 w-5 text-primary" /> Professional Background
                       </h3>
                       <div className="space-y-4">
                         {investor.experience.map((exp: any, i: number) => (

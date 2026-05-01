@@ -25,7 +25,13 @@
         "headline": {
           "type": "string"
         },
+        "investorHeadline": {
+          "type": "string"
+        },
         "bio": {
+          "type": "string"
+        },
+        "investorBio": {
           "type": "string"
         },
         "whyBuilding": {
@@ -81,6 +87,9 @@
             "twitter": { "type": "string" }
           }
         },
+        "linkedinUrl": {
+          "type": "string"
+        },
         "availability": {
           "type": "object",
           "properties": {
@@ -94,6 +103,14 @@
           "default": false
         },
         "preferredStage": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "investmentFocus": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "ticketSize": {
           "type": "string"
         },
         "investorNote": {

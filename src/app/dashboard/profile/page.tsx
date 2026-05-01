@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -11,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { Loader2, Plus, Trash2, Linkedin, Globe, Twitter, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Plus, Trash2, Linkedin, Globe, Twitter, Image as ImageIcon, Briefcase, TrendingUp } from 'lucide-react';
 
 export default function ProfilePage() {
   const { toast } = useToast();
@@ -19,16 +20,24 @@ export default function ProfilePage() {
   const firestore = useFirestore();
 
   const [isLoading, setIsLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     fullName: '',
     imageUrl: '',
     headline: '',
+    investorHeadline: '',
     location: '',
     stage: '',
     skills: '',
     bio: '',
+    investorBio: '',
     whyBuilding: '',
     lookingFor: '',
+    linkedinUrl: '',
+    ticketSize: '',
+    isOpenToPitches: false,
+    investmentFocus: '',
+    preferredStage: '',
     socialLinks: {
       linkedin: '',
       website: '',
@@ -51,16 +60,24 @@ export default function ProfilePage() {
         const snap = await getDoc(doc(firestore, 'users', user.uid));
         if (snap.exists()) {
           const profile = snap.data();
+          setUserRole(profile.role);
           setFormData({
             fullName: profile.fullName || '',
             imageUrl: profile.imageUrl || '',
             headline: profile.headline || '',
+            investorHeadline: profile.investorHeadline || '',
             location: profile.location || '',
             stage: profile.stage || '',
             skills: Array.isArray(profile.skills) ? profile.skills.join(', ') : '',
             bio: profile.bio || '',
+            investorBio: profile.investorBio || '',
             whyBuilding: profile.whyBuilding || '',
             lookingFor: profile.lookingFor || '',
+            linkedinUrl: profile.linkedinUrl || profile.socialLinks?.linkedin || '',
+            ticketSize: profile.ticketSize || '',
+            isOpenToPitches: profile.isOpenToPitches || false,
+            investmentFocus: Array.isArray(profile.investmentFocus) ? profile.investmentFocus.join(', ') : '',
+            preferredStage: Array.isArray(profile.preferredStage) ? profile.preferredStage.join(', ') : '',
             socialLinks: profile.socialLinks || { linkedin: '', website: '', twitter: '' },
             availability: profile.availability || { openToInvestment: false, hiring: false, coFounder: false },
             experience: profile.experience && profile.experience.length > 0 ? profile.experience : [{ company: '', role: '', duration: '', description: '' }],
@@ -82,10 +99,14 @@ export default function ProfilePage() {
 
     try {
       const skillsArray = formData.skills.split(',').map(s => s.trim()).filter(s => s !== '');
+      const focusArray = formData.investmentFocus.split(',').map(s => s.trim()).filter(s => s !== '');
+      const stageArray = formData.preferredStage.split(',').map(s => s.trim()).filter(s => s !== '');
       
       await setDoc(doc(firestore, 'users', user.uid), {
         ...formData,
         skills: skillsArray,
+        investmentFocus: focusArray,
+        preferredStage: stageArray,
         updatedAt: serverTimestamp(),
       }, { merge: true });
 
@@ -121,22 +142,6 @@ export default function ProfilePage() {
     setFormData({ ...formData, experience: newExp });
   };
 
-  const addAchievement = () => {
-    setFormData({ ...formData, achievements: [...formData.achievements, ''] });
-  };
-
-  const removeAchievement = (index: number) => {
-    const newAch = [...formData.achievements];
-    newAch.splice(index, 1);
-    setFormData({ ...formData, achievements: newAch });
-  };
-
-  const updateAchievement = (index: number, value: string) => {
-    const newAch = [...formData.achievements];
-    newAch[index] = value;
-    setFormData({ ...formData, achievements: newAch });
-  };
-
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -145,10 +150,12 @@ export default function ProfilePage() {
     );
   }
 
+  const isInvestor = userRole === 'investor';
+
   return (
     <div className="max-w-4xl mx-auto w-full space-y-8 pb-20">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Founder Profile</h1>
+        <h1 className="text-3xl font-bold">{isInvestor ? 'Investor Profile' : 'Founder Profile'}</h1>
         <Button onClick={handleSave}>Save Changes</Button>
       </div>
       
@@ -190,132 +197,179 @@ export default function ProfilePage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="headline">Headline</Label>
+                <Label htmlFor="headline">{isInvestor ? 'Investor Headline' : 'Headline'}</Label>
                 <Input 
                   id="headline" 
-                  placeholder="e.g. Building the future of AgriTech"
-                  value={formData.headline}
-                  onChange={e => setFormData({...formData, headline: e.target.value})}
+                  placeholder={isInvestor ? "e.g. Managing Partner at Delta VC" : "e.g. Building the future of AgriTech"}
+                  value={isInvestor ? formData.investorHeadline : formData.headline}
+                  onChange={e => setFormData({...formData, [isInvestor ? 'investorHeadline' : 'headline']: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="bio">About Me</Label>
+                <Label htmlFor="bio">{isInvestor ? 'Investor Biography' : 'About Me'}</Label>
                 <Textarea 
                   id="bio" 
                   rows={4} 
                   placeholder="Tell us your story..."
-                  value={formData.bio}
-                  onChange={e => setFormData({...formData, bio: e.target.value})}
+                  value={isInvestor ? formData.investorBio : formData.bio}
+                  onChange={e => setFormData({...formData, [isInvestor ? 'investorBio' : 'bio']: e.target.value})}
                 />
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Professional Experience</CardTitle>
-              <CardDescription>Share your career journey.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {formData.experience.map((exp, index) => (
-                <div key={index} className="space-y-4 p-4 border rounded-lg relative group">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => removeExperience(index)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Company</Label>
-                      <Input 
-                        value={exp.company} 
-                        onChange={e => updateExperience(index, 'company', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Role</Label>
-                      <Input 
-                        value={exp.role} 
-                        onChange={e => updateExperience(index, 'role', e.target.value)}
-                      />
-                    </div>
-                  </div>
+          {isInvestor ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Investment Strategy</CardTitle>
+                <CardDescription>Define your investment criteria.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Duration (e.g. 2020 - Present)</Label>
+                    <Label htmlFor="ticketSize">Ticket Size</Label>
                     <Input 
-                      value={exp.duration} 
-                      onChange={e => updateExperience(index, 'duration', e.target.value)}
+                      id="ticketSize" 
+                      placeholder="e.g. $10k - $50k"
+                      value={formData.ticketSize}
+                      onChange={e => setFormData({...formData, ticketSize: e.target.value})}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Key Responsibilities</Label>
-                    <Textarea 
-                      rows={2}
-                      value={exp.description} 
-                      onChange={e => updateExperience(index, 'description', e.target.value)}
+                    <Label htmlFor="preferredStage">Preferred Stages</Label>
+                    <Input 
+                      id="preferredStage" 
+                      placeholder="e.g. Idea, Early, Growth"
+                      value={formData.preferredStage}
+                      onChange={e => setFormData({...formData, preferredStage: e.target.value})}
                     />
                   </div>
                 </div>
-              ))}
-              <Button variant="outline" className="w-full" onClick={addExperience}>
-                <Plus className="h-4 w-4 mr-2" /> Add Experience
-              </Button>
-            </CardContent>
-          </Card>
+                <div className="space-y-2">
+                  <Label htmlFor="focus">Investment Focus</Label>
+                  <Input 
+                    id="focus" 
+                    placeholder="e.g. Fintech, AI, SaaS"
+                    value={formData.investmentFocus}
+                    onChange={e => setFormData({...formData, investmentFocus: e.target.value})}
+                  />
+                </div>
+                <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox 
+                    id="openToPitches" 
+                    checked={formData.isOpenToPitches}
+                    onCheckedChange={(checked) => setFormData({
+                      ...formData, 
+                      isOpenToPitches: !!checked
+                    })}
+                  />
+                  <Label htmlFor="openToPitches">Open to direct pitches</Label>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Professional Experience</CardTitle>
+                  <CardDescription>Share your career journey.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {formData.experience.map((exp, index) => (
+                    <div key={index} className="space-y-4 p-4 border rounded-lg relative group">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => removeExperience(index)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Company</Label>
+                          <Input 
+                            value={exp.company} 
+                            onChange={e => updateExperience(index, 'company', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Role</Label>
+                          <Input 
+                            value={exp.role} 
+                            onChange={e => updateExperience(index, 'role', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Duration</Label>
+                        <Input 
+                          value={exp.duration} 
+                          onChange={e => updateExperience(index, 'duration', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  <Button variant="outline" className="w-full" onClick={addExperience}>
+                    <Plus className="h-4 w-4 mr-2" /> Add Experience
+                  </Button>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Motivation & Vision</CardTitle>
-              <CardDescription>Why are you building this startup?</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="why">The "Why" Behind Your Vision</Label>
-                <Textarea 
-                  id="why" 
-                  rows={6} 
-                  placeholder="Investors look for passion and purpose."
-                  value={formData.whyBuilding}
-                  onChange={e => setFormData({...formData, whyBuilding: e.target.value})}
-                />
-              </div>
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Motivation & Vision</CardTitle>
+                  <CardDescription>Why are you building this startup?</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="why">The "Why" Behind Your Vision</Label>
+                    <Textarea 
+                      id="why" 
+                      rows={6} 
+                      placeholder="Investors look for passion and purpose."
+                      value={formData.whyBuilding}
+                      onChange={e => setFormData({...formData, whyBuilding: e.target.value})}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
 
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Availability</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="investment" 
-                  checked={formData.availability.openToInvestment}
-                  onCheckedChange={(checked) => setFormData({
-                    ...formData, 
-                    availability: {...formData.availability, openToInvestment: !!checked}
-                  })}
-                />
-                <Label htmlFor="investment">Open to Investment</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="hiring" 
-                  checked={formData.availability.hiring}
-                  onCheckedChange={(checked) => setFormData({
-                    ...formData, 
-                    availability: {...formData.availability, hiring: !!checked}
-                  })}
-                />
-                <Label htmlFor="hiring">Currently Hiring</Label>
-              </div>
-            </CardContent>
-          </Card>
+          {!isInvestor && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Availability</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="investment" 
+                    checked={formData.availability.openToInvestment}
+                    onCheckedChange={(checked) => setFormData({
+                      ...formData, 
+                      availability: {...formData.availability, openToInvestment: !!checked}
+                    })}
+                  />
+                  <Label htmlFor="investment">Open to Investment</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="hiring" 
+                    checked={formData.availability.hiring}
+                    onCheckedChange={(checked) => setFormData({
+                      ...formData, 
+                      availability: {...formData.availability, hiring: !!checked}
+                    })}
+                  />
+                  <Label htmlFor="hiring">Currently Hiring</Label>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
@@ -323,13 +377,24 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label className="flex items-center gap-2"><Linkedin className="h-4 w-4" /> LinkedIn</Label>
+                <Label className="flex items-center gap-2"><Linkedin className="h-4 w-4" /> LinkedIn URL</Label>
                 <Input 
-                  placeholder="https://..."
-                  value={formData.socialLinks.linkedin}
+                  placeholder="https://linkedin.com/in/..."
+                  value={formData.linkedinUrl}
                   onChange={e => setFormData({
                     ...formData, 
-                    socialLinks: {...formData.socialLinks, linkedin: e.target.value}
+                    linkedinUrl: e.target.value
+                  })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2"><Globe className="h-4 w-4" /> Website</Label>
+                <Input 
+                  placeholder="https://..."
+                  value={formData.socialLinks.website}
+                  onChange={e => setFormData({
+                    ...formData, 
+                    socialLinks: {...formData.socialLinks, website: e.target.value}
                   })}
                 />
               </div>
