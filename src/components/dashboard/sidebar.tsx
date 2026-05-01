@@ -56,8 +56,8 @@ export function DashboardSidebar() {
     { href: '/dashboard/profile', label: 'My Profile', icon: User },
     { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
     { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
+    { href: '/dashboard/connections', label: 'Connections', icon: Users },
     ...(isFounder ? [{ href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }] : []),
-    { href: '#', label: 'Connections', icon: Users, disabled: true },
     { href: '#', label: 'Settings', icon: Settings, disabled: true },
   ];
 
