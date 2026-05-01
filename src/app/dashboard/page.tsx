@@ -42,6 +42,7 @@ export default function DashboardOverviewPage() {
   const [interests, setInterests] = useState<any[]>([]);
   const [incomingPitches, setIncomingPitches] = useState<any[]>([]);
   const [sentPitches, setSentPitches] = useState<any[]>([]);
+  const [incomingProfiles, setIncomingProfiles] = useState<Record<string, any>>({});
   
   const [isLoading, setIsLoading] = useState(true);
   const [isOpeningChat, setIsOpeningChat] = useState(false);
@@ -81,7 +82,19 @@ export default function DashboardOverviewPage() {
           limit(10)
         );
         const incomingSnap = await getDocs(incomingQ);
-        setIncomingPitches(incomingSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const pitches = incomingSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setIncomingPitches(pitches);
+
+        // Fetch profiles for incoming pitches
+        const uids = new Set(pitches.map((p: any) => p.fromInvestorUid));
+        const profilesMap: Record<string, any> = {};
+        for (const uid of Array.from(uids)) {
+          const pSnap = await getDoc(doc(firestore, 'users', uid as string));
+          if (pSnap.exists()) {
+            profilesMap[uid as string] = pSnap.data();
+          }
+        }
+        setIncomingProfiles(profilesMap);
       }
 
       if (profileData?.role === 'investor') {
@@ -350,46 +363,53 @@ export default function DashboardOverviewPage() {
             <CardContent>
               <div className="space-y-4">
                 {incomingPitches.length > 0 ? (
-                  incomingPitches.map((pitch: any) => (
-                    <div key={pitch.id} className="p-4 border rounded-2xl bg-muted/20 space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-10 w-10">
-                            <AvatarImage src={`https://picsum.photos/seed/${pitch.fromInvestorUid}/40/40`} />
-                            <AvatarFallback>I</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="text-sm font-bold">Potential Investor</p>
-                            <p className="text-xs text-muted-foreground">{pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Just now'}</p>
+                  incomingPitches.map((pitch: any) => {
+                    const investorProfile = incomingProfiles[pitch.fromInvestorUid];
+                    const investorName = investorProfile?.fullName || "Potential Investor";
+                    
+                    return (
+                      <div key={pitch.id} className="p-4 border rounded-2xl bg-muted/20 space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage src={investorProfile?.imageUrl || `https://picsum.photos/seed/${pitch.fromInvestorUid}/40/40`} />
+                              <AvatarFallback>{investorName.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <Link href={`/investors/${pitch.fromInvestorUid}`} className="hover:underline">
+                                <p className="text-sm font-bold">{investorName}</p>
+                              </Link>
+                              <p className="text-xs text-muted-foreground">{pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Just now'}</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-2">
+                            <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
+                              {getStatusDisplay(pitch.status)}
+                            </Badge>
+                            {pitch.status === 'accepted' && (
+                              <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => openChat(pitch)} disabled={isOpeningChat}>
+                                {isOpeningChat ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageCircle className="h-3 w-3" />}
+                                Open Chat
+                              </Button>
+                            )}
                           </div>
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
-                            {getStatusDisplay(pitch.status)}
-                          </Badge>
-                          {pitch.status === 'accepted' && (
-                            <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => openChat(pitch)} disabled={isOpeningChat}>
-                              {isOpeningChat ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageCircle className="h-3 w-3" />}
-                              Open Chat
+                        <p className="text-sm italic text-muted-foreground">
+                          {pitch.message ? `"${pitch.message}"` : "Expressed interest in connecting."}
+                        </p>
+                        {pitch.status === 'pending' && (
+                          <div className="flex gap-2 justify-end">
+                            <Button size="sm" variant="outline" onClick={() => handlePitchStatus(pitch, 'rejected')} className="text-destructive">
+                              <X className="h-4 w-4 mr-1" /> Decline
                             </Button>
-                          )}
-                        </div>
+                            <Button size="sm" onClick={() => handlePitchStatus(pitch, 'accepted')}>
+                              <Check className="h-4 w-4 mr-1" /> Connect
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm italic text-muted-foreground">
-                        {pitch.message ? `"${pitch.message}"` : "Expressed interest in connecting."}
-                      </p>
-                      {pitch.status === 'pending' && (
-                        <div className="flex gap-2 justify-end">
-                          <Button size="sm" variant="outline" onClick={() => handlePitchStatus(pitch, 'rejected')} className="text-destructive">
-                            <X className="h-4 w-4 mr-1" /> Decline
-                          </Button>
-                          <Button size="sm" onClick={() => handlePitchStatus(pitch, 'accepted')}>
-                            <Check className="h-4 w-4 mr-1" /> Connect
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="text-center py-12 border-2 border-dashed rounded-3xl">
                     <p className="text-sm text-muted-foreground">No requests yet.</p>
@@ -476,7 +496,9 @@ export default function DashboardOverviewPage() {
                             <AvatarFallback>F</AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-bold">{pitch.toFounderName || "Founder"}</p>
+                            <Link href={`/founders/${pitch.toFounderUid}`} className="hover:underline">
+                              <p className="font-bold">{pitch.toFounderName || "Founder"}</p>
+                            </Link>
                             <p className="text-xs text-muted-foreground">Status: Connected</p>
                           </div>
                         </div>
@@ -512,7 +534,9 @@ export default function DashboardOverviewPage() {
                         <AvatarFallback>{interest.investorName?.charAt(0)}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1 overflow-hidden">
-                        <p className="text-xs font-bold leading-none">{interest.investorName}</p>
+                        <Link href={`/investors/${interest.investorId}`} className="hover:underline">
+                          <p className="text-xs font-bold leading-none">{interest.investorName}</p>
+                        </Link>
                         <p className="text-[10px] text-muted-foreground truncate">{interest.investorHeadline}</p>
                       </div>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" onClick={() => openChat({ fromInvestorUid: interest.investorId, toFounderUid: user?.uid, status: 'accepted' })}>
