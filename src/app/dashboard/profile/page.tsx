@@ -20,6 +20,7 @@ export default function ProfilePage() {
   const firestore = useFirestore();
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     fullName: '',
@@ -97,6 +98,7 @@ export default function ProfilePage() {
     e.preventDefault();
     if (!user || !firestore) return;
 
+    setIsSaving(true);
     try {
       const skillsArray = formData.skills.split(',').map(s => s.trim()).filter(s => s !== '');
       const focusArray = formData.investmentFocus.split(',').map(s => s.trim()).filter(s => s !== '');
@@ -120,6 +122,8 @@ export default function ProfilePage() {
         title: "Error",
         description: "Failed to update profile.",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -156,7 +160,10 @@ export default function ProfilePage() {
     <div className="max-w-4xl mx-auto w-full space-y-8 pb-20">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">{isInvestor ? 'Investor Profile' : 'Founder Profile'}</h1>
-        <Button onClick={handleSave}>Save Changes</Button>
+        <Button onClick={handleSave} disabled={isSaving}>
+          {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+          Save Changes
+        </Button>
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -210,7 +217,7 @@ export default function ProfilePage() {
                 <Textarea 
                   id="bio" 
                   rows={4} 
-                  placeholder="Tell us your story..."
+                  placeholder={isInvestor ? "Tell founders about your investment philosophy..." : "Tell us your story..."}
                   value={isInvestor ? formData.investorBio : formData.bio}
                   onChange={e => setFormData({...formData, [isInvestor ? 'investorBio' : 'bio']: e.target.value})}
                 />
@@ -222,7 +229,7 @@ export default function ProfilePage() {
             <Card>
               <CardHeader>
                 <CardTitle>Investment Strategy</CardTitle>
-                <CardDescription>Define your investment criteria.</CardDescription>
+                <CardDescription>Define your investment criteria to attract the right founders.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -239,7 +246,7 @@ export default function ProfilePage() {
                     <Label htmlFor="preferredStage">Preferred Stages</Label>
                     <Input 
                       id="preferredStage" 
-                      placeholder="e.g. Idea, Early, Growth"
+                      placeholder="e.g. Idea, Early, Growth (comma separated)"
                       value={formData.preferredStage}
                       onChange={e => setFormData({...formData, preferredStage: e.target.value})}
                     />
@@ -249,7 +256,7 @@ export default function ProfilePage() {
                   <Label htmlFor="focus">Investment Focus</Label>
                   <Input 
                     id="focus" 
-                    placeholder="e.g. Fintech, AI, SaaS"
+                    placeholder="e.g. Fintech, AI, SaaS (comma separated)"
                     value={formData.investmentFocus}
                     onChange={e => setFormData({...formData, investmentFocus: e.target.value})}
                   />
@@ -263,7 +270,7 @@ export default function ProfilePage() {
                       isOpenToPitches: !!checked
                     })}
                   />
-                  <Label htmlFor="openToPitches">Open to direct pitches</Label>
+                  <Label htmlFor="openToPitches" className="font-normal cursor-pointer">Open to direct pitches from founders</Label>
                 </div>
               </CardContent>
             </Card>
@@ -354,7 +361,7 @@ export default function ProfilePage() {
                       availability: {...formData.availability, openToInvestment: !!checked}
                     })}
                   />
-                  <Label htmlFor="investment">Open to Investment</Label>
+                  <Label htmlFor="investment" className="font-normal cursor-pointer">Open to Investment</Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Checkbox 
@@ -365,7 +372,7 @@ export default function ProfilePage() {
                       availability: {...formData.availability, hiring: !!checked}
                     })}
                   />
-                  <Label htmlFor="hiring">Currently Hiring</Label>
+                  <Label htmlFor="hiring" className="font-normal cursor-pointer">Currently Hiring</Label>
                 </div>
               </CardContent>
             </Card>
@@ -373,7 +380,7 @@ export default function ProfilePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Social Links</CardTitle>
+              <CardTitle>Social Presence</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -400,6 +407,19 @@ export default function ProfilePage() {
               </div>
             </CardContent>
           </Card>
+
+          {isInvestor && (
+            <Card className="bg-primary/5 border-primary/20">
+              <CardHeader>
+                <CardTitle className="text-sm">Quick Tips for Investors</CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs space-y-2 text-muted-foreground">
+                <p>• Clear <strong>Investment Focus</strong> helps founders find you faster.</p>
+                <p>• Setting a <strong>Ticket Size</strong> reduces mismatched inquiries.</p>
+                <p>• Being <strong>Open to Pitches</strong> allows verified founders to contact you directly.</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
