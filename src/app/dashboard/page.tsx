@@ -169,9 +169,12 @@ export default function DashboardOverviewPage() {
       }
 
       setIncomingPitches(prev => prev.map(p => p.id === pitchId ? { ...p, status } : p));
+      
       toast({
-        title: `Request ${status === 'accepted' ? 'Connected' : 'Declined'}`,
-        description: `You have ${status === 'accepted' ? 'accepted' : 'declined'} this interest request.`,
+        title: status === 'accepted' ? "Connection Established!" : "Request Declined",
+        description: status === 'accepted' 
+          ? "You are now connected. Start the conversation." 
+          : "You have declined this interest request.",
       });
     } catch (error) {
       console.error("Error updating status:", error);
@@ -467,7 +470,7 @@ export default function DashboardOverviewPage() {
                                   <Button 
                                     size="sm" 
                                     variant="outline" 
-                                    className="gap-2 rounded-xl h-9" 
+                                    className="gap-2 rounded-xl h-9 bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary" 
                                     onClick={() => openChat(pitch)} 
                                     disabled={isOpeningChat}
                                   >
