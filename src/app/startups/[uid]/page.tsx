@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -96,8 +97,8 @@ export default function StartupPublicProfilePage() {
       setExistingInterest(interestData);
       
       toast({
-        title: "Interest Noted!",
-        description: "The founder has been notified of your interest.",
+        title: "Interest Sent!",
+        description: "Your interest has been sent. The founder will review your profile.",
       });
     } catch (error) {
       console.error("Error saving interest:", error);
@@ -145,7 +146,8 @@ export default function StartupPublicProfilePage() {
     );
   }
 
-  const canExpressInterest = user && currentUserProfile?.role === 'investor' && !existingInterest && !isSubmittingInterest;
+  const isInvestor = currentUserProfile?.role === 'investor';
+  const isOwnStartup = user?.uid === uid;
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
@@ -164,15 +166,19 @@ export default function StartupPublicProfilePage() {
                   <p className="text-xl text-primary font-semibold">{startup.industry}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {canExpressInterest && (
-                    <Button onClick={handleExpressInterest} className="rounded-xl h-12 px-6 gap-2 bg-green-600 hover:bg-green-700">
-                      <Heart className="h-5 w-5 fill-white" /> Express Interest
-                    </Button>
-                  )}
-                  {existingInterest && (
-                    <Badge variant="outline" className="h-12 px-4 rounded-xl border-green-500 text-green-600 flex items-center gap-2 bg-green-50">
-                      <Heart className="h-4 w-4 fill-green-600" /> Interest Sent
-                    </Badge>
+                  {isInvestor && !isOwnStartup && (
+                    <>
+                      {existingInterest ? (
+                        <Button disabled className="rounded-xl h-12 px-6 gap-2 bg-muted text-muted-foreground">
+                          <Heart className="h-5 w-5 fill-muted-foreground" /> Interest Sent
+                        </Button>
+                      ) : (
+                        <Button onClick={handleExpressInterest} className="rounded-xl h-12 px-6 gap-2 bg-green-600 hover:bg-green-700" disabled={isSubmittingInterest}>
+                          {isSubmittingInterest ? <Loader2 className="h-5 w-5 animate-spin" /> : <Heart className="h-5 w-5 fill-white" />}
+                          Express Interest
+                        </Button>
+                      )}
+                    </>
                   )}
                   <Button variant="outline" size="icon" onClick={copyListingLink} className="rounded-xl h-12 w-12">
                     <Share2 className="h-5 w-5" />

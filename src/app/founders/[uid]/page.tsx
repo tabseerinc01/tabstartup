@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useFirestore, useUser } from '@/firebase';
-import { doc, collection, addDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, addDoc, getDoc, getDocs, query, where, limit, serverTimestamp } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,6 +26,7 @@ export default function FounderPublicProfilePage() {
   const [founder, setFounder] = useState<any>(null);
   const [startup, setStartup] = useState<any>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+  const [hasSentPitch, setHasSentPitch] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const [interestMessage, setInterestMessage] = useState('');
@@ -53,6 +54,18 @@ export default function FounderPublicProfilePage() {
           const userSnap = await getDoc(doc(firestore, 'users', user.uid));
           if (userSnap.exists()) {
             setCurrentUserProfile(userSnap.data());
+          }
+
+          // Check if investor has already sent a pitch to this founder
+          const pitchQ = query(
+            collection(firestore, 'pitches'),
+            where('fromInvestorUid', '==', user.uid),
+            where('toFounderUid', '==', uid as string),
+            limit(1)
+          );
+          const pitchSnap = await getDocs(pitchQ);
+          if (!pitchSnap.empty) {
+            setHasSentPitch(true);
           }
         }
       } catch (error) {
@@ -96,7 +109,11 @@ export default function FounderPublicProfilePage() {
         createdAt: serverTimestamp(),
       });
 
-      toast({ title: "Interest Sent!", description: "Your request has been delivered to the founder." });
+      toast({ 
+        title: "Interest Sent!", 
+        description: "Your interest has been sent. The founder will review your profile." 
+      });
+      setHasSentPitch(true);
       setInterestMessage('');
       setIsDialogOpen(false);
     } catch (error) {
@@ -185,36 +202,44 @@ export default function FounderPublicProfilePage() {
 
               <div className="flex flex-wrap gap-4 mb-12">
                 {isInvestor && !isOwnProfile && (
-                  <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base bg-primary hover:bg-primary/90">
-                        <Heart className="h-5 w-5" /> Express Interest
+                  <>
+                    {hasSentPitch ? (
+                      <Button disabled className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base bg-muted text-muted-foreground">
+                        <Heart className="h-5 w-5 fill-muted-foreground" /> Interest Sent
                       </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-md">
-                      <DialogHeader>
-                        <DialogTitle>Express Interest in {displayName}</DialogTitle>
-                        <DialogDescription>
-                          Share why you're interested in this founder and their venture.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <Textarea 
-                          placeholder="Write a short message (optional)..."
-                          className="min-h-[150px] rounded-xl"
-                          value={interestMessage}
-                          onChange={(e) => setInterestMessage(e.target.value)}
-                        />
-                      </div>
-                      <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSendingRequest}>Cancel</Button>
-                        <Button onClick={handleSendInterest} disabled={isSendingRequest}>
-                          {isSendingRequest ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                          Send Request
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
+                    ) : (
+                      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base bg-primary hover:bg-primary/90">
+                            <Heart className="h-5 w-5" /> Express Interest
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md">
+                          <DialogHeader>
+                            <DialogTitle>Express Interest in {displayName}</DialogTitle>
+                            <DialogDescription>
+                              Share why you're interested in this founder and their venture.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <Textarea 
+                              placeholder="Write a short message (optional)..."
+                              className="min-h-[150px] rounded-xl"
+                              value={interestMessage}
+                              onChange={(e) => setInterestMessage(e.target.value)}
+                            />
+                          </div>
+                          <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSendingRequest}>Cancel</Button>
+                            <Button onClick={handleSendInterest} disabled={isSendingRequest}>
+                              {isSendingRequest ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                              Send Request
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    )}
+                  </>
                 )}
                 
                 {isOwnProfile ? (
