@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { mockFounders } from '@/lib/mock-data';
-import { MapPin, Search, Filter, Loader2, Linkedin, MessageSquare, Calendar, CheckCircle2, Rocket } from 'lucide-react';
+import { MapPin, Search, Filter, Loader2, Linkedin, MessageSquare, Calendar, CheckCircle2, Rocket, Briefcase, HandCoins, Info } from 'lucide-react';
 import Image from 'next/image';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { PublicHeader } from '@/components/public/header';
@@ -134,10 +134,10 @@ export default function FoundersPage() {
 function FounderCard({ founder }: { founder: any }) {
   const displayName = founder.fullName || founder.name;
   const imageId = founder.uid || founder.id || 'user';
-  const startupName = founder.startup?.name;
+  const startup = founder.startup;
 
   return (
-    <Card className="flex flex-col h-full hover:shadow-xl transition-all overflow-hidden group border-muted/50">
+    <Card className="flex flex-col h-full hover:shadow-xl transition-all overflow-hidden group border-muted/50 bg-background">
       <div className="relative h-64 bg-muted overflow-hidden">
         <Image 
           src={founder.imageUrl || `https://picsum.photos/seed/${imageId}/600/600`} 
@@ -152,11 +152,6 @@ function FounderCard({ founder }: { founder: any }) {
         )}
         <div className="absolute bottom-4 left-4 flex gap-2">
           <Badge variant="secondary" className="bg-white/90 backdrop-blur text-primary border-none">{founder.stage}</Badge>
-          {startupName && (
-            <Badge className="bg-primary/90 text-white border-none flex items-center gap-1">
-              <Rocket className="h-3 w-3" /> {startupName}
-            </Badge>
-          )}
         </div>
       </div>
       <CardHeader className="pb-2">
@@ -168,18 +163,45 @@ function FounderCard({ founder }: { founder: any }) {
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-1">
-        <div className="flex flex-wrap gap-1">
-          {founder.skills?.slice(0, 4).map((skill: string) => (
-            <Badge key={skill} variant="outline" className="text-[10px] bg-muted/30">{skill}</Badge>
-          ))}
+        <div className="border-t pt-4 space-y-4">
+          {startup ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-base flex items-center gap-2">
+                  <Rocket className="h-4 w-4 text-primary" /> {startup.name}
+                </h4>
+                <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-tight px-2">
+                  {startup.stage}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground line-clamp-2 h-10 italic">
+                {startup.shortDescription || "Building a revolutionary new startup."}
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Briefcase className="h-3 w-3" />
+                  <span className="truncate">{startup.industry || "Technology"}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-primary font-medium">
+                  <HandCoins className="h-3 w-3" />
+                  <span>{startup.fundingNeed || "TBD"}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="py-6 flex flex-col items-center justify-center text-muted-foreground bg-muted/20 rounded-xl border border-dashed">
+              <Info className="h-5 w-5 mb-2 opacity-30" />
+              <p className="text-xs font-medium italic">No startup listed yet</p>
+            </div>
+          )}
         </div>
-        
+
         <div className="mt-auto pt-4 flex gap-2">
           <Dialog>
             <DialogTrigger asChild>
-              <Button className="flex-1">View Full Profile</Button>
+              <Button className="flex-1 rounded-xl">View Details</Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[700px] max-h-[90vh] p-0 overflow-hidden">
+            <DialogContent className="sm:max-w-[700px] max-h-[90vh] p-0 overflow-hidden rounded-3xl">
               <DialogHeader className="sr-only">
                 <DialogTitle>{displayName}'s Profile</DialogTitle>
                 <DialogDescription>Detailed view of founder expertise and journey.</DialogDescription>
@@ -208,20 +230,35 @@ function FounderCard({ founder }: { founder: any }) {
                     </div>
 
                     <div className="flex gap-3 mb-8">
-                      <Button className="flex-1 gap-2" asChild>
+                      <Button className="flex-1 gap-2 rounded-xl" asChild>
                         <Link href={`/founders/${founder.uid || founder.id}`}><MessageSquare className="h-4 w-4" /> Message</Link>
                       </Button>
-                      <Button variant="outline" className="flex-1 gap-2"><Calendar className="h-4 w-4" /> Request Meeting</Button>
+                      <Button variant="outline" className="flex-1 gap-2 rounded-xl"><Calendar className="h-4 w-4" /> Request Meeting</Button>
                     </div>
 
-                    {founder.startup && (
-                      <div className="bg-muted/30 p-6 rounded-2xl border mb-6">
-                        <h3 className="font-bold mb-2 flex items-center gap-2">
-                          <Rocket className="h-4 w-4 text-primary" /> Venture: {founder.startup.name}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">{founder.startup.shortDescription}</p>
-                        <Button variant="link" className="p-0 h-auto mt-4 text-primary" asChild>
-                          <Link href={`/startups/${founder.uid || founder.id}`}>View Startup Listing</Link>
+                    {startup && (
+                      <div className="bg-primary/5 p-6 rounded-2xl border border-primary/10 mb-6">
+                        <div className="flex justify-between items-start mb-4">
+                          <h3 className="font-bold text-xl flex items-center gap-2">
+                            <Rocket className="h-5 w-5 text-primary" /> {startup.name}
+                          </h3>
+                          <Badge className="bg-primary/10 text-primary border-none">{startup.industry}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground leading-relaxed mb-6 italic">
+                          "{startup.shortDescription}"
+                        </p>
+                        <div className="grid grid-cols-2 gap-6 p-4 bg-background rounded-xl border mb-6">
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Target Funding</p>
+                            <p className="text-lg font-bold text-primary">{startup.fundingNeed || 'TBD'}</p>
+                          </div>
+                          <div className="space-y-1 text-right">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Status</p>
+                            <p className="text-sm font-semibold">{startup.fundraisingStatus || 'Open'}</p>
+                          </div>
+                        </div>
+                        <Button variant="link" className="p-0 h-auto text-primary font-bold" asChild>
+                          <Link href={`/startups/${founder.uid || founder.id}`}>Full Startup Profile & Pitch Deck</Link>
                         </Button>
                       </div>
                     )}
@@ -230,7 +267,7 @@ function FounderCard({ founder }: { founder: any }) {
               </ScrollArea>
             </DialogContent>
           </Dialog>
-          <Button variant="outline" size="icon" asChild>
+          <Button variant="outline" size="icon" className="rounded-xl" asChild>
             <Link href={`/founders/${founder.uid || founder.id}`}><Linkedin className="h-4 w-4" /></Link>
           </Button>
         </div>
