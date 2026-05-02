@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { mockFounders } from '@/lib/mock-data';
-import { MapPin, Search, Filter, Loader2, Linkedin, MessageSquare, Calendar, CheckCircle2, Rocket, Briefcase, HandCoins, Info } from 'lucide-react';
+import { MapPin, Search, Filter, Loader2, Linkedin, MessageSquare, Calendar, CheckCircle2, Rocket, Briefcase, HandCoins, Info, LayoutGrid } from 'lucide-react';
 import Image from 'next/image';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { PublicHeader } from '@/components/public/header';
@@ -20,6 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 export default function FoundersPage() {
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('all');
+  const [industryFilter, setIndustryFilter] = useState('');
   const [founders, setFounders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const firestore = useFirestore();
@@ -66,16 +67,26 @@ export default function FoundersPage() {
   }, [firestore]);
 
   const filteredFounders = founders.filter(founder => {
-    const name = founder.fullName || founder.name || '';
-    const headline = founder.headline || '';
-    const startupName = founder.startup?.name || '';
-    const matchesSearch = 
-      name.toLowerCase().includes(search.toLowerCase()) || 
-      headline.toLowerCase().includes(search.toLowerCase()) ||
-      startupName.toLowerCase().includes(search.toLowerCase());
+    const name = (founder.fullName || founder.name || '').toLowerCase();
+    const headline = (founder.headline || '').toLowerCase();
+    const startupName = (founder.startup?.name || '').toLowerCase();
+    const startupIndustry = (founder.startup?.industry || '').toLowerCase();
+    const startupDesc = (founder.startup?.shortDescription || '').toLowerCase();
     
-    const matchesStage = stageFilter === 'all' || founder.stage === stageFilter;
-    return matchesSearch && matchesStage;
+    const matchesSearch = 
+      name.includes(search.toLowerCase()) || 
+      headline.includes(search.toLowerCase()) ||
+      startupName.includes(search.toLowerCase()) ||
+      startupDesc.includes(search.toLowerCase());
+    
+    const matchesStage = stageFilter === 'all' || 
+      (founder.stage === stageFilter) || 
+      (founder.startup?.stage === stageFilter);
+
+    const matchesIndustry = industryFilter === '' || 
+      startupIndustry.includes(industryFilter.toLowerCase());
+
+    return matchesSearch && matchesStage && matchesIndustry;
   });
 
   return (
@@ -87,21 +98,32 @@ export default function FoundersPage() {
           <p className="text-muted-foreground text-lg">Discover visionary founders building the next generation of global startups.</p>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-4 mb-10">
-          <div className="relative flex-1">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-10">
+          <div className="md:col-span-6 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Search by name, startup or skills..." 
-              className="pl-10"
+              placeholder="Search by name, startup or vision..." 
+              className="pl-10 h-12 rounded-xl"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
+          <div className="md:col-span-3 relative">
+            <LayoutGrid className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Filter by Industry..." 
+              className="pl-10 h-12 rounded-xl"
+              value={industryFilter}
+              onChange={(e) => setIndustryFilter(e.target.value)}
+            />
+          </div>
+          <div className="md:col-span-3">
             <Select value={stageFilter} onValueChange={setStageFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Stage" />
+              <SelectTrigger className="h-12 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <SelectValue placeholder="Stage" />
+                </div>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Stages</SelectItem>
@@ -118,11 +140,32 @@ export default function FoundersPage() {
           <div className="flex py-20 items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : (
+        ) : filteredFounders.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredFounders.map((founder) => (
               <FounderCard key={founder.id} founder={founder} />
             ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-24 bg-muted/20 rounded-[2rem] border-2 border-dashed">
+            <div className="p-4 bg-background rounded-full mb-4 shadow-sm">
+              <Search className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">No founders found</h3>
+            <p className="text-muted-foreground text-center max-w-sm px-6">
+              We couldn't find any startups matching your current criteria. Try adjusting your filters or search terms.
+            </p>
+            <Button 
+              variant="outline" 
+              className="mt-6 rounded-full" 
+              onClick={() => {
+                setSearch('');
+                setStageFilter('all');
+                setIndustryFilter('');
+              }}
+            >
+              Clear all filters
+            </Button>
           </div>
         )}
       </main>
@@ -151,7 +194,9 @@ function FounderCard({ founder }: { founder: any }) {
           </div>
         )}
         <div className="absolute bottom-4 left-4 flex gap-2">
-          <Badge variant="secondary" className="bg-white/90 backdrop-blur text-primary border-none">{founder.stage}</Badge>
+          <Badge variant="secondary" className="bg-white/90 backdrop-blur text-primary border-none font-bold">
+            {startup?.stage || founder.stage}
+          </Badge>
         </div>
       </div>
       <CardHeader className="pb-2">
@@ -171,7 +216,7 @@ function FounderCard({ founder }: { founder: any }) {
                   <Rocket className="h-4 w-4 text-primary" /> {startup.name}
                 </h4>
                 <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-tight px-2">
-                  {startup.stage}
+                  {startup.industry || "Tech"}
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground line-clamp-2 h-10 italic">
@@ -224,7 +269,7 @@ function FounderCard({ founder }: { founder: any }) {
                         <p className="text-primary font-medium">{founder.headline}</p>
                         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1"><MapPin className="h-4 w-4" /> {founder.location}</span>
-                          <span className="flex items-center gap-1"><Badge variant="secondary">{founder.stage} Stage</Badge></span>
+                          <span className="flex items-center gap-1"><Badge variant="secondary">{startup?.stage || founder.stage} Stage</Badge></span>
                         </div>
                       </div>
                     </div>
