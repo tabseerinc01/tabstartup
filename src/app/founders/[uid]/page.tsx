@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { MapPin, Briefcase, Award, CheckCircle2, MessageSquare, Calendar, Globe, Linkedin, GraduationCap, ArrowLeft, Loader2, Send, Heart } from 'lucide-react';
+import { MapPin, Briefcase, Award, CheckCircle2, MessageSquare, Calendar, Globe, Linkedin, GraduationCap, ArrowLeft, Loader2, Send, Heart, Rocket, ExternalLink } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +24,7 @@ export default function FounderPublicProfilePage() {
   const { toast } = useToast();
 
   const [founder, setFounder] = useState<any>(null);
+  const [startup, setStartup] = useState<any>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -36,9 +37,16 @@ export default function FounderPublicProfilePage() {
       if (!firestore || !uid) return;
       setIsLoading(true);
       try {
+        // Load Founder Data
         const founderSnap = await getDoc(doc(firestore, 'users', uid as string));
         if (founderSnap.exists()) {
           setFounder({ id: founderSnap.id, ...founderSnap.data() });
+        }
+
+        // Load Startup Data
+        const startupSnap = await getDoc(doc(firestore, 'startups', uid as string));
+        if (startupSnap.exists()) {
+          setStartup({ id: startupSnap.id, ...startupSnap.data() });
         }
 
         if (user?.uid) {
@@ -129,7 +137,6 @@ export default function FounderPublicProfilePage() {
   const isInvestor = currentUserProfile?.role === 'investor';
   const isOwnProfile = user?.uid === uid;
 
-  // Validate image URL to prevent crashes from profile links
   const isValidImage = (url?: string) => {
     if (!url) return false;
     if (url.includes('linkedin.com/in')) return false;
@@ -216,7 +223,11 @@ export default function FounderPublicProfilePage() {
                   </Button>
                 ) : (
                   <>
-                    <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base"><MessageSquare className="h-5 w-5" /> Message Founder</Button>
+                    <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base" asChild>
+                      <Link href={`/dashboard/messages?startWith=${uid}`} className="flex items-center gap-2">
+                         <MessageSquare className="h-5 w-5" /> Message Founder
+                      </Link>
+                    </Button>
                     <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base"><Calendar className="h-5 w-5" /> Schedule Meeting</Button>
                   </>
                 )}
@@ -237,6 +248,52 @@ export default function FounderPublicProfilePage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
                 <div className="lg:col-span-2 space-y-12">
+                  {/* STARTUP SECTION */}
+                  <section>
+                    <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                      <Rocket className="h-6 w-6 text-primary" /> Startup
+                    </h2>
+                    {startup ? (
+                      <div className="border border-primary/10 rounded-[2rem] p-8 space-y-4 bg-primary/5">
+                        <p className="text-2xl font-bold text-primary">
+                          {startup.name}
+                        </p>
+                        <p className="text-muted-foreground text-lg leading-relaxed">
+                          {startup.shortDescription}
+                        </p>
+                        <div className="flex gap-3 flex-wrap">
+                          <Badge variant="secondary" className="px-4 py-1.5 rounded-xl bg-background border shadow-sm">
+                            {startup.stage}
+                          </Badge>
+                          <Badge variant="secondary" className="px-4 py-1.5 rounded-xl bg-background border shadow-sm">
+                            {startup.industry}
+                          </Badge>
+                          <Badge variant="outline" className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground border-none">
+                            {startup.fundingNeed || 'Funding Goal TBD'}
+                          </Badge>
+                        </div>
+                        {startup.website && (
+                          <div className="pt-4">
+                            <Button variant="link" asChild className="px-0 h-auto font-bold text-primary text-base">
+                              <a
+                                href={startup.website.startsWith('http') ? startup.website : `https://${startup.website}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2"
+                              >
+                                Visit Website <ExternalLink className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-8 border-2 border-dashed rounded-[2rem] text-center bg-muted/20">
+                        <p className="text-muted-foreground italic">No startup published yet</p>
+                      </div>
+                    )}
+                  </section>
+
                   {founder.bio && (
                     <section>
                       <h3 className="text-2xl font-bold mb-4">About Me</h3>
