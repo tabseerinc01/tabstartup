@@ -25,7 +25,8 @@ import {
    MessageSquare,
    Briefcase,
    TrendingUp,
-   Info
+   Info,
+   AlertCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -135,7 +136,7 @@ export default function DashboardOverviewPage() {
   const isInvestor = profile?.role === 'investor';
   const interestsCount = interests.length;
 
-  const connectedFounders = sentPitches.filter(p => p.status === 'accepted');
+  const hasNewInterest = incomingPitches.some(p => p.status === 'pending');
 
   const handlePitchStatus = async (pitch: any, status: 'accepted' | 'rejected') => {
     if (!firestore || !user?.uid) return;
@@ -364,7 +365,14 @@ export default function DashboardOverviewPage() {
                 </CardTitle>
                 <CardDescription>Review interest requests from potential investors.</CardDescription>
               </div>
-              <Badge variant="outline" className="bg-primary/5">{incomingPitches.length}</Badge>
+              <div className="flex items-center gap-2">
+                {hasNewInterest && (
+                  <Badge variant="destructive" className="animate-pulse flex items-center gap-1.5 px-3">
+                    🔴 New investor interest
+                  </Badge>
+                )}
+                <Badge variant="outline" className="bg-primary/5">{incomingPitches.length}</Badge>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
