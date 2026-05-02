@@ -10,8 +10,15 @@ service cloud.firestore {
 
     // STARTUPS: Public read for listings, owner-only write
     match /startups/{startupId} {
-      allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == startupId;
+      // ✅ Anyone can view startups (public marketplace)
+      allow get, list: if true;
+
+      // ✅ Only owner can create/update
+      allow create, update: if request.auth != null 
+        && request.auth.uid == startupId;
+
+      // ❌ No delete for now (safe)
+      allow delete: if false;
       
       // Subcollections for tracking
       match /views/{viewId} {
