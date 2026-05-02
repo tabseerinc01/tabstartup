@@ -22,13 +22,19 @@ service cloud.firestore {
       
       // Subcollections for tracking
       match /views/{viewId} {
+        // Founder can read their own views. Anyone can record a view.
         allow read: if request.auth != null && request.auth.uid == startupId;
         allow create: if true; 
       }
       
       match /interests/{interestId} {
-        allow read: if request.auth != null && request.auth.uid == startupId;
-        allow write: if request.auth != null;
+        // ✅ FIX: Allow the startup owner AND the specific investor (interestId) to read the interest record.
+        allow read: if request.auth != null && (
+          request.auth.uid == startupId || 
+          request.auth.uid == interestId
+        );
+        // Only the investor can express or update their own interest.
+        allow create, update: if request.auth != null && request.auth.uid == interestId;
       }
     }
     
