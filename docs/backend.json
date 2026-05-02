@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "User": {
@@ -176,6 +175,22 @@
         "fundraisingStatus": {
             "type": "string",
             "enum": ["Open", "Closed", "Paused"]
+        },
+        "problem": {
+          "type": "string",
+          "description": "The problem the startup is solving."
+        },
+        "solution": {
+          "type": "string",
+          "description": "The solution the startup provides."
+        },
+        "targetMarket": {
+          "type": "string",
+          "description": "The target audience or customers."
+        },
+        "businessModel": {
+          "type": "string",
+          "description": "How the startup plans to make money."
         },
         "createdAt": {
           "type": "string",
