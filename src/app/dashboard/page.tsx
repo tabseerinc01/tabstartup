@@ -22,7 +22,10 @@ import {
    X,
    Heart,
    MessageCircle,
-   MessageSquare
+   MessageSquare,
+   Briefcase,
+   TrendingUp,
+   Info
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -361,58 +364,127 @@ export default function DashboardOverviewPage() {
               <Badge variant="outline" className="bg-primary/5">{incomingPitches.length}</Badge>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {incomingPitches.length > 0 ? (
                   incomingPitches.map((pitch: any) => {
                     const investorProfile = incomingProfiles[pitch.fromInvestorUid];
                     const investorName = investorProfile?.fullName || "Potential Investor";
+                    const investorHeadline = investorProfile?.investorHeadline || investorProfile?.headline || "Investor";
                     
                     return (
-                      <div key={pitch.id} className="p-4 border rounded-2xl bg-muted/20 space-y-4">
+                      <div key={pitch.id} className="p-6 border rounded-[2rem] bg-muted/20 space-y-6 relative group transition-all hover:bg-muted/30">
                         <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-10 w-10">
-                              <AvatarImage src={investorProfile?.imageUrl || `https://picsum.photos/seed/${pitch.fromInvestorUid}/40/40`} />
+                          <div className="flex items-center gap-4">
+                            <Avatar className="h-14 w-14 border-2 border-background shadow-sm">
+                              <AvatarImage src={investorProfile?.imageUrl || `https://picsum.photos/seed/${pitch.fromInvestorUid}/60/60`} />
                               <AvatarFallback>{investorName.charAt(0)}</AvatarFallback>
                             </Avatar>
                             <div>
-                              <Link href={`/investors/${pitch.fromInvestorUid}`} className="hover:underline">
-                                <p className="text-sm font-bold">{investorName}</p>
+                              <Link href={`/investors/${pitch.fromInvestorUid}`} className="hover:underline flex items-center gap-2">
+                                <p className="text-lg font-extrabold">{investorName}</p>
+                                {investorProfile?.isVerified && <CheckCircle2 className="h-4 w-4 text-primary" />}
                               </Link>
-                              <p className="text-xs text-muted-foreground">{pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Just now'}</p>
+                              <p className="text-sm text-primary font-medium">{investorHeadline}</p>
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-2">
-                            <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'}>
+                            <Badge variant={pitch.status === 'accepted' ? 'default' : pitch.status === 'rejected' ? 'destructive' : 'secondary'} className="rounded-lg">
                               {getStatusDisplay(pitch.status)}
                             </Badge>
-                            {pitch.status === 'accepted' && (
-                              <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={() => openChat(pitch)} disabled={isOpeningChat}>
-                                {isOpeningChat ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageCircle className="h-3 w-3" />}
-                                Open Chat
-                              </Button>
-                            )}
+                            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">
+                              {pitch.createdAt?.toDate() ? new Date(pitch.createdAt.toDate()).toLocaleDateString() : 'Recently'}
+                            </p>
                           </div>
                         </div>
-                        <p className="text-sm italic text-muted-foreground">
-                          {pitch.message ? `"${pitch.message}"` : "Expressed interest in connecting."}
-                        </p>
-                        {pitch.status === 'pending' && (
-                          <div className="flex gap-2 justify-end">
-                            <Button size="sm" variant="outline" onClick={() => handlePitchStatus(pitch, 'rejected')} className="text-destructive">
-                              <X className="h-4 w-4 mr-1" /> Decline
-                            </Button>
-                            <Button size="sm" onClick={() => handlePitchStatus(pitch, 'accepted')}>
-                              <Check className="h-4 w-4 mr-1" /> Connect
-                            </Button>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-4 border-y border-border/50">
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Investment Focus</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {investorProfile?.investmentFocus?.length > 0 ? (
+                                investorProfile.investmentFocus.map((tag: string) => (
+                                  <Badge key={tag} variant="outline" className="text-[10px] px-2 py-0 h-5 bg-background border-primary/20 text-primary">
+                                    {tag}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">Generalist</span>
+                              )}
+                            </div>
                           </div>
-                        )}
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Preferred Stage</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {investorProfile?.preferredStage?.length > 0 ? (
+                                investorProfile.preferredStage.map((s: string) => (
+                                  <Badge key={s} variant="secondary" className="text-[10px] px-2 py-0 h-5">
+                                    {s}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">Any Stage</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Ticket Size</p>
+                            <p className="text-sm font-bold text-primary">{investorProfile?.ticketSize || 'N/A'}</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="p-4 rounded-2xl bg-background/50 italic text-sm text-muted-foreground border">
+                            {pitch.message ? `"${pitch.message}"` : "Expressed interest in connecting with your venture."}
+                          </div>
+                          
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                             <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-medium">
+                               <Info className="h-3 w-3" />
+                               Review this investor before accepting
+                             </div>
+
+                             <div className="flex gap-2 justify-end">
+                                {pitch.status === 'pending' && (
+                                  <>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      onClick={() => handlePitchStatus(pitch, 'rejected')} 
+                                      className="text-destructive border-destructive/20 hover:bg-destructive/5 rounded-xl h-9 px-4"
+                                    >
+                                      <X className="h-4 w-4 mr-1.5" /> Ignore
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      onClick={() => handlePitchStatus(pitch, 'accepted')}
+                                      className="rounded-xl h-9 px-6"
+                                    >
+                                      <Check className="h-4 w-4 mr-1.5" /> Accept
+                                    </Button>
+                                  </>
+                                )}
+                                {pitch.status === 'accepted' && (
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="gap-2 rounded-xl h-9" 
+                                    onClick={() => openChat(pitch)} 
+                                    disabled={isOpeningChat}
+                                  >
+                                    {isOpeningChat ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+                                    Message Investor
+                                  </Button>
+                                )}
+                             </div>
+                          </div>
+                        </div>
                       </div>
                     );
                   })
                 ) : (
-                  <div className="text-center py-12 border-2 border-dashed rounded-3xl">
-                    <p className="text-sm text-muted-foreground">No requests yet.</p>
+                  <div className="text-center py-20 border-2 border-dashed rounded-[2rem]">
+                    <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-20" />
+                    <p className="text-muted-foreground font-medium">No incoming interest requests yet.</p>
                   </div>
                 )}
               </div>
