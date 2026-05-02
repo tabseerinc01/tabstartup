@@ -22,7 +22,7 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Search, Filter, Target, Briefcase, Zap, MapPin, ArrowRight } from 'lucide-react';
+import { Loader2, Search, Filter, Target, Briefcase, Zap, MapPin, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -175,8 +175,13 @@ function InvestorCard({ investor }: { investor: any }) {
   const initials = name.split(' ').map((n: any) => n[0]).join('').toUpperCase();
   const avatarUrl = investor.imageUrl || `https://picsum.photos/seed/${investor.id}/200/200`;
 
+  const isProfileVerified = 
+    !!(investor.investorBio || investor.bio) && 
+    !!investor.ticketSize && 
+    !!(investor.linkedinUrl || investor.socialLinks?.linkedin);
+
   return (
-    <Card className="flex flex-col h-full hover:shadow-2xl transition-all border-none bg-background shadow-xl rounded-[2.5rem] overflow-hidden group">
+    <Card className="flex flex-col h-full hover:shadow-2xl transition-all border-none bg-background shadow-xl rounded-[2.5rem] overflow-hidden group relative">
       <CardHeader className="pb-4 pt-8 px-8 flex flex-row gap-4 items-start">
         <Avatar className="h-16 w-16 border-4 border-primary/5 rounded-2xl shadow-lg">
           <AvatarImage src={avatarUrl} alt={name} className="object-cover" />
@@ -190,6 +195,11 @@ function InvestorCard({ investor }: { investor: any }) {
           <CardDescription className="line-clamp-2 font-medium text-primary/80">
             {headline}
           </CardDescription>
+          {isProfileVerified && (
+            <Badge variant="outline" className="mt-2 text-[10px] py-0 px-2 border-green-200 bg-green-50 text-green-700 font-bold flex w-fit items-center gap-1">
+              <CheckCircle2 className="h-3 w-3" /> Verified Profile
+            </Badge>
+          )}
         </div>
       </CardHeader>
       
