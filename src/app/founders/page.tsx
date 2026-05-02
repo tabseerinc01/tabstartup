@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { mockFounders } from '@/lib/mock-data';
-import { MapPin, Search, Filter, Loader2, Linkedin, Globe, MessageSquare, Calendar, CheckCircle2 } from 'lucide-react';
+import { MapPin, Search, Filter, Loader2, Linkedin, MessageSquare, Calendar, CheckCircle2, Rocket } from 'lucide-react';
 import Image from 'next/image';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { PublicHeader } from '@/components/public/header';
@@ -29,16 +29,34 @@ export default function FoundersPage() {
       if (!firestore) return;
       setIsLoading(true);
       try {
-        const q = query(
+        // 1. Load Founders
+        const foundersQuery = query(
           collection(firestore, 'users'),
           where('role', '==', 'founder'),
           limit(50)
         );
-        const snap = await getDocs(q);
-        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setFounders(items.length > 0 ? items : mockFounders);
+        const foundersSnap = await getDocs(foundersQuery);
+        const foundersItems = foundersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        // 2. Load Startups
+        const startupsSnap = await getDocs(collection(firestore, 'startups'));
+        const startupsMap = new Map();
+        startupsSnap.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.ownerUid) {
+            startupsMap.set(data.ownerUid, { id: doc.id, ...data });
+          }
+        });
+
+        // 3. Merge
+        const mergedFounders = (foundersItems.length > 0 ? foundersItems : mockFounders).map(founder => ({
+          ...founder,
+          startup: startupsMap.get(founder.uid || founder.id) || null
+        }));
+
+        setFounders(mergedFounders);
       } catch (error) {
-        console.error("Error loading founders:", error);
+        console.error("Error loading founders and startups:", error);
         setFounders(mockFounders);
       } finally {
         setIsLoading(false);
@@ -50,8 +68,12 @@ export default function FoundersPage() {
   const filteredFounders = founders.filter(founder => {
     const name = founder.fullName || founder.name || '';
     const headline = founder.headline || '';
-    const matchesSearch = name.toLowerCase().includes(search.toLowerCase()) || 
-                          headline.toLowerCase().includes(search.toLowerCase());
+    const startupName = founder.startup?.name || '';
+    const matchesSearch = 
+      name.toLowerCase().includes(search.toLowerCase()) || 
+      headline.toLowerCase().includes(search.toLowerCase()) ||
+      startupName.toLowerCase().includes(search.toLowerCase());
+    
     const matchesStage = stageFilter === 'all' || founder.stage === stageFilter;
     return matchesSearch && matchesStage;
   });
@@ -69,7 +91,7 @@ export default function FoundersPage() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Search by name, headline or skills..." 
+              placeholder="Search by name, startup or skills..." 
               className="pl-10"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -112,6 +134,7 @@ export default function FoundersPage() {
 function FounderCard({ founder }: { founder: any }) {
   const displayName = founder.fullName || founder.name;
   const imageId = founder.uid || founder.id || 'user';
+  const startupName = founder.startup?.name;
 
   return (
     <Card className="flex flex-col h-full hover:shadow-xl transition-all overflow-hidden group border-muted/50">
@@ -127,14 +150,19 @@ function FounderCard({ founder }: { founder: any }) {
             <CheckCircle2 className="h-5 w-5 text-primary" />
           </div>
         )}
-        <div className="absolute bottom-4 left-4">
+        <div className="absolute bottom-4 left-4 flex gap-2">
           <Badge variant="secondary" className="bg-white/90 backdrop-blur text-primary border-none">{founder.stage}</Badge>
+          {startupName && (
+            <Badge className="bg-primary/90 text-white border-none flex items-center gap-1">
+              <Rocket className="h-3 w-3" /> {startupName}
+            </Badge>
+          )}
         </div>
       </div>
       <CardHeader className="pb-2">
         <CardTitle className="text-xl">{displayName}</CardTitle>
         <p className="font-semibold text-sm text-primary line-clamp-1">{founder.headline}</p>
-        <div className="flex items-center text-xs text-muted-foreground">
+        <div className="flex items-center text-xs text-muted-foreground mt-1">
           <MapPin className="mr-1 h-3 w-3" />
           {founder.location}
         </div>
@@ -185,13 +213,25 @@ function FounderCard({ founder }: { founder: any }) {
                       </Button>
                       <Button variant="outline" className="flex-1 gap-2"><Calendar className="h-4 w-4" /> Request Meeting</Button>
                     </div>
+
+                    {founder.startup && (
+                      <div className="bg-muted/30 p-6 rounded-2xl border mb-6">
+                        <h3 className="font-bold mb-2 flex items-center gap-2">
+                          <Rocket className="h-4 w-4 text-primary" /> Venture: {founder.startup.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">{founder.startup.shortDescription}</p>
+                        <Button variant="link" className="p-0 h-auto mt-4 text-primary" asChild>
+                          <Link href={`/startups/${founder.uid || founder.id}`}>View Startup Listing</Link>
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </ScrollArea>
             </DialogContent>
           </Dialog>
           <Button variant="outline" size="icon" asChild>
-            <a href={`/founders/${founder.uid || founder.id}`}><Linkedin className="h-4 w-4" /></a>
+            <Link href={`/founders/${founder.uid || founder.id}`}><Linkedin className="h-4 w-4" /></Link>
           </Button>
         </div>
       </CardContent>
