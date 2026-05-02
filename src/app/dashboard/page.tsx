@@ -493,9 +493,12 @@ export default function DashboardOverviewPage() {
                     );
                   })
                 ) : (
-                  <div className="text-center py-20 border-2 border-dashed rounded-[2rem]">
+                  <div className="text-center py-20 border-2 border-dashed rounded-[2rem] px-6">
                     <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-20" />
-                    <p className="text-muted-foreground font-medium">No incoming interest requests yet.</p>
+                    <p className="text-muted-foreground font-medium mb-1">No investor interest yet.</p>
+                    <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                      Complete your startup profile to attract investors.
+                    </p>
                   </div>
                 )}
               </div>
@@ -547,9 +550,10 @@ export default function DashboardOverviewPage() {
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-12 border-2 border-dashed rounded-3xl">
-                      <p className="text-sm text-muted-foreground">No requests sent yet</p>
-                      <Button variant="outline" className="mt-4" asChild>
+                    <div className="text-center py-20 border-2 border-dashed rounded-[2rem] px-6">
+                      <Send className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-20" />
+                      <p className="text-muted-foreground font-medium mb-4">You haven't expressed interest in any startups yet.</p>
+                      <Button variant="outline" className="rounded-full" asChild>
                         <Link href="/founders">Browse Founders</Link>
                       </Button>
                     </div>
@@ -566,12 +570,11 @@ export default function DashboardOverviewPage() {
                   </CardTitle>
                   <CardDescription>Founders you are officially connected with.</CardDescription>
                 </div>
-                <Badge variant="outline" className="bg-primary/5">{connectedFounders.length}</Badge>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {connectedFounders.length > 0 ? (
-                    connectedFounders.map((pitch: any) => (
+                  {sentPitches.filter(p => p.status === 'accepted').length > 0 ? (
+                    sentPitches.filter(p => p.status === 'accepted').map((pitch: any) => (
                       <div key={pitch.id} className="flex items-center justify-between p-4 border rounded-2xl bg-background shadow-sm">
                         <div className="flex items-center gap-4">
                           <Avatar className="h-10 w-10">
@@ -580,7 +583,7 @@ export default function DashboardOverviewPage() {
                           </Avatar>
                           <div>
                             <Link href={`/founders/${pitch.toFounderUid}`} className="hover:underline">
-                              <p className="font-bold">{pitch.toFounderName || "Founder"}</p>
+                              <p className="font-bold">Founder</p>
                             </Link>
                             <p className="text-xs text-muted-foreground">Status: Connected</p>
                           </div>
@@ -592,7 +595,7 @@ export default function DashboardOverviewPage() {
                     ))
                   ) : (
                     <div className="text-center py-12 border-2 border-dashed rounded-3xl">
-                      <p className="text-sm text-muted-foreground">No connections yet</p>
+                      <p className="text-sm text-muted-foreground italic">No active connections found.</p>
                     </div>
                   )}
                 </div>
