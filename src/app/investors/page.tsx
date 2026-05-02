@@ -22,9 +22,10 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Search } from 'lucide-react';
+import { Loader2, Search, Filter, Target, Briefcase, Zap, MapPin, ArrowRight } from 'lucide-react';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const STAGE_FILTER_OPTIONS = ['All', 'Idea', 'Early', 'Growth', 'Scaling'] as const;
 
@@ -32,7 +33,8 @@ export default function InvestorsPage() {
   const [investors, setInvestors] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [stageFilter, setStageFilter] = useState<(typeof STAGE_FILTER_OPTIONS)[number]>('All');
+  const [focusSearch, setFocusSearch] = useState('');
+  const [stageFilter, setStageFilter] = useState<string>('All');
   const firestore = useFirestore();
 
   useEffect(() => {
@@ -56,46 +58,77 @@ export default function InvestorsPage() {
   const filteredInvestors = useMemo(() => {
     return investors.filter((inv) => {
       const name = (inv.fullName || '').toLowerCase();
-      const headline = (inv.headline || '').toLowerCase();
-      const term = search.toLowerCase();
-      const matchesSearch = name.includes(term) || headline.includes(term);
-      const matchesStage = stageFilter === 'All' ? true : (inv.preferredStage || '').toLowerCase().includes(stageFilter.toLowerCase());
-      return matchesSearch && matchesStage;
+      const headline = (inv.investorHeadline || inv.headline || '').toLowerCase();
+      const searchTerm = search.toLowerCase();
+      
+      const matchesSearch = name.includes(searchTerm) || headline.includes(searchTerm);
+      
+      const matchesStage = stageFilter === 'All' 
+        ? true 
+        : Array.isArray(inv.preferredStage) 
+          ? inv.preferredStage.some((s: string) => s.toLowerCase() === stageFilter.toLowerCase())
+          : (inv.preferredStage || '').toLowerCase().includes(stageFilter.toLowerCase());
+
+      const matchesFocus = focusSearch === '' 
+        ? true 
+        : Array.isArray(inv.investmentFocus)
+          ? inv.investmentFocus.some((f: string) => f.toLowerCase().includes(focusSearch.toLowerCase()))
+          : (inv.investmentFocus || '').toLowerCase().includes(focusSearch.toLowerCase());
+
+      return matchesSearch && matchesStage && matchesFocus;
     });
-  }, [investors, search, stageFilter]);
+  }, [investors, search, stageFilter, focusSearch]);
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
       <main className="flex-1 container mx-auto px-4 py-12">
         <div className="mb-12">
-          <h1 className="text-4xl font-bold mb-4">Meet Investors</h1>
-          <p className="text-muted-foreground text-lg">Discover investors interested in backing startups.</p>
+          <h1 className="text-4xl font-extrabold tracking-tight mb-4">Meet Investors</h1>
+          <p className="text-muted-foreground text-lg max-w-2xl">
+            Discover capital partners and mentors interested in backing the next generation of global startups.
+          </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-[2fr,1fr] mb-10">
-          <div className="space-y-2">
-            <Label htmlFor="search">Search</Label>
+        <div className="grid gap-6 md:grid-cols-12 mb-12">
+          <div className="md:col-span-5 space-y-2">
+            <Label htmlFor="search" className="font-bold">Search Investors</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 id="search"
-                placeholder="Search by name or headline…"
-                className="pl-10"
+                placeholder="Search by name or firm..."
+                className="pl-10 h-12 rounded-xl border-none shadow-sm bg-background"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>Preferred Stage</Label>
-            <Select value={stageFilter} onValueChange={(v: any) => setStageFilter(v)}>
-              <SelectTrigger>
-                <SelectValue />
+          <div className="md:col-span-4 space-y-2">
+            <Label htmlFor="focus" className="font-bold">Investment Focus</Label>
+            <div className="relative">
+              <Target className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="focus"
+                placeholder="e.g. Fintech, AI, SaaS..."
+                className="pl-10 h-12 rounded-xl border-none shadow-sm bg-background"
+                value={focusSearch}
+                onChange={(e) => setFocusSearch(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="md:col-span-3 space-y-2">
+            <Label className="font-bold">Preferred Stage</Label>
+            <Select value={stageFilter} onValueChange={setStageFilter}>
+              <SelectTrigger className="h-12 rounded-xl border-none shadow-sm bg-background">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <SelectValue placeholder="All Stages" />
+                </div>
               </SelectTrigger>
               <SelectContent>
                 {STAGE_FILTER_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt}>{opt === 'All' ? 'All stages' : opt}</SelectItem>
+                  <SelectItem key={opt} value={opt}>{opt === 'All' ? 'All Stages' : opt}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -103,36 +136,113 @@ export default function InvestorsPage() {
         </div>
 
         {isLoading ? (
-          <div className="flex py-20 items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="flex py-24 items-center justify-center">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
           </div>
         ) : filteredInvestors.length === 0 ? (
-          <div className="text-center py-20 border rounded-2xl bg-muted/10">
-            <p className="text-muted-foreground">No investors match your current filters.</p>
+          <div className="text-center py-32 border-2 border-dashed rounded-[3rem] bg-background/50">
+            <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-20" />
+            <h3 className="text-xl font-bold mb-2">No investors found</h3>
+            <p className="text-muted-foreground">Try adjusting your filters or search terms.</p>
+            <Button 
+              variant="link" 
+              className="mt-4" 
+              onClick={() => {
+                setSearch('');
+                setFocusSearch('');
+                setStageFilter('All');
+              }}
+            >
+              Clear all filters
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredInvestors.map((inv) => (
-              <Card key={inv.id} className="flex flex-col h-full hover:shadow-xl transition-all border-muted/50 overflow-hidden">
-                <CardHeader>
-                  <CardTitle className="text-xl">{inv.fullName}</CardTitle>
-                  <CardDescription className="line-clamp-2">{inv.headline}</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col flex-1 space-y-4">
-                  <div className="space-y-2 text-sm flex-1">
-                    <p className="text-muted-foreground"><span className="font-semibold text-foreground">Location:</span> {inv.location}</p>
-                    <p className="text-muted-foreground"><span className="font-semibold text-foreground">Preferred stage:</span> {inv.preferredStage}</p>
-                  </div>
-                  <Button variant="outline" className="w-full rounded-xl mt-auto" asChild>
-                    <Link href={`/investors/${inv.id}`}>View Details</Link>
-                  </Button>
-                </CardContent>
-              </Card>
+              <InvestorCard key={inv.id} investor={inv} />
             ))}
           </div>
         )}
       </main>
       <PublicFooter />
     </div>
+  );
+}
+
+function InvestorCard({ investor }: { investor: any }) {
+  const name = investor.fullName || 'Anonymous Investor';
+  const headline = investor.investorHeadline || investor.headline || 'TabStartup Investor';
+  const initials = name.split(' ').map((n: any) => n[0]).join('').toUpperCase();
+  const avatarUrl = investor.imageUrl || `https://picsum.photos/seed/${investor.id}/200/200`;
+
+  return (
+    <Card className="flex flex-col h-full hover:shadow-2xl transition-all border-none bg-background shadow-xl rounded-[2.5rem] overflow-hidden group">
+      <CardHeader className="pb-4 pt-8 px-8 flex flex-row gap-4 items-start">
+        <Avatar className="h-16 w-16 border-4 border-primary/5 rounded-2xl shadow-lg">
+          <AvatarImage src={avatarUrl} alt={name} className="object-cover" />
+          <AvatarFallback className="rounded-2xl text-xl font-bold">{initials}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 mb-1">
+            <CardTitle className="text-xl truncate group-hover:text-primary transition-colors">{name}</CardTitle>
+            {investor.isVerified && <Zap className="h-4 w-4 text-primary fill-primary" />}
+          </div>
+          <CardDescription className="line-clamp-2 font-medium text-primary/80">
+            {headline}
+          </CardDescription>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="flex flex-col flex-1 px-8 pb-8 space-y-6">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <MapPin className="h-3 w-3" /> {investor.location || 'Global'}
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
+              Investment Focus
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {Array.isArray(investor.investmentFocus) && investor.investmentFocus.length > 0 ? (
+                investor.investmentFocus.slice(0, 3).map((f: string) => (
+                  <Badge key={f} variant="secondary" className="rounded-lg text-[10px] bg-primary/5 text-primary border-none">
+                    {f}
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-xs text-muted-foreground italic">Generalist</span>
+              )}
+              {Array.isArray(investor.investmentFocus) && investor.investmentFocus.length > 3 && (
+                <Badge variant="outline" className="rounded-lg text-[10px]">+{investor.investmentFocus.length - 3}</Badge>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 py-4 border-y border-primary/5">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Ticket Size</p>
+              <p className="text-sm font-bold text-primary">{investor.ticketSize || 'N/A'}</p>
+            </div>
+            <div className="space-y-1 text-right">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Status</p>
+              <div className="flex justify-end">
+                {investor.isOpenToPitches ? (
+                  <Badge className="bg-green-100 text-green-700 border-none text-[10px] h-5">Open to Pitches</Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-[10px] h-5">Referral Only</Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <Button className="w-full rounded-2xl h-12 gap-2 mt-auto group-hover:bg-primary group-hover:text-primary-foreground transition-all" variant="outline" asChild>
+          <Link href={`/investors/${investor.id}`}>
+            View Profile <ArrowRight className="h-4 w-4" />
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
