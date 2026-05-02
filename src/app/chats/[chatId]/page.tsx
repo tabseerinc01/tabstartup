@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useFirestore, useUser } from '@/firebase';
+import { useFirestore, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { 
   doc, 
   getDoc, 
@@ -18,10 +18,10 @@ import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Send, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Loader2, Send, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ChatPage() {
@@ -38,48 +38,47 @@ export default function ChatPage() {
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Load chat metadata once
-  async function loadChatData() {
-    if (!firestore || !chatId || !user?.uid) return;
-    
-    try {
-      const chatSnap = await getDoc(doc(firestore, 'chats', chatId as string));
-      if (!chatSnap.exists()) {
-        toast({ title: "Chat not found", variant: "destructive" });
-        router.push('/dashboard');
-        return;
-      }
-
-      const chatData = chatSnap.data();
-      if (!chatData.participants || !chatData.participants.includes(user.uid)) {
-        toast({ title: "Access denied", variant: "destructive" });
-        router.push('/dashboard');
-        return;
-      }
-      setChat(chatData);
-
-      // Find other participant
-      const otherUid = chatData.participants.find((id: string) => id !== user.uid);
-      if (otherUid) {
-        const otherSnap = await getDoc(doc(firestore, 'users', otherUid));
-        if (otherSnap.exists()) {
-          setOtherUser(otherSnap.data());
-        }
-      }
-    } catch (error) {
-      console.error("Error loading chat metadata:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
   useEffect(() => {
+    async function loadChatData() {
+      if (!firestore || !chatId || !user?.uid) return;
+      
+      try {
+        const chatSnap = await getDoc(doc(firestore, 'chats', chatId as string));
+        if (!chatSnap.exists()) {
+          toast({ title: "Chat not found", variant: "destructive" });
+          router.push('/dashboard/messages');
+          return;
+        }
+
+        const chatData = chatSnap.data();
+        if (!chatData.participants || !chatData.participants.includes(user.uid)) {
+          toast({ title: "Access denied", variant: "destructive" });
+          router.push('/dashboard/messages');
+          return;
+        }
+        setChat(chatData);
+
+        // Find other participant
+        const otherUid = chatData.participants.find((id: string) => id !== user.uid);
+        if (otherUid) {
+          const otherSnap = await getDoc(doc(firestore, 'users', otherUid));
+          if (otherSnap.exists()) {
+            setOtherUser(otherSnap.data());
+          }
+        }
+      } catch (error) {
+        console.error("Error loading chat metadata:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
     if (!isUserLoading && user) {
       loadChatData();
     }
-  }, [firestore, chatId, user, isUserLoading]);
+  }, [firestore, chatId, user, isUserLoading, router, toast]);
 
   // Set up real-time message listener
   useEffect(() => {
@@ -96,13 +95,12 @@ export default function ChatPage() {
         ...d.data() 
       }));
       setMessages(msgs);
-    }, (error) => {
-      console.error("Message listener error:", error);
-      toast({
-        title: "Connection Error",
-        description: "Failed to sync messages in real-time.",
-        variant: "destructive"
+    }, async (error) => {
+      const permissionError = new FirestorePermissionError({
+        path: `chats/${chatId}/messages`,
+        operation: 'list',
       });
+      errorEmitter.emit('permission-error', permissionError);
     });
 
     return () => unsubscribe();
@@ -120,31 +118,34 @@ export default function ChatPage() {
 
     setIsSending(true);
     const messageText = newMessage.trim();
+    const messageData = {
+      senderId: user.uid,
+      text: messageText,
+      timestamp: serverTimestamp(),
+    };
+
     setNewMessage('');
 
-    try {
-      // 1. Add message to subcollection
-      await addDoc(collection(firestore, 'chats', chatId as string, 'messages'), {
-        senderId: user.uid,
-        text: messageText,
-        timestamp: serverTimestamp(),
+    // Add message to subcollection
+    addDoc(collection(firestore, 'chats', chatId as string, 'messages'), messageData)
+      .then(async () => {
+        // Update last message in the parent chat
+        await updateDoc(doc(firestore, 'chats', chatId as string), {
+          lastMessage: messageText,
+          updatedAt: serverTimestamp()
+        });
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: `chats/${chatId}/messages`,
+          operation: 'create',
+          requestResourceData: messageData
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => {
+        setIsSending(false);
       });
-
-      // 2. Update last message in the existing chat document
-      await updateDoc(doc(firestore, 'chats', chatId as string), {
-        lastMessage: messageText,
-        updatedAt: serverTimestamp()
-      });
-    } catch (error: any) {
-      console.error("Error sending message:", error);
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to send message", 
-        variant: "destructive" 
-      });
-    } finally {
-      setIsSending(false);
-    }
   };
 
   if (isUserLoading || isLoading) {
@@ -180,10 +181,10 @@ export default function ChatPage() {
                 <p className="text-xs text-muted-foreground">Direct Message</p>
               </div>
             </div>
-            <div className="w-10" /> {/* Spacer */}
+            <div className="w-10" />
           </div>
 
-          <Card className="flex-1 flex flex-col overflow-hidden rounded-3xl border-none shadow-xl">
+          <Card className="flex-1 flex flex-col overflow-hidden rounded-3xl border-none shadow-xl bg-background">
             <ScrollArea className="flex-1 p-6">
               <div className="space-y-4">
                 {messages.length > 0 ? (
