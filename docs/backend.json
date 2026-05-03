@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "User": {
@@ -191,6 +192,14 @@
         "businessModel": {
           "type": "string",
           "description": "How the startup plans to make money."
+        },
+        "traction": {
+          "type": "string",
+          "description": "Key metrics or proof of growth."
+        },
+        "teamInfo": {
+          "type": "string",
+          "description": "Information about the founding team."
         },
         "createdAt": {
           "type": "string",

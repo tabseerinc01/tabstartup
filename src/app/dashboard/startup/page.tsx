@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -9,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { Globe, MapPin, Tag, Loader2, Rocket, Share2, Lightbulb } from 'lucide-react';
+import { Globe, MapPin, Tag, Loader2, Rocket, Share2, Lightbulb, TrendingUp, Users, ExternalLink } from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -36,6 +37,9 @@ export default function StartupPage() {
     solution: '',
     targetMarket: '',
     businessModel: '',
+    traction: '',
+    teamInfo: '',
+    pitchDeckUrl: '',
   });
 
   useEffect(() => {
@@ -60,6 +64,9 @@ export default function StartupPage() {
             solution: data.solution || '',
             targetMarket: data.targetMarket || '',
             businessModel: data.businessModel || '',
+            traction: data.traction || '',
+            teamInfo: data.teamInfo || '',
+            pitchDeckUrl: data.pitchDeckUrl || '',
           });
           setIsEditing(false);
         } else {
@@ -287,6 +294,43 @@ export default function StartupPage() {
                   </div>
                 </div>
               </div>
+
+              <div className="space-y-4 pt-4 border-t">
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-primary" /> Proof & Details
+                </h3>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="traction">Traction</Label>
+                    <Textarea 
+                      id="traction" 
+                      placeholder="Any users, revenue, growth, or validation?"
+                      rows={3} 
+                      value={startup.traction}
+                      onChange={e => setStartup({...startup, traction: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="teamInfo">Team</Label>
+                    <Textarea 
+                      id="teamInfo" 
+                      placeholder="Who is building this? (solo founder or team)"
+                      rows={2} 
+                      value={startup.teamInfo}
+                      onChange={e => setStartup({...startup, teamInfo: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="pitchDeck">Pitch Deck URL</Label>
+                    <Input 
+                      id="pitchDeck" 
+                      placeholder="Google Drive / PDF link"
+                      value={startup.pitchDeckUrl}
+                      onChange={e => setStartup({...startup, pitchDeckUrl: e.target.value})}
+                    />
+                  </div>
+                </div>
+              </div>
             </CardContent>
             <CardFooter className="flex gap-2">
               <Button type="submit" className="flex-1" disabled={isSaving}>
@@ -322,7 +366,7 @@ export default function StartupPage() {
                   <span className="truncate">{startupData?.website || 'No website'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-primary font-bold">
-                  <Tag className="h-4 w-4" /> {startupData?.fundingNeed || 'TBD'}
+                  <HandCoins className="h-4 w-4" /> {startupData?.fundingNeed || 'TBD'}
                 </div>
               </div>
             </div>
@@ -356,6 +400,35 @@ export default function StartupPage() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {(startupData?.traction || startupData?.teamInfo || startupData?.pitchDeckUrl) && (
+              <div className="space-y-6 pt-6 border-t">
+                <h3 className="text-lg font-bold">Proof & Validation</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {startupData?.traction && (
+                    <div className="space-y-2">
+                      <Label className="text-xs uppercase tracking-widest text-muted-foreground">Traction</Label>
+                      <p className="text-sm leading-relaxed">{startupData.traction}</p>
+                    </div>
+                  )}
+                  {startupData?.teamInfo && (
+                    <div className="space-y-2">
+                      <Label className="text-xs uppercase tracking-widest text-muted-foreground">Team</Label>
+                      <p className="text-sm leading-relaxed">{startupData.teamInfo}</p>
+                    </div>
+                  )}
+                </div>
+                {startupData?.pitchDeckUrl && (
+                  <div className="pt-2">
+                    <Button variant="outline" asChild className="gap-2">
+                      <a href={startupData.pitchDeckUrl} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-4 w-4" /> View Pitch Deck
+                      </a>
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 

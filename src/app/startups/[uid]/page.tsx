@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -9,7 +10,7 @@ import { PublicFooter } from '@/components/public/footer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Globe, Tag, Loader2, Rocket, Share2, HandCoins, ExternalLink, Heart, Lightbulb } from 'lucide-react';
+import { MapPin, Globe, Tag, Loader2, Rocket, Share2, HandCoins, ExternalLink, Heart, Lightbulb, TrendingUp, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
@@ -226,6 +227,27 @@ export default function StartupPublicProfilePage() {
                         <section>
                           <h4 className="text-lg font-bold mb-3">Business Model</h4>
                           <p className="text-muted-foreground leading-relaxed text-sm">{startup.businessModel}</p>
+                        </section>
+                      )}
+                    </div>
+                  )}
+
+                  {(startup.traction || startup.teamInfo) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t">
+                      {startup.traction && (
+                        <section>
+                          <h4 className="text-lg font-bold mb-3 flex items-center gap-2">
+                            <TrendingUp className="h-4 w-4 text-primary" /> Traction
+                          </h4>
+                          <p className="text-muted-foreground leading-relaxed text-sm">{startup.traction}</p>
+                        </section>
+                      )}
+                      {startup.teamInfo && (
+                        <section>
+                          <h4 className="text-lg font-bold mb-3 flex items-center gap-2">
+                            <Users className="h-4 w-4 text-primary" /> Founding Team
+                          </h4>
+                          <p className="text-muted-foreground leading-relaxed text-sm">{startup.teamInfo}</p>
                         </section>
                       )}
                     </div>
