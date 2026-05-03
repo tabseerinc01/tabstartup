@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { useFirestore } from '@/firebase';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
-import { Loader2, Users, Rocket, Zap, MessageSquare, ArrowRight, Briefcase } from 'lucide-react';
+import { Loader2, Users, Rocket, Zap, ArrowRight, Briefcase, Handshake } from 'lucide-react';
 
 export default function CofoundersPage() {
   const [founders, setFounders] = useState<any[]>([]);
@@ -32,10 +32,8 @@ export default function CofoundersPage() {
         const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setFounders(users);
 
-        // Fetch startups for these users to show venture names
         const uids = users.map(u => u.id);
         if (uids.length > 0) {
-          // Firestore 'in' query is limited to 30 items
           const chunks = [];
           for (let i = 0; i < uids.length; i += 30) {
             chunks.push(uids.slice(i, i + 30));
@@ -68,7 +66,7 @@ export default function CofoundersPage() {
         <div className="mb-12">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-3 bg-primary/10 rounded-2xl">
-              <Users className="h-8 w-8 text-primary" />
+              <Handshake className="h-8 w-8 text-primary" />
             </div>
             <h1 className="text-4xl font-extrabold tracking-tight">Co-founder Directory</h1>
           </div>
@@ -112,10 +110,25 @@ export default function CofoundersPage() {
                     <div className="flex-1 min-w-0">
                       <h3 className="text-xl font-bold truncate group-hover:text-primary transition-colors">{founder.fullName}</h3>
                       <p className="text-xs font-semibold text-primary truncate uppercase tracking-wider mb-1">{founder.headline}</p>
+                      
                       {startup && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Rocket className="h-3 w-3 text-primary/60" />
-                          <span className="truncate font-medium">{startup.name}</span>
+                        <div className="flex flex-col gap-1 mt-1">
+                          <Link 
+                            href={`/startups/${founder.id}`} 
+                            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors font-bold group/link"
+                          >
+                            <Rocket className="h-3 w-3 text-primary/60" />
+                            <span className="truncate">{startup.name}</span>
+                            <ArrowRight className="h-2 w-2 opacity-0 group-hover/link:opacity-100 transition-opacity" />
+                          </Link>
+                          <div className="flex gap-2">
+                            <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-muted/30 border-none font-medium text-muted-foreground">
+                              {startup.stage}
+                            </Badge>
+                            <Badge variant="outline" className="text-[9px] h-4 px-1.5 bg-muted/30 border-none font-medium text-muted-foreground">
+                              {startup.industry}
+                            </Badge>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -124,7 +137,7 @@ export default function CofoundersPage() {
                   <CardContent className="flex flex-col flex-1 px-8 pb-8 space-y-6">
                     <div className="space-y-4">
                       <div>
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Required Skills</p>
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Partner Skills Required</p>
                         <div className="flex flex-wrap gap-1.5">
                           {skills.length > 0 ? (
                             skills.map((skill: string) => (
@@ -133,14 +146,14 @@ export default function CofoundersPage() {
                               </Badge>
                             ))
                           ) : (
-                            <span className="text-xs text-muted-foreground italic">Seeking generalist partner</span>
+                            <span className="text-xs text-muted-foreground italic font-medium">Seeking generalist partner</span>
                           )}
                         </div>
                       </div>
 
                       <div className="p-5 rounded-2xl bg-primary/5 border border-primary/10 min-h-[100px]">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                          <Briefcase className="h-3 w-3" /> Role Description
+                          <Briefcase className="h-3 w-3" /> Role & Vision
                         </p>
                         <p className="text-sm line-clamp-3 italic text-foreground/80 leading-relaxed font-medium">
                           "{founder.cofounderRole || "Looking for a strategic partner to join the journey and scale this vision."}"
