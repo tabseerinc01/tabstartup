@@ -201,7 +201,7 @@ function FounderCard({ founder }: { founder: any }) {
           </Badge>
           {founder.lookingForCofounder && (
             <Badge className="bg-accent text-accent-foreground border-none font-bold flex items-center gap-1 shadow-sm">
-              <Users className="h-3 w-3" /> Co-founder
+              <Users className="h-3 w-3" /> Looking for Co-founder
             </Badge>
           )}
         </div>
