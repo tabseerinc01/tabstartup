@@ -204,9 +204,9 @@ export default function StartupPublicProfilePage() {
 
           <Card className="overflow-hidden border-none shadow-2xl rounded-[3rem] bg-background">
             {/* Professional Hero Section */}
-            <div className="relative h-64 bg-gradient-to-br from-primary/90 via-accent/90 to-primary/80">
+            <div className="relative h-auto min-h-[16rem] bg-gradient-to-br from-primary/90 via-accent/90 to-primary/80">
               <div className="absolute inset-0 bg-black/10" />
-              <div className="absolute bottom-0 left-0 right-0 p-8 md:p-12 text-white">
+              <div className="relative p-8 md:p-12 text-white">
                 <div className="flex flex-col md:flex-row justify-between items-end gap-6">
                   <div className="space-y-4 max-w-2xl">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -219,7 +219,36 @@ export default function StartupPublicProfilePage() {
                       "{startup.shortDescription}"
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="flex flex-wrap gap-3 w-full md:w-auto">
+                    {/* Investor Specific Actions in Hero */}
+                    {isInvestor && !isOwnStartup && (
+                      <>
+                        {existingInterest ? (
+                          <Button disabled className="h-14 px-8 rounded-2xl text-base gap-2 bg-white/20 text-white border-white/10 backdrop-blur-md">
+                            <Heart className="h-5 w-5 fill-white/50" /> Interest Sent
+                          </Button>
+                        ) : (
+                          <Button 
+                            onClick={handleExpressInterest} 
+                            className="h-14 px-10 rounded-2xl text-base gap-2 bg-white text-primary hover:bg-white/90 shadow-xl transition-transform hover:scale-105" 
+                            disabled={isSubmittingInterest}
+                          >
+                            {isSubmittingInterest ? <Loader2 className="h-5 w-5 animate-spin" /> : <Rocket className="h-5 w-5" />}
+                            Express Interest
+                          </Button>
+                        )}
+                        <Button 
+                          variant="outline" 
+                          className="h-14 px-8 rounded-2xl text-base gap-2 border-white/30 text-white hover:bg-white/10 backdrop-blur-md" 
+                          asChild
+                        >
+                          <Link href={`/dashboard/messages?startWith=${uid}`}>
+                            <MessageSquare className="h-5 w-5" /> Message
+                          </Link>
+                        </Button>
+                      </>
+                    )}
+                    
                     <Button variant="outline" size="icon" onClick={copyListingLink} className="rounded-2xl h-14 w-14 bg-white/10 hover:bg-white/20 border-white/20 text-white backdrop-blur-md transition-all">
                       <Share2 className="h-6 w-6" />
                     </Button>
@@ -263,38 +292,6 @@ export default function StartupPublicProfilePage() {
                   <p className="text-lg font-extrabold text-green-600">{startup.fundingNeed || 'TBD'}</p>
                 </div>
               </div>
-
-              {/* Action Bar for Investors */}
-              {isInvestor && !isOwnStartup && (
-                <div className="py-8 border-b flex flex-wrap gap-4 items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-3 bg-green-50 rounded-2xl">
-                      <ShieldCheck className="h-6 w-6 text-green-600" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-lg">Investor Access</h4>
-                      <p className="text-sm text-muted-foreground">Directly engage with this venture's founding team.</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-4 w-full md:w-auto">
-                    {existingInterest ? (
-                      <Button disabled className="flex-1 md:flex-none h-14 px-10 rounded-2xl text-base gap-2 bg-muted text-muted-foreground">
-                        <Heart className="h-5 w-5 fill-muted-foreground" /> Interest Sent
-                      </Button>
-                    ) : (
-                      <Button onClick={handleExpressInterest} className="flex-1 md:flex-none h-14 px-10 rounded-2xl text-base gap-2 bg-green-600 hover:bg-green-700 shadow-xl shadow-green-200" disabled={isSubmittingInterest}>
-                        {isSubmittingInterest ? <Loader2 className="h-5 w-5 animate-spin" /> : <Heart className="h-5 w-5" />}
-                        Express Interest
-                      </Button>
-                    )}
-                    <Button variant="outline" className="flex-1 md:flex-none h-14 px-10 rounded-2xl text-base gap-2 border-primary/20 hover:bg-primary/5" asChild>
-                      <Link href={`/dashboard/messages?startWith=${uid}`}>
-                        <MessageSquare className="h-5 w-5" /> Message
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-              )}
 
               <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-16">
                 {/* MAIN CONTENT AREA */}
