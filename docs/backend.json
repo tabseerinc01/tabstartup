@@ -320,6 +320,22 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["fromInvestorUid", "toFounderUid", "message", "status", "createdAt"]
+    },
+    "Service": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Service",
+      "type": "object",
+      "description": "Represents a professional service offered to startups.",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "string" },
+        "providerName": { "type": "string" },
+        "providerUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "category", "price", "providerName", "providerUid", "createdAt"]
     }
   },
   "auth": {
@@ -365,6 +381,14 @@
           "entityName": "Pitch",
           "schema": { "$ref": "#/backend/entities/Pitch" },
           "description": "Investment interest requests."
+        }
+      },
+      {
+        "path": "/services/{serviceId}",
+        "definition": {
+          "entityName": "Service",
+          "schema": { "$ref": "#/backend/entities/Service" },
+          "description": "Professional services directory."
         }
       }
     ]

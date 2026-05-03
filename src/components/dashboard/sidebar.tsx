@@ -13,7 +13,8 @@ import {
   ChevronRight,
   HandCoins,
   MessageSquare,
-  GraduationCap
+  GraduationCap,
+  Wrench
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -77,6 +78,7 @@ export function DashboardSidebar() {
     { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
     { href: '/cofounders', label: 'Co-founders', icon: Users },
     { href: '/mentors', label: 'Mentors', icon: GraduationCap },
+    { href: '/services', label: 'Services', icon: Wrench },
     { 
       href: '/dashboard/connections', 
       label: 'Connections', 
