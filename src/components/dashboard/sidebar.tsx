@@ -12,7 +12,8 @@ import {
   LogOut,
   ChevronRight,
   HandCoins,
-  MessageSquare
+  MessageSquare,
+  GraduationCap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -75,6 +76,7 @@ export function DashboardSidebar() {
     { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
     { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
     { href: '/cofounders', label: 'Co-founders', icon: Users },
+    { href: '/mentors', label: 'Mentors', icon: GraduationCap },
     { 
       href: '/dashboard/connections', 
       label: 'Connections', 
