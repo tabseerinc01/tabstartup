@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "User": {
@@ -93,9 +92,9 @@
         "availability": {
           "type": "object",
           "properties": {
-            "openToInvestment": { "boolean": true },
-            "hiring": { "boolean": true },
-            "coFounder": { "boolean": true }
+            "openToInvestment": { "type": "boolean" },
+            "hiring": { "type": "boolean" },
+            "coFounder": { "type": "boolean" }
           }
         },
         "lookingForCofounder": {
@@ -139,6 +138,28 @@
         },
         "isOpenToPitches": {
           "type": "boolean"
+        },
+        "isMentor": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the user is an active mentor."
+        },
+        "mentorSkills": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Specific areas where the mentor provides guidance."
+        },
+        "mentorBio": {
+          "type": "string",
+          "description": "A dedicated bio for mentorship purposes."
+        },
+        "yearsOfExperience": {
+          "type": "string",
+          "description": "The number of years of professional experience."
+        },
+        "mentorAvailability": {
+          "type": "string",
+          "description": "Mentorship schedule or availability details (e.g. '2 hours/week')."
         },
         "createdAt": {
           "type": "string",
