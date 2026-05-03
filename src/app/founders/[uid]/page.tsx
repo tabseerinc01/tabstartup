@@ -331,9 +331,12 @@ export default function FounderPublicProfilePage() {
                     </h2>
                     {startup ? (
                       <div className="border border-primary/10 rounded-[2rem] p-8 space-y-4 bg-primary/5">
-                        <p className="text-2xl font-bold text-primary">
+                        <Link 
+                          href={`/startups/${uid}`} 
+                          className="text-2xl font-bold text-primary hover:underline decoration-primary/30 underline-offset-4"
+                        >
                           {startup.name}
-                        </p>
+                        </Link>
                         <p className="text-muted-foreground text-lg leading-relaxed">
                           {startup.shortDescription}
                         </p>
