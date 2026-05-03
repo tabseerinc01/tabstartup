@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, addDoc, serverTimestamp, orderBy, where } from 'firebase/firestore';
 import { useFirestore, useUser } from '@/firebase';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
@@ -27,6 +27,7 @@ export default function ServicesPage() {
   const [services, setServices] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isConnecting, setIsConnecting] = useState<string | null>(null);
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
@@ -116,13 +117,57 @@ export default function ServicesPage() {
     }
   };
 
-  const handleContact = (providerUid: string) => {
+  const handleContact = async (providerUid: string, serviceTitle: string) => {
     if (!user) {
       toast({ title: "Login Required", description: "Please sign in to contact providers." });
       router.push('/login');
       return;
     }
-    router.push(`/dashboard/messages?startWith=${providerUid}`);
+
+    if (user.uid === providerUid) {
+      toast({ title: "Self-Contact", description: "This is your own service listing." });
+      return;
+    }
+
+    setIsConnecting(providerUid);
+    try {
+      // Find existing chat
+      const q = query(
+        collection(firestore, "chats"),
+        where("participants", "array-contains", user.uid)
+      );
+
+      const snap = await getDocs(q);
+      let chatId = null;
+
+      snap.forEach(doc => {
+        const data = doc.data();
+        if (data.participants && data.participants.includes(providerUid)) {
+          chatId = doc.id;
+        }
+      });
+
+      if (chatId) {
+        router.push(`/chats/${chatId}`);
+      } else {
+        // Create new chat
+        const newChatRef = await addDoc(collection(firestore, 'chats'), {
+          participants: [user.uid, providerUid],
+          lastMessage: `Interested in: ${serviceTitle}`,
+          updatedAt: serverTimestamp(),
+        });
+        router.push(`/chats/${newChatRef.id}`);
+      }
+    } catch (error) {
+      console.error("Error starting conversation:", error);
+      toast({ 
+        title: "Error", 
+        description: "Failed to start conversation. Please try again.", 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsConnecting(null);
+    }
   };
 
   const getIcon = (category: string) => {
@@ -201,9 +246,15 @@ export default function ServicesPage() {
                 <CardFooter className="px-8 pb-8 pt-4">
                    <Button 
                     className="w-full h-12 rounded-2xl gap-2 font-bold group-hover:scale-105 transition-transform"
-                    onClick={() => handleContact(service.providerUid)}
+                    onClick={() => handleContact(service.providerUid, service.title)}
+                    disabled={isConnecting === service.providerUid}
                    >
-                     <MessageSquare className="h-4 w-4" /> Contact Provider
+                     {isConnecting === service.providerUid ? (
+                       <Loader2 className="h-4 w-4 animate-spin" />
+                     ) : (
+                       <MessageSquare className="h-4 w-4" />
+                     )}
+                     Contact Provider
                    </Button>
                 </CardFooter>
               </Card>
