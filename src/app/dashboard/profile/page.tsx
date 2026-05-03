@@ -242,7 +242,7 @@ export default function ProfilePage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-primary" /> Co-founder Search
+                  <Users className="h-5 w-5 text-primary" /> Co-founder
                 </CardTitle>
                 <CardDescription>Looking for a partner to build with?</CardDescription>
               </CardHeader>
@@ -256,21 +256,12 @@ export default function ProfilePage() {
                       lookingForCofounder: !!checked
                     })}
                   />
-                  <Label htmlFor="lookingForCofounder" className="font-bold cursor-pointer text-primary">I am currently seeking a co-founder</Label>
+                  <Label htmlFor="lookingForCofounder" className="font-bold cursor-pointer text-primary">Looking for Co-founder</Label>
                 </div>
 
                 {formData.lookingForCofounder && (
                   <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="cofounderRole">Desired Role</Label>
-                        <Input 
-                          id="cofounderRole" 
-                          placeholder="e.g. CTO, COO, Head of Growth"
-                          value={formData.cofounderRole}
-                          onChange={e => setFormData({...formData, cofounderRole: e.target.value})}
-                        />
-                      </div>
                       <div className="space-y-2">
                         <Label htmlFor="commitmentType">Expected Commitment</Label>
                         <Select 
@@ -283,11 +274,28 @@ export default function ProfilePage() {
                           <SelectContent>
                             <SelectItem value="Full-time">Full-time</SelectItem>
                             <SelectItem value="Part-time">Part-time</SelectItem>
-                            <SelectItem value="Equity-only">Equity-only</SelectItem>
-                            <SelectItem value="Other">Other</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="equityOffer">Equity Range (%)</Label>
+                        <Input 
+                          id="equityOffer" 
+                          placeholder="e.g. 10-25%"
+                          value={formData.equityOffer}
+                          onChange={e => setFormData({...formData, equityOffer: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cofounderRole">Role Description</Label>
+                      <Textarea 
+                        id="cofounderRole" 
+                        placeholder="Describe the responsibilities and expectations for your co-founder..."
+                        value={formData.cofounderRole}
+                        rows={3}
+                        onChange={e => setFormData({...formData, cofounderRole: e.target.value})}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="cofounderSkills">Required Skills (comma separated)</Label>
@@ -296,15 +304,6 @@ export default function ProfilePage() {
                         placeholder="e.g. React, Node.js, Sales, Operations"
                         value={formData.cofounderSkills}
                         onChange={e => setFormData({...formData, cofounderSkills: e.target.value})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="equityOffer">Equity Range (%)</Label>
-                      <Input 
-                        id="equityOffer" 
-                        placeholder="e.g. 10-25%"
-                        value={formData.equityOffer}
-                        onChange={e => setFormData({...formData, equityOffer: e.target.value})}
                       />
                     </div>
                   </div>
