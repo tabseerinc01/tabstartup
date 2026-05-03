@@ -98,6 +98,27 @@
             "coFounder": { "boolean": true }
           }
         },
+        "lookingForCofounder": {
+          "type": "boolean",
+          "default": false
+        },
+        "cofounderSkills": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "cofounderRole": {
+          "type": "string",
+          "description": "The specific role needed (e.g., CTO, COO, Head of Growth)."
+        },
+        "equityOffer": {
+          "type": "string",
+          "description": "The range of equity offered (e.g., 10-25%)."
+        },
+        "commitmentType": {
+          "type": "string",
+          "enum": ["Full-time", "Part-time", "Equity-only", "Other", ""],
+          "description": "Expected commitment level."
+        },
         "isVerified": {
           "type": "boolean",
           "default": false

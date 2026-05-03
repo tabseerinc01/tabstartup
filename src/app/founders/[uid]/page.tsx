@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -11,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { MapPin, Briefcase, Award, CheckCircle2, MessageSquare, Calendar, Globe, Linkedin, GraduationCap, ArrowLeft, Loader2, Send, Heart, Rocket, ExternalLink } from 'lucide-react';
+import { MapPin, Briefcase, Award, CheckCircle2, MessageSquare, Calendar, Globe, Linkedin, GraduationCap, ArrowLeft, Loader2, Send, Heart, Rocket, ExternalLink, Users, Zap } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -274,6 +275,57 @@ export default function FounderPublicProfilePage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
                 <div className="lg:col-span-2 space-y-12">
+                  {founder.lookingForCofounder && (
+                    <section className="animate-in fade-in slide-in-from-left duration-500">
+                      <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                        <Users className="h-6 w-6 text-primary" /> Co-founder Wanted
+                      </h2>
+                      <Card className="border-primary/20 bg-primary/5 rounded-[2rem] overflow-hidden">
+                        <CardContent className="p-8 space-y-6">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-sm font-bold text-primary uppercase tracking-widest mb-1">Role Needed</p>
+                              <p className="text-3xl font-extrabold">{founder.cofounderRole || 'Co-founder'}</p>
+                            </div>
+                            <Badge className="bg-primary text-white px-4 py-1.5 rounded-xl h-auto flex items-center gap-1.5">
+                              <Zap className="h-3 w-3 fill-white" /> {founder.commitmentType || 'Full-time'}
+                            </Badge>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-8 py-6 border-y border-primary/10">
+                            <div>
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Equity Offered</p>
+                              <p className="text-xl font-bold text-primary">{founder.equityOffer || 'TBD'}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Commitment</p>
+                              <p className="text-lg font-semibold">{founder.commitmentType || 'Flexible'}</p>
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Required Skills</p>
+                            <div className="flex flex-wrap gap-2">
+                              {Array.isArray(founder.cofounderSkills) && founder.cofounderSkills.length > 0 ? (
+                                founder.cofounderSkills.map((skill: string) => (
+                                  <Badge key={skill} variant="outline" className="px-3 py-1 rounded-lg bg-background border-primary/20 text-primary">
+                                    {skill}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <span className="text-sm text-muted-foreground italic">Seeking generalist partner</span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <Button className="w-full rounded-2xl h-12 font-bold" variant="secondary" asChild>
+                             <Link href={`/dashboard/messages?startWith=${uid}`}>Apply as Co-founder</Link>
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    </section>
+                  )}
+
                   <section>
                     <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
                       <Rocket className="h-6 w-6 text-primary" /> Startup

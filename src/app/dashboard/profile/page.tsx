@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { Loader2, Plus, Trash2, Linkedin, Globe, Twitter, Image as ImageIcon, Briefcase, TrendingUp } from 'lucide-react';
+import { Loader2, Plus, Trash2, Linkedin, Globe, Twitter, Image as ImageIcon, Briefcase, TrendingUp, Users } from 'lucide-react';
 
 export default function ProfilePage() {
   const { toast } = useToast();
@@ -39,6 +39,11 @@ export default function ProfilePage() {
     isOpenToPitches: false,
     investmentFocus: '',
     preferredStage: '',
+    lookingForCofounder: false,
+    cofounderSkills: '',
+    cofounderRole: '',
+    equityOffer: '',
+    commitmentType: '',
     socialLinks: {
       linkedin: '',
       website: '',
@@ -79,6 +84,11 @@ export default function ProfilePage() {
             isOpenToPitches: profile.isOpenToPitches || false,
             investmentFocus: Array.isArray(profile.investmentFocus) ? profile.investmentFocus.join(', ') : '',
             preferredStage: Array.isArray(profile.preferredStage) ? profile.preferredStage.join(', ') : '',
+            lookingForCofounder: profile.lookingForCofounder || false,
+            cofounderSkills: Array.isArray(profile.cofounderSkills) ? profile.cofounderSkills.join(', ') : '',
+            cofounderRole: profile.cofounderRole || '',
+            equityOffer: profile.equityOffer || '',
+            commitmentType: profile.commitmentType || '',
             socialLinks: profile.socialLinks || { linkedin: '', website: '', twitter: '' },
             availability: profile.availability || { openToInvestment: false, hiring: false, coFounder: false },
             experience: profile.experience && profile.experience.length > 0 ? profile.experience : [{ company: '', role: '', duration: '', description: '' }],
@@ -103,12 +113,14 @@ export default function ProfilePage() {
       const skillsArray = formData.skills.split(',').map(s => s.trim()).filter(s => s !== '');
       const focusArray = formData.investmentFocus.split(',').map(s => s.trim()).filter(s => s !== '');
       const stageArray = formData.preferredStage.split(',').map(s => s.trim()).filter(s => s !== '');
+      const cofounderSkillsArray = formData.cofounderSkills.split(',').map(s => s.trim()).filter(s => s !== '');
       
       await setDoc(doc(firestore, 'users', user.uid), {
         ...formData,
         skills: skillsArray,
         investmentFocus: focusArray,
         preferredStage: stageArray,
+        cofounderSkills: cofounderSkillsArray,
         updatedAt: serverTimestamp(),
       }, { merge: true });
 
@@ -155,6 +167,7 @@ export default function ProfilePage() {
   }
 
   const isInvestor = userRole === 'investor';
+  const isFounder = userRole === 'founder';
 
   return (
     <div className="max-w-4xl mx-auto w-full space-y-8 pb-20">
@@ -224,6 +237,81 @@ export default function ProfilePage() {
               </div>
             </CardContent>
           </Card>
+
+          {isFounder && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" /> Co-founder Search
+                </CardTitle>
+                <CardDescription>Looking for a partner to build with?</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center space-x-2 bg-primary/5 p-4 rounded-xl border border-primary/10">
+                  <Checkbox 
+                    id="lookingForCofounder" 
+                    checked={formData.lookingForCofounder}
+                    onCheckedChange={(checked) => setFormData({
+                      ...formData, 
+                      lookingForCofounder: !!checked
+                    })}
+                  />
+                  <Label htmlFor="lookingForCofounder" className="font-bold cursor-pointer text-primary">I am currently seeking a co-founder</Label>
+                </div>
+
+                {formData.lookingForCofounder && (
+                  <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="cofounderRole">Desired Role</Label>
+                        <Input 
+                          id="cofounderRole" 
+                          placeholder="e.g. CTO, COO, Head of Growth"
+                          value={formData.cofounderRole}
+                          onChange={e => setFormData({...formData, cofounderRole: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="commitmentType">Expected Commitment</Label>
+                        <Select 
+                          value={formData.commitmentType} 
+                          onValueChange={v => setFormData({...formData, commitmentType: v})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Full-time">Full-time</SelectItem>
+                            <SelectItem value="Part-time">Part-time</SelectItem>
+                            <SelectItem value="Equity-only">Equity-only</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cofounderSkills">Required Skills (comma separated)</Label>
+                      <Input 
+                        id="cofounderSkills" 
+                        placeholder="e.g. React, Node.js, Sales, Operations"
+                        value={formData.cofounderSkills}
+                        onChange={e => setFormData({...formData, cofounderSkills: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="equityOffer">Equity Range (%)</Label>
+                      <Input 
+                        id="equityOffer" 
+                        placeholder="e.g. 10-25%"
+                        value={formData.equityOffer}
+                        onChange={e => setFormData({...formData, equityOffer: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {isInvestor ? (
             <Card>
