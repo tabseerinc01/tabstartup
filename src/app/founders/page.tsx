@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { mockFounders } from '@/lib/mock-data';
-import { MapPin, Search, Filter, Loader2, Linkedin, MessageSquare, Calendar, CheckCircle2, Rocket, Briefcase, HandCoins, Info, LayoutGrid } from 'lucide-react';
+import { MapPin, Search, Filter, Loader2, Linkedin, MessageSquare, Calendar, CheckCircle2, Rocket, Briefcase, HandCoins, Info, LayoutGrid, Users } from 'lucide-react';
 import Image from 'next/image';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { PublicHeader } from '@/components/public/header';
@@ -34,7 +34,7 @@ export default function FoundersPage() {
         const foundersQuery = query(
           collection(firestore, 'users'),
           where('role', '==', 'founder'),
-          limit(50)
+          limit(100)
         );
         const foundersSnap = await getDocs(foundersQuery);
         const foundersItems = foundersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -66,28 +66,30 @@ export default function FoundersPage() {
     loadFounders();
   }, [firestore]);
 
-  const filteredFounders = founders.filter(founder => {
-    const name = (founder.fullName || founder.name || '').toLowerCase();
-    const headline = (founder.headline || '').toLowerCase();
-    const startupName = (founder.startup?.name || '').toLowerCase();
-    const startupIndustry = (founder.startup?.industry || '').toLowerCase();
-    const startupDesc = (founder.startup?.shortDescription || '').toLowerCase();
-    
-    const matchesSearch = 
-      name.includes(search.toLowerCase()) || 
-      headline.includes(search.toLowerCase()) ||
-      startupName.includes(search.toLowerCase()) ||
-      startupDesc.includes(search.toLowerCase());
-    
-    const matchesStage = stageFilter === 'all' || 
-      (founder.stage === stageFilter) || 
-      (founder.startup?.stage === stageFilter);
+  const filteredFounders = useMemo(() => {
+    return founders.filter(founder => {
+      const name = (founder.fullName || founder.name || '').toLowerCase();
+      const headline = (founder.headline || '').toLowerCase();
+      const startupName = (founder.startup?.name || '').toLowerCase();
+      const startupIndustry = (founder.startup?.industry || '').toLowerCase();
+      const startupDesc = (founder.startup?.shortDescription || '').toLowerCase();
+      
+      const matchesSearch = 
+        name.includes(search.toLowerCase()) || 
+        headline.includes(search.toLowerCase()) ||
+        startupName.includes(search.toLowerCase()) ||
+        startupDesc.includes(search.toLowerCase());
+      
+      const matchesStage = stageFilter === 'all' || 
+        (founder.stage === stageFilter) || 
+        (founder.startup?.stage === stageFilter);
 
-    const matchesIndustry = industryFilter === '' || 
-      startupIndustry.includes(industryFilter.toLowerCase());
+      const matchesIndustry = industryFilter === '' || 
+        startupIndustry.includes(industryFilter.toLowerCase());
 
-    return matchesSearch && matchesStage && matchesIndustry;
-  });
+      return matchesSearch && matchesStage && matchesIndustry;
+    });
+  }, [founders, search, stageFilter, industryFilter]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -193,10 +195,15 @@ function FounderCard({ founder }: { founder: any }) {
             <CheckCircle2 className="h-5 w-5 text-primary" />
           </div>
         )}
-        <div className="absolute bottom-4 left-4 flex gap-2">
+        <div className="absolute bottom-4 left-4 flex flex-wrap gap-2">
           <Badge variant="secondary" className="bg-white/90 backdrop-blur text-primary border-none font-bold">
             {startup?.stage || founder.stage}
           </Badge>
+          {founder.lookingForCofounder && (
+            <Badge className="bg-accent text-accent-foreground border-none font-bold flex items-center gap-1 shadow-sm">
+              <Users className="h-3 w-3" /> Co-founder
+            </Badge>
+          )}
         </div>
       </div>
       <CardHeader className="pb-2">
