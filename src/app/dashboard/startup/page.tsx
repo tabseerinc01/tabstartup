@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,7 +9,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { Globe, MapPin, Tag, Loader2, Rocket, Share2, Lightbulb, TrendingUp, Users, ExternalLink } from 'lucide-react';
+import { 
+  Globe, 
+  MapPin, 
+  Tag, 
+  Loader2, 
+  Rocket, 
+  Share2, 
+  Lightbulb, 
+  TrendingUp, 
+  Users, 
+  ExternalLink,
+  HandCoins
+} from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
