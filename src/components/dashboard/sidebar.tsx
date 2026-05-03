@@ -74,6 +74,7 @@ export function DashboardSidebar() {
     { href: '/dashboard/profile', label: 'My Profile', icon: User },
     { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
     { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
+    { href: '/cofounders', label: 'Co-founders', icon: Users },
     { 
       href: '/dashboard/connections', 
       label: 'Connections', 
