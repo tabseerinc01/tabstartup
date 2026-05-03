@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
 import { useAuth, initiateSignOut, useUser, useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 
 export function DashboardSidebar() {
   const pathname = usePathname();
@@ -28,6 +28,7 @@ export function DashboardSidebar() {
   const firestore = useFirestore();
 
   const [profile, setProfile] = useState<any>(null);
+  const [hasPendingPitches, setHasPendingPitches] = useState(false);
 
   useEffect(() => {
     async function loadProfile() {
@@ -44,6 +45,23 @@ export function DashboardSidebar() {
     loadProfile();
   }, [firestore, user?.uid]);
 
+  // Listen for pending pitches (investor interest) for founders
+  useEffect(() => {
+    if (!firestore || !user?.uid || profile?.role !== 'founder') return;
+
+    const q = query(
+      collection(firestore, 'pitches'),
+      where('toFounderUid', '==', user.uid),
+      where('status', '==', 'pending')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setHasPendingPitches(!snapshot.empty);
+    });
+
+    return () => unsubscribe();
+  }, [firestore, user?.uid, profile?.role]);
+
   const handleLogout = () => {
     initiateSignOut(auth);
     router.push('/login');
@@ -56,7 +74,12 @@ export function DashboardSidebar() {
     { href: '/dashboard/profile', label: 'My Profile', icon: User },
     { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
     { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
-    { href: '/dashboard/connections', label: 'Connections', icon: Users },
+    { 
+      href: '/dashboard/connections', 
+      label: 'Connections', 
+      icon: Users,
+      showBadge: hasPendingPitches 
+    },
     ...(isFounder ? [{ href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }] : []),
     { href: '#', label: 'Settings', icon: Settings, disabled: true },
   ];
@@ -80,9 +103,15 @@ export function DashboardSidebar() {
               item.disabled && "opacity-50 cursor-not-allowed"
             )}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 relative">
               <item.icon className="h-4 w-4" />
               {item.label}
+              {item.showBadge && (
+                <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
+                </span>
+              )}
             </div>
             {item.disabled && <span className="text-[10px] bg-muted px-1.5 rounded-full text-muted-foreground">Soon</span>}
             {!item.disabled && pathname === item.href && <ChevronRight className="h-3 w-3" />}
