@@ -44,6 +44,12 @@ export default function ProfilePage() {
     cofounderRole: '',
     equityOffer: '',
     commitmentType: '',
+    // Mentor fields
+    isMentor: false,
+    mentorSkills: '',
+    mentorBio: '',
+    yearsOfExperience: '',
+    mentorAvailability: '',
     socialLinks: {
       linkedin: '',
       website: '',
@@ -89,6 +95,12 @@ export default function ProfilePage() {
             cofounderRole: profile.cofounderRole || '',
             equityOffer: profile.equityOffer || '',
             commitmentType: profile.commitmentType || '',
+            // Load Mentor fields
+            isMentor: profile.isMentor || false,
+            mentorSkills: Array.isArray(profile.mentorSkills) ? profile.mentorSkills.join(', ') : '',
+            mentorBio: profile.mentorBio || '',
+            yearsOfExperience: profile.yearsOfExperience || '',
+            mentorAvailability: profile.mentorAvailability || '',
             socialLinks: profile.socialLinks || { linkedin: '', website: '', twitter: '' },
             availability: profile.availability || { openToInvestment: false, hiring: false, coFounder: false },
             experience: profile.experience && profile.experience.length > 0 ? profile.experience : [{ company: '', role: '', duration: '', description: '' }],
@@ -110,11 +122,11 @@ export default function ProfilePage() {
 
     setIsSaving(true);
     try {
-      // Process comma-separated strings into arrays for structured data storage
       const skillsArray = formData.skills.split(',').map(s => s.trim()).filter(s => s !== '');
       const focusArray = formData.investmentFocus.split(',').map(s => s.trim()).filter(s => s !== '');
       const stageArray = formData.preferredStage.split(',').map(s => s.trim()).filter(s => s !== '');
       const cofounderSkillsArray = formData.cofounderSkills.split(',').map(s => s.trim()).filter(s => s !== '');
+      const mentorSkillsArray = formData.mentorSkills.split(',').map(s => s.trim()).filter(s => s !== '');
       
       const updatedData = {
         ...formData,
@@ -122,6 +134,7 @@ export default function ProfilePage() {
         investmentFocus: focusArray,
         preferredStage: stageArray,
         cofounderSkills: cofounderSkillsArray,
+        mentorSkills: mentorSkillsArray,
         updatedAt: serverTimestamp(),
       };
 
@@ -171,11 +184,14 @@ export default function ProfilePage() {
 
   const isInvestor = userRole === 'investor';
   const isFounder = userRole === 'founder';
+  const isMentorRole = userRole === 'mentor';
 
   return (
     <div className="max-w-4xl mx-auto w-full space-y-8 pb-20">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">{isInvestor ? 'Investor Profile' : 'Founder Profile'}</h1>
+        <h1 className="text-3xl font-bold">
+          {isInvestor ? 'Investor Profile' : isMentorRole ? 'Mentor Profile' : 'Founder Profile'}
+        </h1>
         <Button onClick={handleSave} disabled={isSaving}>
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
           Save Changes
@@ -220,16 +236,18 @@ export default function ProfilePage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="headline">{isInvestor ? 'Investor Headline' : 'Headline'}</Label>
+                <Label htmlFor="headline">
+                  {isInvestor ? 'Investor Headline' : isMentorRole ? 'Professional Headline' : 'Headline'}
+                </Label>
                 <Input 
                   id="headline" 
-                  placeholder={isInvestor ? "e.g. Managing Partner at Delta VC" : "e.g. Building the future of AgriTech"}
+                  placeholder={isInvestor ? "e.g. Managing Partner at Delta VC" : isMentorRole ? "e.g. 10+ years in Product Strategy" : "e.g. Building the future of AgriTech"}
                   value={isInvestor ? formData.investorHeadline : formData.headline}
                   onChange={e => setFormData({...formData, [isInvestor ? 'investorHeadline' : 'headline']: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="bio">{isInvestor ? 'Investor Biography' : 'About Me'}</Label>
+                <Label htmlFor="bio">{isInvestor ? 'Investor Biography' : isMentorRole ? 'About Me' : 'About Me'}</Label>
                 <Textarea 
                   id="bio" 
                   rows={4} 
@@ -238,6 +256,79 @@ export default function ProfilePage() {
                   onChange={e => setFormData({...formData, [isInvestor ? 'investorBio' : 'bio']: e.target.value})}
                 />
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Mentor Profile Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" /> Mentor Profile
+              </CardTitle>
+              <CardDescription>Share your experience and guide others.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center space-x-2 bg-primary/5 p-4 rounded-xl border border-primary/10">
+                <Checkbox 
+                  id="isMentor" 
+                  checked={formData.isMentor}
+                  onCheckedChange={(checked) => setFormData({
+                    ...formData, 
+                    isMentor: !!checked
+                  })}
+                />
+                <Label htmlFor="isMentor" className="font-bold cursor-pointer text-primary">Available as Mentor</Label>
+              </div>
+
+              {formData.isMentor && (
+                <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="yearsExp">Years of Experience</Label>
+                      <Input 
+                        id="yearsExp" 
+                        placeholder="e.g. 10+ years"
+                        value={formData.yearsOfExperience}
+                        onChange={e => setFormData({...formData, yearsOfExperience: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="mentorAvailability">Availability</Label>
+                      <Select 
+                        value={formData.mentorAvailability} 
+                        onValueChange={v => setFormData({...formData, mentorAvailability: v})}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select availability" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Open to mentoring">Open to mentoring</SelectItem>
+                          <SelectItem value="Limited availability">Limited availability</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mentorSkills">Mentor Skills (comma separated)</Label>
+                    <Input 
+                      id="mentorSkills" 
+                      placeholder="e.g. Leadership, Scaling, Fundraising"
+                      value={formData.mentorSkills}
+                      onChange={e => setFormData({...formData, mentorSkills: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mentorBio">Mentor Biography</Label>
+                    <Textarea 
+                      id="mentorBio" 
+                      placeholder="Describe your areas of expertise and how you can help founders..."
+                      value={formData.mentorBio}
+                      rows={4}
+                      onChange={e => setFormData({...formData, mentorBio: e.target.value})}
+                    />
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
