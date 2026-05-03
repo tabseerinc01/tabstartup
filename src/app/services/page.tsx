@@ -17,9 +17,11 @@ import {
   TrendingUp, 
   CheckCircle2, 
   ArrowRight,
-  DatabaseZap
+  DatabaseZap,
+  MessageSquare
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
 
 export default function ServicesPage() {
   const [services, setServices] = useState<any[]>([]);
@@ -28,6 +30,7 @@ export default function ServicesPage() {
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
+  const router = useRouter();
 
   async function loadServices() {
     if (!firestore) return;
@@ -113,6 +116,15 @@ export default function ServicesPage() {
     }
   };
 
+  const handleContact = (providerUid: string) => {
+    if (!user) {
+      toast({ title: "Login Required", description: "Please sign in to contact providers." });
+      router.push('/login');
+      return;
+    }
+    router.push(`/dashboard/messages?startWith=${providerUid}`);
+  };
+
   const getIcon = (category: string) => {
     switch (category) {
       case 'Legal': return <Scale className="h-6 w-6" />;
@@ -132,7 +144,7 @@ export default function ServicesPage() {
               <Wrench className="h-8 w-8 text-primary" /> Services Marketplace
             </h1>
             <p className="text-muted-foreground text-lg max-w-2xl">
-              Find professional services to help scale your venture. From legal to design, we've got you covered.
+              Professional services for the TabStartup ecosystem. Find expert support to scale your venture faster.
             </p>
           </div>
 
@@ -168,7 +180,7 @@ export default function ServicesPage() {
                     </Badge>
                   </div>
                   <CardTitle className="text-2xl group-hover:text-primary transition-colors">{service.title}</CardTitle>
-                  <CardDescription className="text-muted-foreground leading-relaxed line-clamp-3">
+                  <CardDescription className="text-muted-foreground leading-relaxed line-clamp-3 h-[72px]">
                     {service.description}
                   </CardDescription>
                 </CardHeader>
@@ -181,14 +193,17 @@ export default function ServicesPage() {
                     </div>
                     <div className="pt-4 border-t border-muted-foreground/10 flex items-center gap-2">
                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                       <span className="text-xs font-medium text-slate-700">Provided by {service.providerName}</span>
+                       <span className="text-xs font-medium text-slate-700">By {service.providerName}</span>
                     </div>
                   </div>
                 </CardContent>
 
                 <CardFooter className="px-8 pb-8 pt-4">
-                   <Button className="w-full h-12 rounded-2xl gap-2 font-bold group-hover:scale-105 transition-transform">
-                     Book Service <ArrowRight className="h-4 w-4" />
+                   <Button 
+                    className="w-full h-12 rounded-2xl gap-2 font-bold group-hover:scale-105 transition-transform"
+                    onClick={() => handleContact(service.providerUid)}
+                   >
+                     <MessageSquare className="h-4 w-4" /> Contact Provider
                    </Button>
                 </CardFooter>
               </Card>
