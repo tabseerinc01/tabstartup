@@ -155,7 +155,7 @@ export default function StartupPublicProfilePage() {
 
   const copyListingLink = () => {
     const url = window.location.href;
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.text(url);
     toast({
       title: "Link Copied",
       description: "Startup listing link copied to clipboard.",
@@ -237,7 +237,7 @@ export default function StartupPublicProfilePage() {
                         )}
                         <Button 
                           variant="outline" 
-                          className="h-14 px-8 rounded-2xl text-base gap-2 border-white/30 text-white hover:bg-white/10 backdrop-blur-md" 
+                          className="h-14 px-8 rounded-2xl text-base gap-2 border-white/30 text-slate-900 hover:bg-white/10 backdrop-blur-md" 
                           asChild
                         >
                           <Link href={`/dashboard/messages?startWith=${uid}`}>
