@@ -110,19 +110,22 @@ export default function ProfilePage() {
 
     setIsSaving(true);
     try {
+      // Process comma-separated strings into arrays for structured data storage
       const skillsArray = formData.skills.split(',').map(s => s.trim()).filter(s => s !== '');
       const focusArray = formData.investmentFocus.split(',').map(s => s.trim()).filter(s => s !== '');
       const stageArray = formData.preferredStage.split(',').map(s => s.trim()).filter(s => s !== '');
       const cofounderSkillsArray = formData.cofounderSkills.split(',').map(s => s.trim()).filter(s => s !== '');
       
-      await setDoc(doc(firestore, 'users', user.uid), {
+      const updatedData = {
         ...formData,
         skills: skillsArray,
         investmentFocus: focusArray,
         preferredStage: stageArray,
         cofounderSkills: cofounderSkillsArray,
         updatedAt: serverTimestamp(),
-      }, { merge: true });
+      };
+
+      await setDoc(doc(firestore, 'users', user.uid), updatedData, { merge: true });
 
       toast({
         title: "Success",
