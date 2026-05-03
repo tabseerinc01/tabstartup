@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { MapPin, Briefcase, Award, CheckCircle2, MessageSquare, Calendar, Globe, Linkedin, GraduationCap, ArrowLeft, Loader2, Send, Heart, Rocket, ExternalLink, Users, Zap } from 'lucide-react';
-import Image from 'next/image';
+import Image from 'image';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 
@@ -278,7 +278,7 @@ export default function FounderPublicProfilePage() {
                   {founder.lookingForCofounder && (
                     <section className="animate-in fade-in slide-in-from-left duration-500">
                       <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                        <Users className="h-6 w-6 text-primary" /> Co-founder Wanted
+                        <Users className="h-6 w-6 text-primary" /> Looking for Co-founder
                       </h2>
                       <Card className="border-primary/20 bg-primary/5 rounded-[2rem] overflow-hidden">
                         <CardContent className="p-8 space-y-6">
@@ -319,7 +319,7 @@ export default function FounderPublicProfilePage() {
                           </div>
                           
                           <Button className="w-full rounded-2xl h-12 font-bold" variant="secondary" asChild>
-                             <Link href={`/dashboard/messages?startWith=${uid}`}>Apply as Co-founder</Link>
+                             <Link href={`/dashboard/messages?startWith=${uid}`}>Connect</Link>
                           </Button>
                         </CardContent>
                       </Card>
