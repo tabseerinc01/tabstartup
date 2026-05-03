@@ -469,7 +469,7 @@ export default function DashboardOverviewPage() {
                       <div>
                         <p className="text-sm font-bold text-muted-foreground">No investor interest yet.</p>
                         <p className="text-xs text-muted-foreground max-w-[240px] mx-auto mt-1">
-                          Complete your startup profile to attract more potential investors.
+                          Complete your startup profile to attract investors.
                         </p>
                       </div>
                     </div>
@@ -502,8 +502,17 @@ export default function DashboardOverviewPage() {
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-10 border-2 border-dashed rounded-3xl text-muted-foreground text-sm">
-                      You haven't expressed interest in any startups yet.
+                    <div className="text-center py-12 border-2 border-dashed rounded-[2.5rem] bg-muted/10 space-y-4">
+                      <Send className="h-10 w-10 text-muted-foreground mx-auto opacity-20" />
+                      <div>
+                        <p className="text-sm font-bold text-muted-foreground">You haven't expressed interest yet.</p>
+                        <p className="text-xs text-muted-foreground mt-1 mb-6">
+                          Discover high-potential startups in the directory.
+                        </p>
+                        <ShadButton size="sm" asChild>
+                          <Link href="/founders">Explore Startups</Link>
+                        </ShadButton>
+                      </div>
                     </div>
                   )}
                 </div>
