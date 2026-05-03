@@ -1,41 +1,42 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/logo';
 import { useUser } from '@/firebase';
-import { 
-  Menu, 
-  Users,
-  Briefcase,
-  TrendingUp,
-  Handshake
-} from 'lucide-react';
+import { Menu, X, Rocket, Users, Target, GraduationCap } from 'lucide-react';
 import { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
 export function PublicHeader() {
   const { user } = useUser();
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
 
   const navLinks = [
-    { href: '/founders', label: 'Founders', icon: Users },
-    { href: '/investors', label: 'Investors', icon: TrendingUp },
-    { href: '/cofounders', label: 'Co-founders', icon: Handshake },
+    { href: '/founders', label: 'Founders', icon: Rocket },
+    { href: '/investors', label: 'Investors', icon: Target },
+    { href: '/cofounders', label: 'Co-founders', icon: Users },
+    { href: '/mentors', label: 'Mentors', icon: GraduationCap },
   ];
+
+  const isActive = (path: string) => pathname === path;
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+      <div className="container mx-auto px-4 flex h-16 items-center justify-between">
         <Logo />
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center gap-8">
+        <nav className="hidden md:flex items-center gap-6">
           {navLinks.map((link) => (
-            <Link 
-              key={link.href} 
-              href={link.href} 
-              className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors"
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`text-sm font-medium transition-colors hover:text-primary ${
+                isActive(link.href) ? 'text-primary' : 'text-muted-foreground'
+              }`}
             >
               {link.label}
             </Link>
@@ -43,60 +44,61 @@ export function PublicHeader() {
         </nav>
 
         <div className="flex items-center gap-4">
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2">
             {user ? (
-              <Button asChild variant="default" className="rounded-full px-6 h-10">
+              <Button asChild rounded-full px-6>
                 <Link href="/dashboard">Dashboard</Link>
               </Button>
             ) : (
               <>
-                <Button asChild variant="ghost" className="rounded-full px-6 h-10 font-semibold">
-                  <Link href="/login">Log in</Link>
+                <Button variant="ghost" asChild rounded-full>
+                  <Link href="/login">Login</Link>
                 </Button>
-                <Button asChild className="rounded-full px-6 h-10 font-semibold">
+                <Button asChild rounded-full px-6>
                   <Link href="/signup">Join Now</Link>
                 </Button>
               </>
             )}
           </div>
 
-          {/* Mobile Navigation */}
+          {/* Mobile Menu */}
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="md:hidden">
                 <Menu className="h-6 w-6" />
+                <span className="sr-only">Toggle menu</span>
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-[300px] sm:w-[400px]">
-              <div className="flex flex-col gap-6 mt-12">
-                <div className="px-2">
-                   <Logo />
-                </div>
-                <nav className="flex flex-col gap-2">
+              <div className="flex flex-col gap-8 py-8">
+                <Logo />
+                <nav className="flex flex-col gap-4">
                   {navLinks.map((link) => (
-                    <Link 
-                      key={link.href} 
-                      href={link.href} 
+                    <Link
+                      key={link.href}
+                      href={link.href}
                       onClick={() => setIsOpen(false)}
-                      className="flex items-center gap-4 text-lg font-bold p-4 hover:bg-muted rounded-2xl transition-all"
+                      className={`flex items-center gap-3 text-lg font-medium transition-colors hover:text-primary ${
+                        isActive(link.href) ? 'text-primary' : 'text-muted-foreground'
+                      }`}
                     >
-                      <link.icon className="h-5 w-5 text-primary" />
+                      <link.icon className="h-5 w-5" />
                       {link.label}
                     </Link>
                   ))}
                 </nav>
-                <div className="border-t pt-6 mt-4 flex flex-col gap-3 px-2">
+                <div className="flex flex-col gap-3 pt-4 border-t">
                   {user ? (
-                    <Button asChild className="w-full rounded-2xl h-12 text-base" onClick={() => setIsOpen(false)}>
-                      <Link href="/dashboard">Dashboard</Link>
+                    <Button asChild className="w-full rounded-xl" onClick={() => setIsOpen(false)}>
+                      <Link href="/dashboard">Go to Dashboard</Link>
                     </Button>
                   ) : (
                     <>
-                      <Button asChild variant="outline" className="w-full rounded-2xl h-12 text-base font-bold" onClick={() => setIsOpen(false)}>
-                        <Link href="/login">Log in</Link>
+                      <Button asChild className="w-full rounded-xl" onClick={() => setIsOpen(false)}>
+                        <Link href="/signup">Sign Up</Link>
                       </Button>
-                      <Button asChild className="w-full rounded-2xl h-12 text-base font-bold" onClick={() => setIsOpen(false)}>
-                        <Link href="/signup">Sign up</Link>
+                      <Button variant="outline" asChild className="w-full rounded-xl" onClick={() => setIsOpen(false)}>
+                        <Link href="/login">Log In</Link>
                       </Button>
                     </>
                   )}
