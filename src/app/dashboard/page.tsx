@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/progress'; // Fixed typo in previous code, using UI components correctly
-import { Button as ShadButton } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -12,29 +10,25 @@ import {
    Target, 
    Loader2, 
    CheckCircle2, 
-   Share2, 
    ExternalLink, 
-   HandCoins,
    Eye,
    Users,
-   Clock,
-   Send,
+   MessageSquare,
    Check,
    X,
    Heart,
-   MessageCircle,
-   MessageSquare,
+   Send,
+   ArrowRight,
+   Zap,
    Briefcase,
-   TrendingUp,
-   Info,
-   AlertCircle,
-   ArrowRight
+   HandCoins
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, collection, query, where, limit, orderBy, updateDoc, getDoc, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { Button as ShadButton } from '@/components/ui/button';
 
 export default function DashboardOverviewPage() {
   const { user, isUserLoading } = useUser();
@@ -204,27 +198,6 @@ export default function DashboardOverviewPage() {
     }
   };
 
-  async function openChat(pitch: any) {
-    if (!firestore || !user?.uid || isOpeningChat) return;
-    setIsOpeningChat(true);
-    try {
-      const otherUid = user.uid === pitch.fromInvestorUid ? pitch.toFounderUid : pitch.fromInvestorUid;
-      const q = query(collection(firestore, "chats"), where("participants", "array-contains", user.uid));
-      const snap = await getDocs(q);
-      let chatId = null;
-      snap.forEach(doc => {
-        if (doc.data().participants?.includes(otherUid)) chatId = doc.id;
-      });
-
-      if (chatId) router.push(`/chats/${chatId}`);
-      else toast({ title: "Chat not found", variant: "destructive" });
-    } catch (error) {
-      console.error("Error opening chat:", error);
-    } finally {
-      setIsOpeningChat(false);
-    }
-  }
-
   const completeness = (() => {
     if (!profile) return 0;
     const coreFields = ['headline', 'location', 'stage', 'skills', 'bio', 'whyBuilding', 'lookingFor', 'imageUrl'];
@@ -377,7 +350,10 @@ export default function DashboardOverviewPage() {
                   <CardDescription>Review interest requests from potential investors.</CardDescription>
                 </div>
                 {incomingPitches.some(p => p.status === 'pending') && (
-                  <Badge variant="destructive" className="animate-pulse">New Interest</Badge>
+                  <Badge variant="destructive" className="animate-pulse flex items-center gap-1.5 rounded-full px-3 h-7">
+                    <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+                    New investor interest
+                  </Badge>
                 )}
               </CardHeader>
               <CardContent>
@@ -387,35 +363,115 @@ export default function DashboardOverviewPage() {
                       const investorProfile = incomingProfiles[pitch.fromInvestorUid];
                       const investorName = investorProfile?.fullName || "Investor";
                       return (
-                        <div key={pitch.id} className="p-4 border rounded-2xl bg-muted/20 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-10 w-10">
-                              <AvatarImage src={investorProfile?.imageUrl} />
-                              <AvatarFallback>{investorName.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <Link href={`/investors/${pitch.fromInvestorUid}`} className="font-bold hover:underline">
-                                {investorName}
-                              </Link>
-                              <p className="text-xs text-muted-foreground">{investorProfile?.investorHeadline || "Investor"}</p>
+                        <div key={pitch.id} className="p-6 border rounded-[2rem] bg-muted/20 space-y-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-4">
+                              <Avatar className="h-14 w-14 border-2 border-primary/10 rounded-2xl">
+                                <AvatarImage src={investorProfile?.imageUrl} />
+                                <AvatarFallback>{investorName.charAt(0)}</AvatarFallback>
+                              </Avatar>
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <Link href={`/investors/${pitch.fromInvestorUid}`} className="text-lg font-bold hover:underline">
+                                    {investorName}
+                                  </Link>
+                                  {investorProfile?.isOpenToPitches && (
+                                    <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-primary/20 bg-primary/5 text-primary gap-1">
+                                      <Zap className="h-2.5 w-2.5 fill-primary" /> Open to Pitches
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm font-medium text-primary/80">{investorProfile?.investorHeadline || "Active Investor"}</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              {pitch.status === 'pending' ? (
+                                <>
+                                  <ShadButton 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="rounded-xl h-10 w-10 p-0" 
+                                    onClick={() => handlePitchStatus(pitch, 'rejected')}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </ShadButton>
+                                  <ShadButton 
+                                    size="sm" 
+                                    className="rounded-xl h-10 px-4 gap-2" 
+                                    onClick={() => handlePitchStatus(pitch, 'accepted')}
+                                  >
+                                    <Check className="h-4 w-4" /> Accept
+                                  </ShadButton>
+                                </>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <Badge 
+                                    variant={pitch.status === 'accepted' ? 'default' : 'secondary'}
+                                    className="rounded-full px-4"
+                                  >
+                                    {pitch.status === 'accepted' ? 'Connected' : 'Declined'}
+                                  </Badge>
+                                  {pitch.status === 'accepted' && (
+                                    <ShadButton size="sm" variant="outline" asChild className="rounded-xl gap-2 h-9 px-4">
+                                      <Link href={`/chats/${pitch.id}`}>
+                                        <MessageSquare className="h-4 w-4" /> Message
+                                      </Link>
+                                    </ShadButton>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            {pitch.status === 'pending' ? (
-                              <>
-                                <ShadButton size="sm" variant="outline" onClick={() => handlePitchStatus(pitch, 'rejected')}><X className="h-4 w-4" /></ShadButton>
-                                <ShadButton size="sm" onClick={() => handlePitchStatus(pitch, 'accepted')}><Check className="h-4 w-4" /></ShadButton>
-                              </>
-                            ) : (
-                              <Badge variant={pitch.status === 'accepted' ? 'default' : 'secondary'}>{pitch.status}</Badge>
-                            )}
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-muted-foreground/10">
+                            <div className="space-y-2">
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                                <Target className="h-3 w-3" /> Investment Focus
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {Array.isArray(investorProfile?.investmentFocus) && investorProfile.investmentFocus.length > 0 ? (
+                                  investorProfile.investmentFocus.map((f: string) => (
+                                    <Badge key={f} variant="secondary" className="text-[10px] bg-background border h-5 px-2">
+                                      {f}
+                                    </Badge>
+                                  ))
+                                ) : (
+                                  <span className="text-xs text-muted-foreground italic">Generalist</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                                  <HandCoins className="h-3 w-3" /> Ticket Size
+                                </p>
+                                <p className="text-sm font-bold">{investorProfile?.ticketSize || 'TBD'}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                                  <Briefcase className="h-3 w-3" /> Pref. Stages
+                                </p>
+                                <p className="text-xs font-medium truncate">
+                                  {Array.isArray(investorProfile?.preferredStage) ? investorProfile.preferredStage.join(', ') : 'All Stages'}
+                                </p>
+                              </div>
+                            </div>
                           </div>
+                          <p className="text-xs text-muted-foreground italic pt-2">
+                            * Review this investor before accepting to ensure a strategic fit.
+                          </p>
                         </div>
                       );
                     })
                   ) : (
-                    <div className="text-center py-10 border-2 border-dashed rounded-3xl text-muted-foreground text-sm">
-                      No investor interest yet. Complete your profile to attract investors.
+                    <div className="text-center py-12 border-2 border-dashed rounded-[2.5rem] bg-muted/10 space-y-3">
+                      <Heart className="h-10 w-10 text-muted-foreground mx-auto opacity-20" />
+                      <div>
+                        <p className="text-sm font-bold text-muted-foreground">No investor interest yet.</p>
+                        <p className="text-xs text-muted-foreground max-w-[240px] mx-auto mt-1">
+                          Complete your startup profile to attract more potential investors.
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
