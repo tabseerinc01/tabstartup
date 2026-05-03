@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -99,6 +98,8 @@ export default function FounderPublicProfilePage() {
       return;
     }
 
+    if (hasSentPitch || isSendingRequest) return;
+
     setIsSendingRequest(true);
     try {
       await addDoc(collection(firestore, 'pitches'), {
@@ -110,8 +111,8 @@ export default function FounderPublicProfilePage() {
       });
 
       toast({ 
-        title: "Interest Sent!", 
-        description: "Your interest has been sent. The founder will review your profile." 
+        title: "Success", 
+        description: "Interest sent. The founder will review your profile." 
       });
       setHasSentPitch(true);
       setInterestMessage('');
@@ -204,7 +205,7 @@ export default function FounderPublicProfilePage() {
                 {isInvestor && !isOwnProfile && (
                   <>
                     {hasSentPitch ? (
-                      <Button disabled className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base bg-muted text-muted-foreground">
+                      <Button disabled className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base bg-muted text-muted-foreground opacity-80">
                         <Heart className="h-5 w-5 fill-muted-foreground" /> Interest Sent
                       </Button>
                     ) : (
@@ -273,7 +274,6 @@ export default function FounderPublicProfilePage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
                 <div className="lg:col-span-2 space-y-12">
-                  {/* STARTUP SECTION */}
                   <section>
                     <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
                       <Rocket className="h-6 w-6 text-primary" /> Startup

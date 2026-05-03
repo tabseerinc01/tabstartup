@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -112,6 +111,8 @@ export default function StartupPublicProfilePage() {
       return;
     }
 
+    if (existingInterest || isSubmittingInterest) return;
+
     setIsSubmittingInterest(true);
     try {
       const interestData = {
@@ -137,8 +138,8 @@ export default function StartupPublicProfilePage() {
       setExistingInterest(interestData);
       
       toast({
-        title: "Interest Sent!",
-        description: "Your interest has been sent. The founder will review your profile.",
+        title: "Success",
+        description: "Interest sent. The founder will review your profile.",
       });
     } catch (error) {
       console.error("Error saving interest:", error);
@@ -195,7 +196,6 @@ export default function StartupPublicProfilePage() {
       <PublicHeader />
       <main className="flex-1 container mx-auto px-4 py-12">
         <div className="max-w-6xl mx-auto space-y-8">
-          {/* Breadcrumb / Back Navigation */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
              <Link href="/founders" className="hover:text-primary transition-colors">Directory</Link>
              <span>/</span>
@@ -203,7 +203,6 @@ export default function StartupPublicProfilePage() {
           </div>
 
           <Card className="overflow-hidden border-none shadow-2xl rounded-[3rem] bg-background">
-            {/* Professional Hero Section */}
             <div className="relative h-auto min-h-[16rem] bg-gradient-to-br from-primary/90 via-accent/90 to-primary/80">
               <div className="absolute inset-0 bg-black/10" />
               <div className="relative p-8 md:p-12 text-white">
@@ -220,12 +219,11 @@ export default function StartupPublicProfilePage() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-3 w-full md:w-auto">
-                    {/* Investor Specific Actions in Hero */}
                     {isInvestor && !isOwnStartup && (
                       <>
                         {existingInterest ? (
-                          <Button disabled className="h-14 px-8 rounded-2xl text-base gap-2 bg-white/20 text-white border-white/10 backdrop-blur-md">
-                            <Heart className="h-5 w-5 fill-white/50" /> Interest Sent
+                          <Button disabled className="h-14 px-8 rounded-2xl text-base gap-2 bg-white/20 text-white border-white/10 backdrop-blur-md opacity-80">
+                            <Heart className="h-5 w-5 fill-white" /> Interest Sent
                           </Button>
                         ) : (
                           <Button 
@@ -263,7 +261,6 @@ export default function StartupPublicProfilePage() {
             </div>
 
             <div className="px-8 md:px-12 py-10">
-              {/* Quick Info Grid */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b">
                 <div className="space-y-1">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
@@ -294,10 +291,7 @@ export default function StartupPublicProfilePage() {
               </div>
 
               <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-16">
-                {/* MAIN CONTENT AREA */}
                 <div className="lg:col-span-2 space-y-16">
-                  
-                  {/* PITCH SECTIONS */}
                   {startup.problem && (
                     <section className="space-y-4">
                       <div className="flex items-center gap-3 text-primary">
@@ -345,7 +339,6 @@ export default function StartupPublicProfilePage() {
                     )}
                   </div>
 
-                  {/* PROOF SECTION */}
                   <div className="space-y-12 pt-8 border-t">
                     {startup.traction && (
                       <section className="space-y-4">
@@ -371,11 +364,9 @@ export default function StartupPublicProfilePage() {
                   </div>
                 </div>
 
-                {/* SIDEBAR STATS & LINKS */}
                 <div className="space-y-10">
                   <section className="bg-white p-8 rounded-[2.5rem] border shadow-xl shadow-primary/5 space-y-8 sticky top-24">
                     <h3 className="text-xl font-bold flex items-center gap-2 mb-2">Venture Overview</h3>
-                    
                     <div className="space-y-6">
                       <div className="space-y-2">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Fundraising Status</p>
@@ -384,12 +375,10 @@ export default function StartupPublicProfilePage() {
                           <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-none px-3">Active</Badge>
                         </div>
                       </div>
-
                       <div className="space-y-2">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Equity Available</p>
                         <p className="text-lg font-bold text-primary">{startup.equityOffered || 'TBD'}</p>
                       </div>
-
                       <div className="pt-6 border-t space-y-4">
                          {startup.website && (
                             <Button className="w-full h-14 rounded-2xl gap-2 text-base font-bold" asChild>
@@ -407,7 +396,6 @@ export default function StartupPublicProfilePage() {
                          )}
                       </div>
                     </div>
-
                     {startup.tags && startup.tags.length > 0 && (
                       <div className="pt-6 border-t">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">Verticals & Tags</p>
