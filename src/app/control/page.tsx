@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { Loader2, ShieldAlert, Users, Rocket, Wrench, Settings, Activity, ShieldCheck, Heart } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -71,8 +71,13 @@ export default function ControlPanelPage() {
             services: svSnap.size,
             interests: pSnap.size
           });
-        } catch (error) {
-          console.error("Error fetching admin stats:", error);
+        } catch (serverError: any) {
+          // Surface rich contextual error for rules debugging
+          const permissionError = new FirestorePermissionError({
+            path: 'pitches', // This was the most likely restricted path
+            operation: 'list',
+          });
+          errorEmitter.emit('permission-error', permissionError);
         } finally {
           setIsStatsLoading(false);
         }

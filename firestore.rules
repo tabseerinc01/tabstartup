@@ -2,76 +2,87 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper: Check if user is super admin
+    function isSuperAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == 'shahmubaruk05@gmail.com' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin'
+      );
+    }
+
     // USERS: Public read for profiles, owner-only write
     match /users/{userId} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && (request.auth.uid == userId || isSuperAdmin());
     }
 
     // STARTUPS: Public read for listings, owner-only write
     match /startups/{startupId} {
-      // ✅ Anyone can view startups (public marketplace)
+      // Anyone can view startups (public marketplace)
       allow get, list: if true;
 
-      // ✅ Only owner can create/update
+      // Only owner or admin can create/update
       allow create, update: if request.auth != null 
-        && request.auth.uid == startupId;
+        && (request.auth.uid == startupId || isSuperAdmin());
 
-      // ❌ No delete for now (safe)
-      allow delete: if false;
+      // Only admin can delete
+      allow delete: if isSuperAdmin();
       
       // Subcollections for tracking
       match /views/{viewId} {
-        // Founder can read their own views. Anyone can record a view.
-        allow read: if request.auth != null && request.auth.uid == startupId;
+        // Founder or admin can read their own views. Anyone can record a view.
+        allow read: if request.auth != null && (request.auth.uid == startupId || isSuperAdmin());
         allow create: if true; 
       }
       
       match /interests/{interestId} {
-        // ✅ FIX: Allow the startup owner AND the specific investor (interestId) to read the interest record.
+        // Allow the startup owner, the specific investor, or admin to read the interest record.
         allow read: if request.auth != null && (
           request.auth.uid == startupId || 
-          request.auth.uid == interestId
+          request.auth.uid == interestId ||
+          isSuperAdmin()
         );
-        // Only the investor can express or update their own interest.
-        allow create, update: if request.auth != null && request.auth.uid == interestId;
+        // Only the investor or admin can express or update interest.
+        allow create, update: if request.auth != null && (request.auth.uid == interestId || isSuperAdmin());
       }
     }
     
-    // CHATS: Only participants can access
+    // CHATS: Only participants or admin can access
     match /chats/{chatId} {
-      // Allow read/update if the user is a participant
-      allow read, update: if request.auth != null && resource.data.participants.hasAny([request.auth.uid]);
+      // Allow read/update if the user is a participant or admin
+      allow read, update: if request.auth != null && (resource.data.participants.hasAny([request.auth.uid]) || isSuperAdmin());
       
-      // Allow create if the user is one of the participants
-      allow create: if request.auth != null && request.resource.data.participants.hasAny([request.auth.uid]);
+      // Allow create if the user is one of the participants or admin
+      allow create: if request.auth != null && (request.resource.data.participants.hasAny([request.auth.uid]) || isSuperAdmin());
       
       match /messages/{messageId} {
-        // Allow read/create if the user is a participant of the parent chat
-        allow read, create: if request.auth != null && 
-          get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]);
+        // Allow read/create if the user is a participant of the parent chat or admin
+        allow read, create: if request.auth != null && (
+          get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]) ||
+          isSuperAdmin()
+        );
       }
     }
 
     // PITCHES (Interest Requests)
     match /pitches/{pitchId} {
       allow create: if request.auth != null;
-      allow read: if request.auth != null && (
+      allow read, update: if request.auth != null && (
         request.auth.uid == resource.data.toFounderUid || 
-        request.auth.uid == resource.data.fromInvestorUid
+        request.auth.uid == resource.data.fromInvestorUid ||
+        isSuperAdmin()
       );
-      allow update: if request.auth != null && (
-        request.auth.uid == resource.data.toFounderUid || 
-        request.auth.uid == resource.data.fromInvestorUid
-      );
+      // Allow admins to list all pitches for the control panel stats
+      allow list: if isSuperAdmin();
     }
 
-    // SERVICES: Public read, provider-only write
+    // SERVICES: Public read, provider or admin write
     match /services/{serviceId} {
       allow read: if true;
       allow write: if request.auth != null && (
         request.auth.uid == request.resource.data.providerUid ||
-        request.auth.uid == resource.data.providerUid
+        request.auth.uid == resource.data.providerUid ||
+        isSuperAdmin()
       );
     }
   }
