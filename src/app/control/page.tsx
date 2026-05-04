@@ -3,7 +3,15 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { doc, getDoc, collection, getDocs, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { 
+  doc, 
+  getDoc, 
+  collection, 
+  getDocs, 
+  updateDoc, 
+  deleteDoc,
+  serverTimestamp 
+} from 'firebase/firestore';
 import { 
   Loader2, 
   ShieldAlert, 
@@ -20,9 +28,10 @@ import {
   Lock,
   ExternalLink,
   FileText,
-  MoreVertical,
   Mail,
-  UserCog
+  UserCog,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -46,6 +55,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from '@/hooks/use-toast';
 
 export default function ControlPanelPage() {
@@ -67,6 +88,11 @@ export default function ControlPanelPage() {
   
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [isUsersLoading, setIsUsersLoading] = useState(true);
+
+  const [allServices, setAllServices] = useState<any[]>([]);
+  const [isServicesLoading, setIsServicesLoading] = useState(true);
+  const [editingService, setEditingService] = useState<any>(null);
+  const [isUpdatingService, setIsUpdatingService] = useState(false);
 
   useEffect(() => {
     async function checkAuthorization() {
@@ -101,7 +127,7 @@ export default function ControlPanelPage() {
 
   useEffect(() => {
     if (isAuthorized === true && firestore) {
-      async function fetchStats() {
+      async function fetchData() {
         try {
           const [uSnap, sSnap, svSnap, pSnap] = await Promise.all([
             getDocs(collection(firestore, 'users')),
@@ -119,25 +145,29 @@ export default function ControlPanelPage() {
 
           const userList = uSnap.docs.map(d => ({ id: d.id, ...d.data() }));
           setAllUsers(userList);
+
+          const serviceList = svSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setAllServices(serviceList);
+
         } catch (serverError: any) {
           const permissionError = new FirestorePermissionError({
-            path: 'users',
+            path: 'system_records',
             operation: 'list',
           });
           errorEmitter.emit('permission-error', permissionError);
         } finally {
           setIsStatsLoading(false);
           setIsUsersLoading(false);
+          setIsServicesLoading(false);
         }
       }
-      fetchStats();
+      fetchData();
     }
   }, [isAuthorized, firestore]);
 
   const handleRoleChange = async (targetUserId: string, newRole: string) => {
     if (!firestore || !user) return;
     
-    // Restriction: Cannot change own role
     if (targetUserId === user.uid) {
       toast({
         title: "Restricted",
@@ -147,7 +177,6 @@ export default function ControlPanelPage() {
       return;
     }
 
-    // Restriction: Only super_admin can assign admin/super_admin roles
     if ((newRole === 'admin' || newRole === 'super_admin') && currentUserRole !== 'super_admin') {
       toast({
         title: "Permission Denied",
@@ -176,6 +205,43 @@ export default function ControlPanelPage() {
         description: "Could not save the new role assignment.",
         variant: "destructive"
       });
+    }
+  };
+
+  const handleDeleteService = async (serviceId: string) => {
+    if (!firestore) return;
+    if (!confirm("Are you sure you want to delete this service listing? This action cannot be undone.")) return;
+
+    try {
+      await deleteDoc(doc(firestore, 'services', serviceId));
+      setAllServices(prev => prev.filter(s => s.id !== serviceId));
+      toast({ title: "Service Deleted", description: "The listing has been removed from the marketplace." });
+    } catch (error) {
+      console.error("Delete failed:", error);
+      toast({ title: "Error", description: "Failed to delete service.", variant: "destructive" });
+    }
+  };
+
+  const handleUpdateService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!firestore || !editingService) return;
+
+    setIsUpdatingService(true);
+    try {
+      const { id, ...data } = editingService;
+      await updateDoc(doc(firestore, 'services', id), {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+
+      setAllServices(prev => prev.map(s => s.id === id ? editingService : s));
+      toast({ title: "Service Updated", description: "The listing details have been saved." });
+      setEditingService(null);
+    } catch (error) {
+      console.error("Update failed:", error);
+      toast({ title: "Error", description: "Failed to update service.", variant: "destructive" });
+    } finally {
+      setIsUpdatingService(false);
     }
   };
 
@@ -213,7 +279,10 @@ export default function ControlPanelPage() {
                   <LayoutDashboard className="h-4 w-4" /> Overview
                 </TabsTrigger>
                 <TabsTrigger value="users" className="rounded-xl px-6 gap-2">
-                  <Users className="h-4 w-4" /> User Management
+                  <Users className="h-4 w-4" /> Users
+                </TabsTrigger>
+                <TabsTrigger value="services" className="rounded-xl px-6 gap-2">
+                  <Wrench className="h-4 w-4" /> Services
                 </TabsTrigger>
               </TabsList>
 
@@ -243,80 +312,6 @@ export default function ControlPanelPage() {
                     </Card>
                   ))}
                 </div>
-
-                <div className="grid gap-8 lg:grid-cols-3">
-                  <div className="lg:col-span-2 space-y-6">
-                    <Card className="border-none shadow-sm rounded-[2.5rem] overflow-hidden bg-white">
-                      <CardHeader className="pb-2 border-b border-slate-50 px-8 py-8 flex flex-row items-center justify-between">
-                        <div>
-                          <CardTitle className="text-xl font-bold">Management Modules</CardTitle>
-                          <CardDescription>Direct action tools for platform moderation.</CardDescription>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="p-8">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {[
-                            { title: 'User Access', desc: 'Manage permissions and roles.', icon: Lock, active: true, tab: 'users' },
-                            { title: 'Listing Audit', desc: 'Approve or flag startups.', icon: Rocket },
-                            { title: 'Content Review', desc: 'Moderate service descriptions.', icon: FileText },
-                            { title: 'System Settings', desc: 'Global platform configuration.', icon: Settings },
-                          ].map((tool, i) => (
-                            <Button 
-                              key={i} 
-                              variant="outline" 
-                              className="h-24 justify-start gap-4 px-6 rounded-2xl border-slate-100 hover:border-destructive/20 hover:bg-destructive/5 transition-all text-left"
-                            >
-                              <div className="p-2 bg-slate-50 rounded-xl text-slate-400 group-hover:text-destructive group-hover:bg-destructive/10">
-                                <tool.icon className="h-6 w-6" />
-                              </div>
-                              <div>
-                                <p className="font-bold text-slate-900">{tool.title}</p>
-                                <p className="text-xs text-slate-500">{tool.desc}</p>
-                              </div>
-                            </Button>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-slate-200">
-                      <div className="space-y-2 text-center md:text-left">
-                          <h3 className="text-xl font-bold flex items-center gap-2 justify-center md:justify-start">
-                            <Activity className="h-5 w-5 text-destructive" /> Platform Health: Optimal
-                          </h3>
-                          <p className="text-slate-400 text-sm">All core services are responding within expected latency (24ms).</p>
-                      </div>
-                      <Button variant="secondary" className="rounded-full px-8 bg-white text-slate-900 hover:bg-slate-100 font-bold">
-                          System Status <ExternalLink className="ml-2 h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <Card className="border-none shadow-sm rounded-[2.5rem] overflow-hidden bg-white">
-                      <CardHeader className="bg-slate-50 py-6 px-8">
-                        <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-500">System Activity</CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-8 space-y-6">
-                        {[
-                          { event: 'Admin Session', time: 'Just now', icon: ShieldCheck, color: 'text-green-500' },
-                          { event: 'Rule Sync', time: '2 mins ago', icon: Activity, color: 'text-blue-500' },
-                          { event: 'Database Backup', time: '1 hour ago', icon: LayoutDashboard, color: 'text-slate-400' },
-                        ].map((log, i) => (
-                          <div key={i} className="flex items-center gap-4">
-                            <div className={cn("p-2 rounded-lg bg-slate-50", log.color)}>
-                              <log.icon className="h-4 w-4" />
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-xs font-bold text-slate-800">{log.event}</p>
-                              <p className="text-[10px] text-slate-400">{log.time}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  </div>
-                </div>
               </TabsContent>
 
               <TabsContent value="users" className="animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -328,11 +323,9 @@ export default function ControlPanelPage() {
                       </CardTitle>
                       <CardDescription>Manage user roles and platform access permissions.</CardDescription>
                     </div>
-                    <div className="flex items-center gap-2">
-                       <Badge variant="outline" className="h-8 rounded-lg px-3 bg-slate-50 text-slate-600 border-slate-200">
-                         {allUsers.length} Registered Members
-                       </Badge>
-                    </div>
+                    <Badge variant="outline" className="h-8 rounded-lg px-3 bg-slate-50 text-slate-600 border-slate-200">
+                      {allUsers.length} Registered Members
+                    </Badge>
                   </CardHeader>
                   <CardContent className="p-0">
                     <Table>
@@ -398,6 +391,136 @@ export default function ControlPanelPage() {
                                     <SelectItem value="super_admin" disabled={currentUserRole !== 'super_admin'}>Super Admin</SelectItem>
                                   </SelectContent>
                                 </Select>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="services" className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <Card className="border-none shadow-sm rounded-[2.5rem] overflow-hidden bg-white">
+                  <CardHeader className="px-8 py-8 border-b border-slate-50 flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-2xl font-bold flex items-center gap-3">
+                        <Wrench className="h-6 w-6 text-primary" /> Service Catalog
+                      </CardTitle>
+                      <CardDescription>Moderate startup services and professional listings.</CardDescription>
+                    </div>
+                    <Badge variant="outline" className="h-8 rounded-lg px-3 bg-slate-50 text-slate-600 border-slate-200">
+                      {allServices.length} Active Listings
+                    </Badge>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader className="bg-slate-50/50">
+                        <TableRow className="border-none hover:bg-transparent">
+                          <TableHead className="pl-8 h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Service Title</TableHead>
+                          <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Category</TableHead>
+                          <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Provider</TableHead>
+                          <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest text-right pr-8">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {isServicesLoading ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="h-32 text-center">
+                              <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-20" />
+                            </TableCell>
+                          </TableRow>
+                        ) : allServices.map((s) => (
+                          <TableRow key={s.id} className="group border-b border-slate-50 hover:bg-slate-50/30 transition-colors">
+                            <TableCell className="pl-8 py-5">
+                              <span className="font-bold text-slate-900">{s.title}</span>
+                              <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-tighter">Price: {s.price}</p>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="rounded-lg bg-slate-50 text-[10px] border-slate-200 font-bold uppercase">
+                                {s.category}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <div className="h-6 w-6 rounded bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500">
+                                  {s.providerName?.charAt(0)}
+                                </div>
+                                <span className="text-sm font-medium text-slate-600">{s.providerName}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="pr-8 text-right">
+                              <div className="flex justify-end gap-2">
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8 rounded-lg hover:bg-blue-50 hover:text-blue-600"
+                                      onClick={() => setEditingService(s)}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent className="sm:max-w-[500px]">
+                                    <DialogHeader>
+                                      <DialogTitle>Edit Service Listing</DialogTitle>
+                                      <DialogDescription>Modify the service details for the public marketplace.</DialogDescription>
+                                    </DialogHeader>
+                                    <form onSubmit={handleUpdateService} className="space-y-4 py-4">
+                                      <div className="space-y-2">
+                                        <Label htmlFor="title">Service Title</Label>
+                                        <Input 
+                                          id="title" 
+                                          value={editingService?.title || ''} 
+                                          onChange={e => setEditingService({...editingService, title: e.target.value})}
+                                        />
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                          <Label htmlFor="category">Category</Label>
+                                          <Input 
+                                            id="category" 
+                                            value={editingService?.category || ''} 
+                                            onChange={e => setEditingService({...editingService, category: e.target.value})}
+                                          />
+                                        </div>
+                                        <div className="space-y-2">
+                                          <Label htmlFor="price">Price</Label>
+                                          <Input 
+                                            id="price" 
+                                            value={editingService?.price || ''} 
+                                            onChange={e => setEditingService({...editingService, price: e.target.value})}
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="desc">Description</Label>
+                                        <Textarea 
+                                          id="desc" 
+                                          rows={4}
+                                          value={editingService?.description || ''} 
+                                          onChange={e => setEditingService({...editingService, description: e.target.value})}
+                                        />
+                                      </div>
+                                      <DialogFooter className="pt-4">
+                                        <Button type="submit" disabled={isUpdatingService}>
+                                          {isUpdatingService ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                          Save Changes
+                                        </Button>
+                                      </DialogFooter>
+                                    </form>
+                                  </DialogContent>
+                                </Dialog>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 rounded-lg hover:bg-destructive/5 hover:text-destructive"
+                                  onClick={() => handleDeleteService(s.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             </TableCell>
                           </TableRow>
