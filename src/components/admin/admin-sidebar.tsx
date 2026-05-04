@@ -14,19 +14,24 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import LinkNext from 'next/link';
+import Link from 'next/link';
 
 export function AdminSidebar() {
   const pathname = usePathname();
 
   const adminMenuItems = [
-    { href: '/control', label: 'Admin Overview', icon: LayoutDashboard },
-    { href: '/control', label: 'Manage Users', icon: Users }, // Now integrated in control page tabs
-    { href: '#', label: 'Startup Reviews', icon: Rocket, disabled: true },
-    { href: '#', label: 'Service Audit', icon: Wrench, disabled: true },
+    { href: '/control', label: 'Admin Overview', icon: LayoutDashboard, exact: true },
+    { href: '/control/users', label: 'Manage Users', icon: Users },
+    { href: '/control/startups', label: 'Startups', icon: Rocket },
+    { href: '/control/services', label: 'Services', icon: Wrench },
     { href: '#', label: 'System Logs', icon: Activity, disabled: true },
     { href: '#', label: 'Compliance', icon: FileText, disabled: true },
   ];
+
+  const isActive = (item: any) => {
+    if (item.exact) return pathname === item.href;
+    return pathname.startsWith(item.href);
+  };
 
   return (
     <aside className="hidden md:flex flex-col w-64 border-r bg-slate-950 text-slate-100 h-screen sticky top-0">
@@ -42,12 +47,12 @@ export function AdminSidebar() {
       
       <nav className="flex-1 px-4 py-6 space-y-1">
         {adminMenuItems.map((item) => (
-          <LinkNext
+          <Link
             key={item.label}
             href={item.disabled ? '#' : item.href}
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group",
-              pathname === item.href 
+              isActive(item) 
                 ? "bg-destructive text-white" 
                 : "text-slate-400 hover:bg-slate-900 hover:text-slate-100",
               item.disabled && "opacity-40 cursor-not-allowed"
@@ -56,7 +61,7 @@ export function AdminSidebar() {
             <item.icon className="h-4 w-4" />
             {item.label}
             {item.disabled && <span className="ml-auto text-[9px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-500">LOCK</span>}
-          </LinkNext>
+          </Link>
         ))}
       </nav>
 
@@ -66,10 +71,10 @@ export function AdminSidebar() {
           className="w-full justify-start gap-3 bg-transparent border-slate-700 text-slate-300 hover:bg-slate-900 hover:text-white rounded-xl" 
           asChild
         >
-          <LinkNext href="/dashboard">
+          <Link href="/dashboard">
             <ArrowLeft className="h-4 w-4" />
             Back to Dashboard
-          </LinkNext>
+          </Link>
         </Button>
       </div>
     </aside>
