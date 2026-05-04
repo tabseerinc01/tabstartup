@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -21,7 +22,8 @@ import {
    ArrowRight,
    Zap,
    Briefcase,
-   HandCoins
+   HandCoins,
+   ShieldAlert
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -29,6 +31,8 @@ import { useUser, useFirestore } from '@/firebase';
 import { doc, collection, query, where, limit, orderBy, updateDoc, getDoc, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Button as ShadButton } from '@/components/ui/button';
+
+const SUPER_ADMIN_EMAIL = "shahmubaruk05@gmail.com";
 
 export default function DashboardOverviewPage() {
   const { user, isUserLoading } = useUser();
@@ -58,6 +62,19 @@ export default function DashboardOverviewPage() {
       const profileData = profileSnap.exists() ? profileSnap.data() : null;
       setProfile(profileData);
 
+      // Super Admin Promotion Logic
+      if (user.email === SUPER_ADMIN_EMAIL && profileData && profileData.role !== 'super_admin') {
+        await updateDoc(doc(firestore, 'users', user.uid), {
+          role: 'super_admin',
+          updatedAt: serverTimestamp()
+        });
+        setProfile((prev: any) => ({ ...prev, role: 'super_admin' }));
+        toast({
+          title: "Permission Elevated",
+          description: "Your account has been promoted to Super Admin.",
+        });
+      }
+
       const startupSnap = await getDoc(doc(firestore, 'startups', user.uid));
       const startupData = startupSnap.exists() ? startupSnap.data() : null;
       setStartup(startupData);
@@ -70,7 +87,7 @@ export default function DashboardOverviewPage() {
       const chatsSnap = await getDocs(chatsQ);
       setChatsCount(chatsSnap.size);
 
-      if (profileData?.role === 'founder') {
+      if (profileData?.role === 'founder' || profileData?.role === 'super_admin') {
         try {
           const viewsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'views'));
           setViewsCount(viewsSnap.size);
@@ -106,7 +123,7 @@ export default function DashboardOverviewPage() {
         setIncomingProfiles(profilesMap);
       }
 
-      if (profileData?.role === 'investor') {
+      if (profileData?.role === 'investor' || profileData?.role === 'super_admin') {
         const sentQ = query(
           collection(firestore, 'pitches'),
           where('fromInvestorUid', '==', user.uid),
@@ -145,9 +162,10 @@ export default function DashboardOverviewPage() {
   }
 
   const displayName = profile?.fullName || user?.email?.split('@')[0] || "User";
-  const roleDisplay = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : "Founder";
-  const isFounder = profile?.role === 'founder';
-  const isInvestor = profile?.role === 'investor';
+  const roleDisplay = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1).replace('_', ' ') : "Founder";
+  const isFounder = profile?.role === 'founder' || profile?.role === 'super_admin';
+  const isInvestor = profile?.role === 'investor' || profile?.role === 'super_admin';
+  const isSuperAdmin = profile?.role === 'super_admin';
   
   const handlePitchStatus = async (pitch: any, status: 'accepted' | 'rejected') => {
     if (!firestore || !user?.uid) return;
@@ -217,6 +235,7 @@ export default function DashboardOverviewPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             Welcome, {displayName} {profile?.isVerified && <CheckCircle2 className="h-6 w-6 text-primary" />}
+            {isSuperAdmin && <ShieldAlert className="h-6 w-6 text-destructive" />}
           </h1>
           <p className="text-muted-foreground">
             {roleDisplay} • {user?.email}
@@ -233,6 +252,19 @@ export default function DashboardOverviewPage() {
           </ShadButton>
         </div>
       </div>
+
+      {isSuperAdmin && (
+        <Card className="bg-destructive/5 border-destructive/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold text-destructive flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4" /> System Administrator
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">You have full access to manage users, startups, and services across the platform.</p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {isInvestor ? (

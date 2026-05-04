@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "User": {
@@ -19,7 +20,7 @@
         },
         "role": {
           "type": "string",
-          "enum": ["founder", "mentor", "investor"]
+          "enum": ["founder", "mentor", "investor", "user", "admin", "super_admin"]
         },
         "headline": {
           "type": "string"
@@ -265,7 +266,7 @@
           "items": { "type": "string" }
         },
         "lastMessage": { "type": "string" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "updatedAt": { "type": "string", format: "date-time" }
       },
       "required": ["participants"]
     },
@@ -277,7 +278,7 @@
       "properties": {
         "startupId": { "type": "string" },
         "viewerId": { "type": "string" },
-        "timestamp": { "type": "string", "format": "date-time" }
+        "timestamp": { "type": "string", format: "date-time" }
       },
       "required": ["startupId", "timestamp"]
     },
@@ -291,7 +292,7 @@
         "investorId": { "type": "string" },
         "investorName": { "type": "string" },
         "investorHeadline": { "type": "string" },
-        "timestamp": { "type": "string", "format": "date-time" }
+        "timestamp": { "type": "string", format: "date-time" }
       },
       "required": ["startupId", "investorId", "timestamp"]
     },
@@ -303,7 +304,7 @@
       "properties": {
         "senderId": { "type": "string" },
         "text": { "type": "string" },
-        "timestamp": { "type": "string", "format": "date-time" }
+        "timestamp": { "type": "string", format: "date-time" }
       },
       "required": ["senderId", "text", "timestamp"]
     },
@@ -316,8 +317,8 @@
         "fromInvestorUid": { "type": "string" },
         "toFounderUid": { "type": "string" },
         "message": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "status": { "type": "string", enum: ["pending", "accepted", "rejected"] },
+        "createdAt": { "type": "string", format: "date-time" }
       },
       "required": ["fromInvestorUid", "toFounderUid", "message", "status", "createdAt"]
     },
@@ -333,7 +334,7 @@
         "price": { "type": "string" },
         "providerName": { "type": "string" },
         "providerUid": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", format: "date-time" }
       },
       "required": ["title", "description", "category", "price", "providerName", "providerUid", "createdAt"]
     }
