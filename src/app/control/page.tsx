@@ -18,8 +18,10 @@ import {
   Server,
   Zap,
   Lock,
-  ExternalLink
+  ExternalLink,
+  FileText
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AdminSidebar } from '@/components/admin/admin-sidebar';
