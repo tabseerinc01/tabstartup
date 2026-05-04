@@ -14,7 +14,8 @@ import {
   HandCoins,
   MessageSquare,
   GraduationCap,
-  Wrench
+  Wrench,
+  ShieldAlert
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -70,6 +71,7 @@ export function DashboardSidebar() {
   };
 
   const isFounder = profile?.role === 'founder';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
   const menuItems = [
     { href: '/dashboard', label: 'Overview', icon: Home },
@@ -86,6 +88,7 @@ export function DashboardSidebar() {
       showBadge: hasPendingPitches 
     },
     ...(isFounder ? [{ href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }] : []),
+    ...(isAdmin ? [{ href: '/control', label: 'Control Panel', icon: ShieldAlert }] : []),
     { href: '#', label: 'Settings', icon: Settings, disabled: true },
   ];
 
