@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, getDocs, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { Wrench, Loader2, Pencil, Trash2 } from 'lucide-react';
+import { Wrench, Loader2, Pencil, Trash2, Tag, HandCoins } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -59,14 +59,14 @@ export default function ServiceCatalogPage() {
 
   const handleDeleteService = async (serviceId: string) => {
     if (!firestore) return;
-    if (!confirm("Are you sure you want to delete this service listing?")) return;
+    if (!confirm("Are you sure you want to delete this service listing? This action cannot be undone.")) return;
 
     try {
       await deleteDoc(doc(firestore, 'services', serviceId));
       setAllServices(prev => prev.filter(s => s.id !== serviceId));
-      toast({ title: "Service Deleted" });
+      toast({ title: "Service Listing Removed" });
     } catch (error) {
-      toast({ title: "Error", variant: "destructive" });
+      toast({ title: "Delete Failed", variant: "destructive" });
     }
   };
 
@@ -83,142 +83,152 @@ export default function ServiceCatalogPage() {
       });
 
       setAllServices(prev => prev.map(s => s.id === id ? editingService : s));
-      toast({ title: "Service Updated" });
+      toast({ title: "Service Details Updated" });
       setEditingService(null);
     } catch (error) {
-      toast({ title: "Error", variant: "destructive" });
+      toast({ title: "Update Failed", variant: "destructive" });
     } finally {
       setIsUpdatingService(false);
     }
   };
 
   return (
-    <Card className="border-none shadow-sm rounded-[2.5rem] overflow-hidden bg-white">
-      <CardHeader className="px-8 py-8 border-b border-slate-50 flex flex-row items-center justify-between">
-        <div>
-          <CardTitle className="text-2xl font-bold flex items-center gap-3">
-            <Wrench className="h-6 w-6 text-primary" /> Service Catalog
-          </CardTitle>
-          <CardDescription>Moderate startup services and professional listings.</CardDescription>
-        </div>
-        <Badge variant="outline" className="h-8 rounded-lg px-3 bg-slate-50 text-slate-600 border-slate-200">
-          {allServices.length} Active Listings
-        </Badge>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader className="bg-slate-50/50">
-            <TableRow className="border-none hover:bg-transparent">
-              <TableHead className="pl-8 h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Service Title</TableHead>
-              <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Category</TableHead>
-              <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Provider</TableHead>
-              <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest text-right pr-8">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={4} className="h-32 text-center">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-20" />
-                </TableCell>
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 flex items-center gap-3">
+          <Wrench className="h-8 w-8 text-primary" /> Service Catalog
+        </h1>
+        <p className="text-slate-500 font-medium">Moderate professional startup services and provider listings.</p>
+      </div>
+
+      <Card className="border-none shadow-sm rounded-[2.5rem] overflow-hidden bg-white">
+        <CardHeader className="px-8 py-8 border-b border-slate-50 flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-xl">Marketplace Listings</CardTitle>
+            <CardDescription>Manage professional support offerings within the TabStartup ecosystem.</CardDescription>
+          </div>
+          <Badge variant="outline" className="h-8 rounded-lg px-3 bg-slate-50 text-slate-600 border-slate-200">
+            {allServices.length} Active Listings
+          </Badge>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-slate-50/50">
+              <TableRow className="border-none hover:bg-transparent">
+                <TableHead className="pl-8 h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Service Title</TableHead>
+                <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Category</TableHead>
+                <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Provider</TableHead>
+                <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest text-right pr-8">Actions</TableHead>
               </TableRow>
-            ) : allServices.map((s) => (
-              <TableRow key={s.id} className="group border-b border-slate-50 hover:bg-slate-50/30 transition-colors">
-                <TableCell className="pl-8 py-5">
-                  <span className="font-bold text-slate-900">{s.title}</span>
-                  <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-tighter">Price: {s.price}</p>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="rounded-lg bg-slate-50 text-[10px] border-slate-200 font-bold uppercase">
-                    {s.category}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <div className="h-6 w-6 rounded bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500">
-                      {s.providerName?.charAt(0)}
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="h-32 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-20" />
+                  </TableCell>
+                </TableRow>
+              ) : allServices.map((s) => (
+                <TableRow key={s.id} className="group border-b border-slate-50 hover:bg-slate-50/30 transition-colors">
+                  <TableCell className="pl-8 py-5">
+                    <span className="font-bold text-slate-900 block">{s.title}</span>
+                    <div className="flex items-center gap-1.5 mt-0.5 opacity-60">
+                       <HandCoins className="h-3 w-3" />
+                       <p className="text-[10px] font-bold uppercase tracking-widest">Fee: {s.price}</p>
                     </div>
-                    <span className="text-sm font-medium text-slate-600">{s.providerName}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="pr-8 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 rounded-lg hover:bg-blue-50 hover:text-blue-600"
-                          onClick={() => setEditingService(s)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[500px]">
-                        <DialogHeader>
-                          <DialogTitle>Edit Service Listing</DialogTitle>
-                          <DialogDescription>Modify the service details for the public marketplace.</DialogDescription>
-                        </DialogHeader>
-                        <form onSubmit={handleUpdateService} className="space-y-4 py-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="title">Service Title</Label>
-                            <Input 
-                              id="title" 
-                              value={editingService?.title || ''} 
-                              onChange={e => setEditingService({...editingService, title: e.target.value})}
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="rounded-lg bg-slate-50 text-[10px] border-slate-200 font-bold uppercase py-0.5 px-2">
+                      {s.category}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500">
+                        {s.providerName?.charAt(0)}
+                      </div>
+                      <span className="text-sm font-medium text-slate-600">{s.providerName}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="pr-8 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 rounded-lg hover:bg-blue-50 hover:text-blue-600"
+                            onClick={() => setEditingService(s)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[500px]">
+                          <DialogHeader>
+                            <DialogTitle>Edit Service Listing</DialogTitle>
+                            <DialogDescription>Modify the service details for the public marketplace.</DialogDescription>
+                          </DialogHeader>
+                          <form onSubmit={handleUpdateService} className="space-y-4 py-4">
                             <div className="space-y-2">
-                              <Label htmlFor="category">Category</Label>
+                              <Label htmlFor="title">Service Title</Label>
                               <Input 
-                                id="category" 
-                                value={editingService?.category || ''} 
-                                onChange={e => setEditingService({...editingService, category: e.target.value})}
+                                id="title" 
+                                value={editingService?.title || ''} 
+                                onChange={e => setEditingService({...editingService, title: e.target.value})}
                               />
                             </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="category">Category</Label>
+                                <Input 
+                                  id="category" 
+                                  value={editingService?.category || ''} 
+                                  onChange={e => setEditingService({...editingService, category: e.target.value})}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="price">Price</Label>
+                                <Input 
+                                  id="price" 
+                                  value={editingService?.price || ''} 
+                                  onChange={e => setEditingService({...editingService, price: e.target.value})}
+                                />
+                              </div>
+                            </div>
                             <div className="space-y-2">
-                              <Label htmlFor="price">Price</Label>
-                              <Input 
-                                id="price" 
-                                value={editingService?.price || ''} 
-                                onChange={e => setEditingService({...editingService, price: e.target.value})}
+                              <Label htmlFor="desc">Description</Label>
+                              <Textarea 
+                                id="desc" 
+                                rows={4}
+                                value={editingService?.description || ''} 
+                                onChange={e => setEditingService({...editingService, description: e.target.value})}
                               />
                             </div>
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="desc">Description</Label>
-                            <Textarea 
-                              id="desc" 
-                              rows={4}
-                              value={editingService?.description || ''} 
-                              onChange={e => setEditingService({...editingService, description: e.target.value})}
-                            />
-                          </div>
-                          <DialogFooter className="pt-4">
-                            <Button type="submit" disabled={isUpdatingService}>
-                              {isUpdatingService ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                              Save Changes
-                            </Button>
-                          </DialogFooter>
-                        </form>
-                      </DialogContent>
-                    </Dialog>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-8 w-8 rounded-lg hover:bg-destructive/5 hover:text-destructive"
-                      onClick={() => handleDeleteService(s.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+                            <DialogFooter className="pt-4">
+                              <Button type="submit" disabled={isUpdatingService}>
+                                {isUpdatingService ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                Save Changes
+                              </Button>
+                            </DialogFooter>
+                          </form>
+                        </DialogContent>
+                      </Dialog>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 rounded-lg hover:bg-destructive/5 hover:text-destructive"
+                        onClick={() => handleDeleteService(s.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
