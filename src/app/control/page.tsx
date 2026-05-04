@@ -31,7 +31,8 @@ import {
   Mail,
   UserCog,
   Pencil,
-  Trash2
+  Trash2,
+  Eye
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -68,6 +69,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 
 export default function ControlPanelPage() {
   const { user, isUserLoading } = useUser();
@@ -88,6 +90,9 @@ export default function ControlPanelPage() {
   
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [isUsersLoading, setIsUsersLoading] = useState(true);
+
+  const [allStartups, setAllStartups] = useState<any[]>([]);
+  const [isStartupsLoading, setIsStartupsLoading] = useState(true);
 
   const [allServices, setAllServices] = useState<any[]>([]);
   const [isServicesLoading, setIsServicesLoading] = useState(true);
@@ -146,6 +151,9 @@ export default function ControlPanelPage() {
           const userList = uSnap.docs.map(d => ({ id: d.id, ...d.data() }));
           setAllUsers(userList);
 
+          const startupList = sSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setAllStartups(startupList);
+
           const serviceList = svSnap.docs.map(d => ({ id: d.id, ...d.data() }));
           setAllServices(serviceList);
 
@@ -158,6 +166,7 @@ export default function ControlPanelPage() {
         } finally {
           setIsStatsLoading(false);
           setIsUsersLoading(false);
+          setIsStartupsLoading(false);
           setIsServicesLoading(false);
         }
       }
@@ -281,6 +290,9 @@ export default function ControlPanelPage() {
                 <TabsTrigger value="users" className="rounded-xl px-6 gap-2">
                   <Users className="h-4 w-4" /> Users
                 </TabsTrigger>
+                <TabsTrigger value="startups" className="rounded-xl px-6 gap-2">
+                  <Rocket className="h-4 w-4" /> Startups
+                </TabsTrigger>
                 <TabsTrigger value="services" className="rounded-xl px-6 gap-2">
                   <Wrench className="h-4 w-4" /> Services
                 </TabsTrigger>
@@ -395,6 +407,78 @@ export default function ControlPanelPage() {
                             </TableCell>
                           </TableRow>
                         ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="startups" className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <Card className="border-none shadow-sm rounded-[2.5rem] overflow-hidden bg-white">
+                  <CardHeader className="px-8 py-8 border-b border-slate-50 flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-2xl font-bold flex items-center gap-3">
+                        <Rocket className="h-6 w-6 text-primary" /> Venture Oversight
+                      </CardTitle>
+                      <CardDescription>Monitor active startup listings and their progress.</CardDescription>
+                    </div>
+                    <Badge variant="outline" className="h-8 rounded-lg px-3 bg-slate-50 text-slate-600 border-slate-200">
+                      {allStartups.length} Published Ventures
+                    </Badge>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader className="bg-slate-50/50">
+                        <TableRow className="border-none hover:bg-transparent">
+                          <TableHead className="pl-8 h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Startup Name</TableHead>
+                          <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Founder</TableHead>
+                          <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest">Current Stage</TableHead>
+                          <TableHead className="h-12 font-bold text-slate-500 uppercase text-[10px] tracking-widest text-right pr-8">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {isStartupsLoading ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="h-32 text-center">
+                              <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-20" />
+                            </TableCell>
+                          </TableRow>
+                        ) : allStartups.map((s) => {
+                          const founder = allUsers.find(u => u.id === s.ownerUid);
+                          return (
+                            <TableRow key={s.id} className="group border-b border-slate-50 hover:bg-slate-50/30 transition-colors">
+                              <TableCell className="pl-8 py-5">
+                                <span className="font-bold text-slate-900">{s.name}</span>
+                                <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-tighter">{s.industry}</p>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <div className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500">
+                                    {founder?.fullName?.charAt(0) || '?'}
+                                  </div>
+                                  <span className="text-sm font-medium text-slate-600">{founder?.fullName || 'Unknown Founder'}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="rounded-lg bg-slate-50 text-[10px] border-slate-200 font-bold uppercase">
+                                  {s.stage}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="pr-8 text-right">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="rounded-xl h-8 gap-2 hover:bg-primary/5 hover:text-primary"
+                                  asChild
+                                >
+                                  <Link href={`/startups/${s.ownerUid}`}>
+                                    <Eye className="h-3.5 w-3.5" /> View Listing
+                                  </Link>
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </CardContent>
