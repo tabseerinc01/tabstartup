@@ -1,9 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, getDocs, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { Wrench, Loader2, Pencil, Trash2, Tag, HandCoins, Activity } from 'lucide-react';
+import { useFirestore, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { 
+  collection, 
+  getDocs, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  addDoc,
+  serverTimestamp 
+} from 'firebase/firestore';
+import { Wrench, Loader2, Pencil, Trash2, Plus, HandCoins, Activity } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -24,38 +32,86 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from '@/hooks/use-toast';
 
+const CATEGORIES = ["Legal", "Design", "Marketing", "Consulting", "Technology", "Finance"];
+
 export default function ServiceCatalogPage() {
   const firestore = useFirestore();
+  const { user } = useUser();
   const { toast } = useToast();
   
   const [allServices, setAllServices] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingService, setEditingService] = useState<any>(null);
   const [isUpdatingService, setIsUpdatingService] = useState(false);
+  
+  const [isAddingService, setIsAddingService] = useState(false);
+  const [isCreatingService, setIsCreatingService] = useState(false);
+  const [newService, setNewService] = useState({
+    title: '',
+    description: '',
+    category: '',
+    price: ''
+  });
+
+  const fetchData = async () => {
+    if (!firestore) return;
+    setIsLoading(true);
+    try {
+      const svSnap = await getDocs(collection(firestore, 'services'));
+      setAllServices(svSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (serverError) {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: 'services',
+        operation: 'list',
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!firestore) return;
-    
-    async function fetchData() {
-      try {
-        const svSnap = await getDocs(collection(firestore, 'services'));
-        setAllServices(svSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (serverError) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'services',
-          operation: 'list',
-        }));
-      } finally {
-        setIsLoading(false);
-      }
-    }
     fetchData();
   }, [firestore]);
+
+  const handleAddService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!firestore || !user) return;
+
+    setIsCreatingService(true);
+    try {
+      const serviceData = {
+        ...newService,
+        providerName: user.displayName || user.email?.split('@')[0] || "Admin",
+        providerUid: user.uid,
+        status: "active",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      await addDoc(collection(firestore, 'services'), serviceData);
+      
+      toast({ title: "Service Created Successfully" });
+      setIsAddingService(false);
+      setNewService({ title: '', description: '', category: '', price: '' });
+      fetchData(); // Refresh list
+    } catch (error) {
+      toast({ title: "Creation Failed", variant: "destructive" });
+    } finally {
+      setIsCreatingService(false);
+    }
+  };
 
   const handleDeleteService = async (serviceId: string) => {
     if (!firestore) return;
@@ -94,11 +150,83 @@ export default function ServiceCatalogPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 flex items-center gap-3">
-          <Wrench className="h-8 w-8 text-primary" /> Service Catalog
-        </h1>
-        <p className="text-slate-500 font-medium">Moderate professional startup services and provider listings.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 flex items-center gap-3">
+            <Wrench className="h-8 w-8 text-primary" /> Service Catalog
+          </h1>
+          <p className="text-slate-500 font-medium">Moderate professional startup services and provider listings.</p>
+        </div>
+
+        <Dialog open={isAddingService} onOpenChange={setIsAddingService}>
+          <DialogTrigger asChild>
+            <Button className="rounded-xl h-11 gap-2 shadow-lg shadow-primary/20">
+              <Plus className="h-5 w-5" /> Add New Service
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Add Professional Service</DialogTitle>
+              <DialogDescription>Register a new service offering in the marketplace.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAddService} className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-title">Service Title</Label>
+                <Input 
+                  id="new-title" 
+                  required
+                  placeholder="e.g. Legal Compliance Audit"
+                  value={newService.title} 
+                  onChange={e => setNewService({...newService, title: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-category">Category</Label>
+                  <Select 
+                    value={newService.category} 
+                    onValueChange={v => setNewService({...newService, category: v})}
+                  >
+                    <SelectTrigger id="new-category">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map(cat => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-price">Price</Label>
+                  <Input 
+                    id="new-price" 
+                    placeholder="e.g. $150/hr"
+                    value={newService.price} 
+                    onChange={e => setNewService({...newService, price: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-desc">Description</Label>
+                <Textarea 
+                  id="new-desc" 
+                  required
+                  placeholder="Provide details about what the service includes..."
+                  rows={4}
+                  value={newService.description} 
+                  onChange={e => setNewService({...newService, description: e.target.value})}
+                />
+              </div>
+              <DialogFooter className="pt-4">
+                <Button type="submit" disabled={isCreatingService} className="w-full">
+                  {isCreatingService ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Publish Service
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card className="border-none shadow-sm rounded-[2.5rem] overflow-hidden bg-white">
@@ -107,7 +235,7 @@ export default function ServiceCatalogPage() {
             <CardTitle className="text-xl">Marketplace Listings</CardTitle>
             <CardDescription>Manage professional support offerings within the TabStartup ecosystem.</CardDescription>
           </div>
-          <Badge variant="outline" className="h-8 rounded-lg px-3 bg-slate-50 text-slate-600 border-slate-200">
+          <Badge variant="outline" className="h-8 rounded-lg px-3 bg-slate-50 text-slate-600 border-slate-200 font-bold">
             {allServices.length} Active Listings
           </Badge>
         </CardHeader>
@@ -142,7 +270,7 @@ export default function ServiceCatalogPage() {
                       <span className="font-bold text-slate-900 block">{s.title}</span>
                       <div className="flex items-center gap-1.5 mt-0.5 opacity-60">
                         <HandCoins className="h-3 w-3" />
-                        <p className="text-[10px] font-bold uppercase tracking-widest">Fee: {s.price}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest">Fee: {s.price || 'TBD'}</p>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -194,11 +322,19 @@ export default function ServiceCatalogPage() {
                               <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                   <Label htmlFor="category">Category</Label>
-                                  <Input 
-                                    id="category" 
+                                  <Select 
                                     value={editingService?.category || ''} 
-                                    onChange={e => setEditingService({...editingService, category: e.target.value})}
-                                  />
+                                    onValueChange={v => setEditingService({...editingService, category: v})}
+                                  >
+                                    <SelectTrigger id="category">
+                                      <SelectValue placeholder="Select category" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {CATEGORIES.map(cat => (
+                                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                                 </div>
                                 <div className="space-y-2">
                                   <Label htmlFor="price">Price</Label>
@@ -219,7 +355,7 @@ export default function ServiceCatalogPage() {
                                 />
                               </div>
                               <DialogFooter className="pt-4">
-                                <Button type="submit" disabled={isUpdatingService}>
+                                <Button type="submit" disabled={isUpdatingService} className="w-full">
                                   {isUpdatingService ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                                   Save Changes
                                 </Button>
