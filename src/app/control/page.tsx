@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { Loader2, ShieldAlert, Users, Rocket, Wrench, Settings, Activity, ShieldCheck } from 'lucide-react';
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { Loader2, ShieldAlert, Users, Rocket, Wrench, Settings, Activity, ShieldCheck, Heart } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DashboardSidebar } from '@/components/dashboard/sidebar';
@@ -15,6 +15,14 @@ export default function ControlPanelPage() {
   const firestore = useFirestore();
   const router = useRouter();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+  
+  const [stats, setStats] = useState({
+    users: 0,
+    startups: 0,
+    services: 0,
+    interests: 0
+  });
+  const [isStatsLoading, setIsStatsLoading] = useState(true);
 
   useEffect(() => {
     async function checkAuthorization() {
@@ -32,7 +40,6 @@ export default function ControlPanelPage() {
           if (role === 'admin' || role === 'super_admin') {
             setIsAuthorized(true);
           } else {
-            // Not authorized, send back to dashboard
             router.push('/dashboard');
           }
         } else {
@@ -46,6 +53,33 @@ export default function ControlPanelPage() {
 
     checkAuthorization();
   }, [user, isUserLoading, firestore, router]);
+
+  useEffect(() => {
+    if (isAuthorized === true && firestore) {
+      async function fetchStats() {
+        try {
+          const [uSnap, sSnap, svSnap, pSnap] = await Promise.all([
+            getDocs(collection(firestore, 'users')),
+            getDocs(collection(firestore, 'startups')),
+            getDocs(collection(firestore, 'services')),
+            getDocs(collection(firestore, 'pitches'))
+          ]);
+          
+          setStats({
+            users: uSnap.size,
+            startups: sSnap.size,
+            services: svSnap.size,
+            interests: pSnap.size
+          });
+        } catch (error) {
+          console.error("Error fetching admin stats:", error);
+        } finally {
+          setIsStatsLoading(false);
+        }
+      }
+      fetchStats();
+    }
+  }, [isAuthorized, firestore]);
 
   if (isUserLoading || isAuthorized === null) {
     return (
@@ -85,11 +119,13 @@ export default function ControlPanelPage() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
               <Card className="border-none shadow-sm">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">User Base</CardTitle>
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Total Users</CardTitle>
                   <Users className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">...</div>
+                  <div className="text-2xl font-bold">
+                    {isStatsLoading ? <Loader2 className="h-4 w-4 animate-spin opacity-20" /> : stats.users}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">Total registered accounts</p>
                 </CardContent>
               </Card>
@@ -99,28 +135,34 @@ export default function ControlPanelPage() {
                   <Rocket className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">...</div>
+                  <div className="text-2xl font-bold">
+                    {isStatsLoading ? <Loader2 className="h-4 w-4 animate-spin opacity-20" /> : stats.startups}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">Live listings in marketplace</p>
                 </CardContent>
               </Card>
               <Card className="border-none shadow-sm">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Marketplace</CardTitle>
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Services</CardTitle>
                   <Wrench className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">...</div>
+                  <div className="text-2xl font-bold">
+                    {isStatsLoading ? <Loader2 className="h-4 w-4 animate-spin opacity-20" /> : stats.services}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">Professional services active</p>
                 </CardContent>
               </Card>
               <Card className="border-none shadow-sm">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">System</CardTitle>
-                  <Activity className="h-4 w-4 text-green-500" />
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Interests</CardTitle>
+                  <Heart className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-green-600">Stable</div>
-                  <p className="text-xs text-muted-foreground mt-1">API & database latency normal</p>
+                  <div className="text-2xl font-bold">
+                    {isStatsLoading ? <Loader2 className="h-4 w-4 animate-spin opacity-20" /> : stats.interests}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Total connection requests</p>
                 </CardContent>
               </Card>
             </div>
@@ -191,8 +233,8 @@ export default function ControlPanelPage() {
                     <CardTitle className="text-sm">Admin Quick-Log</CardTitle>
                   </CardHeader>
                   <CardContent className="text-[10px] text-muted-foreground font-mono space-y-1">
-                    <p>[2024-10-25 14:32] Admin session initiated.</p>
-                    <p>[2024-10-25 14:30] Global rule set synchronized.</p>
+                    <p>[{new Date().toLocaleDateString()}] Admin session initiated.</p>
+                    <p>[{new Date().toLocaleDateString()}] Global rule set synchronized.</p>
                   </CardContent>
                 </Card>
               </div>
