@@ -138,10 +138,12 @@ export default function ServiceCatalogPage() {
         updatedAt: serverTimestamp()
       });
 
+      // Update local state for immediate feedback
       setAllServices(prev => prev.map(s => s.id === id ? editingService : s));
       toast({ title: "Service Details Updated" });
       setEditingService(null);
     } catch (error) {
+      console.error("Update error:", error);
       toast({ title: "Update Failed", variant: "destructive" });
     } finally {
       setIsUpdatingService(false);
@@ -294,7 +296,7 @@ export default function ServiceCatalogPage() {
                     </TableCell>
                     <TableCell className="pr-8 text-right">
                       <div className="flex justify-end gap-2">
-                        <Dialog>
+                        <Dialog open={editingService?.id === s.id} onOpenChange={(open) => !open && setEditingService(null)}>
                           <DialogTrigger asChild>
                             <Button 
                               variant="ghost" 
@@ -310,7 +312,7 @@ export default function ServiceCatalogPage() {
                               <DialogTitle>Edit Service Listing</DialogTitle>
                               <DialogDescription>Modify the service details for the public marketplace.</DialogDescription>
                             </DialogHeader>
-                            <form onSubmit={handleUpdateService} className="space-y-4 py-4">
+                            <form onSubmit={handleUpdateService} className="space-y-4 py-4 text-left">
                               <div className="space-y-2">
                                 <Label htmlFor="title">Service Title</Label>
                                 <Input 
