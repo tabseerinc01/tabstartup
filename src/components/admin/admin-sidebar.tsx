@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/navigation';
 import { usePathname } from 'next/navigation';
 import { 
   ShieldAlert, 
@@ -14,7 +13,6 @@ import {
   FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
 import LinkNext from 'next/link';
 
@@ -23,7 +21,7 @@ export function AdminSidebar() {
 
   const adminMenuItems = [
     { href: '/control', label: 'Admin Overview', icon: LayoutDashboard },
-    { href: '#', label: 'Manage Users', icon: Users, disabled: true },
+    { href: '/control', label: 'Manage Users', icon: Users }, // Now integrated in control page tabs
     { href: '#', label: 'Startup Reviews', icon: Rocket, disabled: true },
     { href: '#', label: 'Service Audit', icon: Wrench, disabled: true },
     { href: '#', label: 'System Logs', icon: Activity, disabled: true },
