@@ -5,7 +5,7 @@ import { useFirestore } from '@/firebase';
 import { collection, query, where, getDocs, limit, QueryConstraint } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
-import { Loader2, AlertCircle, ArrowLeft, Rocket, MapPin, ArrowRight } from 'lucide-react';
+import { Loader2, AlertCircle, ArrowLeft, Rocket, MapPin, ArrowRight, Globe, Users, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,6 +21,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
   
   const [pageData] = useState<any>(initialPageData);
   const [startups, setStartups] = useState<any[]>([]);
+  const [otherPages, setOtherPages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isStartupsLoading, setIsStartupsLoading] = useState(false);
 
@@ -52,6 +53,20 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
         const startupsQ = query(collection(firestore, 'startups'), ...constraints);
         const startupsSnap = await getDocs(startupsQ);
         setStartups(startupsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+        // Also fetch other SEO pages for the "Explore More" section
+        const otherPagesQ = query(
+          collection(firestore, 'seoPages'), 
+          where('status', '==', 'active'),
+          limit(6)
+        );
+        const otherSnap = await getDocs(otherPagesQ);
+        const filteredOther = otherSnap.docs
+          .map(d => d.data())
+          .filter(p => p.slug !== slug)
+          .slice(0, 4);
+        setOtherPages(filteredOther);
+
       } catch (error) {
         console.error("Error fetching dynamic startups:", error);
       } finally {
@@ -61,7 +76,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
     }
 
     fetchFilteredStartups();
-  }, [firestore, pageData]);
+  }, [firestore, pageData, slug]);
 
   if (isLoading) {
     return (
@@ -101,7 +116,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
       <main className="flex-1 container mx-auto px-4 py-12 md:py-20">
-        <div className="max-w-4xl mx-auto space-y-12">
+        <div className="max-w-4xl mx-auto space-y-12 pb-20">
           <Link 
             href="/founders" 
             className="inline-flex items-center gap-2 text-sm font-bold text-primary mb-2 hover:opacity-70 transition-opacity"
@@ -224,6 +239,60 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
                 ))}
               </div>
             )}
+          </section>
+
+          {/* Explore More Section */}
+          <section className="space-y-8 pt-12 border-t border-slate-200">
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Explore More Curated Hubs</h2>
+              <p className="text-slate-500 font-medium mt-1">Discover other niches in the TabStartup ecosystem.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {otherPages.map((page) => (
+                <Link key={page.slug} href={`/seo/${page.slug}`}>
+                  <Card className="hover:border-primary/30 transition-colors cursor-pointer group">
+                    <CardContent className="p-5 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary/5 rounded-lg text-primary">
+                          <Globe className="h-5 w-5" />
+                        </div>
+                        <span className="font-bold text-slate-700 group-hover:text-primary transition-colors">{page.h1}</span>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-primary transition-colors" />
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+
+              <Link href="/services">
+                <Card className="hover:border-primary/30 transition-colors cursor-pointer group bg-primary/5 border-primary/10">
+                  <CardContent className="p-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary text-white rounded-lg">
+                        <Wrench className="h-5 w-5" />
+                      </div>
+                      <span className="font-bold text-primary">Services Marketplace</span>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-primary" />
+                  </CardContent>
+                </Card>
+              </Link>
+
+              <Link href="/cofounders">
+                <Card className="hover:border-primary/30 transition-colors cursor-pointer group bg-accent/5 border-accent/10">
+                  <CardContent className="p-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-accent text-white rounded-lg">
+                        <Users className="h-5 w-5" />
+                      </div>
+                      <span className="font-bold text-accent">Co-founder Directory</span>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-accent" />
+                  </CardContent>
+                </Card>
+              </Link>
+            </div>
           </section>
 
           {/* Call to Action */}
