@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { 
   Rocket, 
   Loader2, 
@@ -12,7 +12,9 @@ import {
   Calendar, 
   Star, 
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  EyeOff,
+  MoreHorizontal
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,41 +27,79 @@ import {
   TableRow 
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 export default function StartupOversightPage() {
   const firestore = useFirestore();
+  const { toast } = useToast();
   
   const [allStartups, setAllStartups] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState<string | null>(null);
+
+  async function fetchData() {
+    if (!firestore) return;
+    setIsLoading(true);
+    try {
+      const startupsQ = query(collection(firestore, 'startups'), orderBy('createdAt', 'desc'));
+      const [sSnap, uSnap] = await Promise.all([
+        getDocs(startupsQ),
+        getDocs(collection(firestore, 'users'))
+      ]);
+      
+      setAllStartups(sSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setAllUsers(uSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (serverError) {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: 'startups',
+        operation: 'list',
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
-    if (!firestore) return;
-    
-    async function fetchData() {
-      setIsLoading(true);
-      try {
-        const startupsQ = query(collection(firestore, 'startups'), orderBy('createdAt', 'desc'));
-        const [sSnap, uSnap] = await Promise.all([
-          getDocs(startupsQ),
-          getDocs(collection(firestore, 'users'))
-        ]);
-        
-        setAllStartups(sSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-        setAllUsers(uSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (serverError) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'startups',
-          operation: 'list',
-        }));
-      } finally {
-        setIsLoading(false);
-      }
-    }
     fetchData();
   }, [firestore]);
+
+  const handleToggleStatus = async (startupId: string, currentStatus: string) => {
+    if (!firestore) return;
+    const newStatus = currentStatus === 'hidden' ? 'active' : 'hidden';
+    
+    setIsUpdating(startupId);
+    try {
+      await updateDoc(doc(firestore, 'startups', startupId), {
+        status: newStatus,
+        updatedAt: serverTimestamp()
+      });
+      
+      setAllStartups(prev => prev.map(s => s.id === startupId ? { ...s, status: newStatus } : s));
+      toast({
+        title: "Visibility Updated",
+        description: `Startup is now ${newStatus === 'active' ? 'visible' : 'hidden'} on the platform.`
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Update Failed",
+        description: "Could not change visibility status."
+      });
+    } finally {
+      setIsUpdating(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -116,6 +156,7 @@ export default function StartupOversightPage() {
                   const founder = allUsers.find(u => u.id === s.ownerUid);
                   const createdAtDate = s.createdAt?.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
                   const isFeatured = s.featured || false;
+                  const status = s.status || 'active';
 
                   return (
                     <TableRow key={s.id} className="group border-b border-slate-50 hover:bg-slate-50/30 transition-colors">
@@ -167,22 +208,48 @@ export default function StartupOversightPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="rounded-lg bg-green-50 text-[10px] border-green-200 text-green-700 font-bold uppercase py-0.5 px-2 flex w-fit items-center gap-1">
-                          <CheckCircle2 className="h-2.5 w-2.5" />
-                          {s.status || 'Active'}
+                        <Badge variant="outline" className={cn(
+                          "rounded-lg text-[10px] font-bold uppercase py-0.5 px-2 flex w-fit items-center gap-1",
+                          status === 'active' ? "bg-green-50 border-green-200 text-green-700" : "bg-slate-100 border-slate-200 text-slate-400"
+                        )}>
+                          {status === 'active' ? <CheckCircle2 className="h-2.5 w-2.5" /> : <EyeOff className="h-2.5 w-2.5" />}
+                          {status}
                         </Badge>
                       </TableCell>
                       <TableCell className="pr-8 text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="rounded-xl h-9 gap-2 hover:bg-primary hover:text-white transition-all font-bold text-xs shadow-none border-none"
-                          asChild
-                        >
-                          <Link href={`/startups/${s.ownerUid}`}>
-                            <Eye className="h-4 w-4" /> View listing
-                          </Link>
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="rounded-xl h-8 gap-1 font-bold text-[10px] uppercase border-slate-200"
+                            onClick={() => handleToggleStatus(s.id, status)}
+                            disabled={isUpdating === s.id}
+                          >
+                            {isUpdating === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : (
+                              status === 'active' ? <><EyeOff className="h-3 w-3" /> Hide</> : <><CheckCircle2 className="h-3 w-3" /> Activate</>
+                            )}
+                          </Button>
+
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="rounded-xl">
+                              <DropdownMenuLabel>Venture Actions</DropdownMenuLabel>
+                              <DropdownMenuItem asChild>
+                                <Link href={`/startups/${s.ownerUid}`} className="cursor-pointer flex items-center gap-2">
+                                  <Eye className="h-4 w-4" /> View Public Listing
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-destructive focus:text-destructive flex items-center gap-2 cursor-not-allowed opacity-50">
+                                <AlertCircle className="h-4 w-4" /> Flag for Review
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

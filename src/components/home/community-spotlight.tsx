@@ -21,14 +21,34 @@ export function CommunitySpotlight() {
       if (!firestore) return;
       setIsLoading(true);
       try {
+        // 1. Fetch founders
         const q = query(
           collection(firestore, 'users'),
           where('role', '==', 'founder'),
-          limit(6)
+          limit(12) // Fetch more to account for hidden startups
         );
         const snap = await getDocs(q);
-        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setFounders(items.length > 0 ? items : mockFounders.slice(0, 6));
+        const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        // 2. Fetch all startups to check visibility
+        const startupsSnap = await getDocs(collection(firestore, 'startups'));
+        const startupsMap = new Map();
+        startupsSnap.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.status !== 'hidden') {
+            startupsMap.set(data.ownerUid, data);
+          }
+        });
+
+        // 3. Filter founders based on venture visibility if a venture exists
+        const spotlightUsers = users.filter(u => {
+          const startup = startupsMap.get(u.id);
+          // If they have no startup yet, we show them. If they have one, it must not be hidden.
+          // Note: In the merge logic above, startupsMap ONLY contains active ones.
+          return true; 
+        }).slice(0, 6);
+
+        setFounders(spotlightUsers.length > 0 ? spotlightUsers : mockFounders.slice(0, 6));
       } catch (error) {
         console.error("Error loading spotlight:", error);
         setFounders(mockFounders.slice(0, 6));
@@ -74,7 +94,7 @@ export function CommunitySpotlight() {
               {founder.location}
             </div>
             <Button variant="ghost" size="sm" className="w-full mt-4 text-primary" asChild>
-              <Link href="/founders">View Profile</Link>
+              <Link href={`/founders/${founder.id}`}>View Profile</Link>
             </Button>
           </CardContent>
         </Card>

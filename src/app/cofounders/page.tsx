@@ -30,7 +30,6 @@ export default function CofoundersPage() {
         );
         const snap = await getDocs(q);
         const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setFounders(users);
 
         const uids = users.map(u => u.id);
         if (uids.length > 0) {
@@ -41,15 +40,21 @@ export default function CofoundersPage() {
 
           const sMap: Record<string, any> = {};
           for (const chunk of chunks) {
+            // Fetch startups for these users
             const sQ = query(collection(firestore, 'startups'), where('ownerUid', 'in', chunk));
             const sSnap = await getDocs(sQ);
             sSnap.docs.forEach(d => {
               const data = d.data();
-              sMap[data.ownerUid] = data;
+              // Only include if NOT hidden
+              if (data.status !== 'hidden') {
+                sMap[data.ownerUid] = data;
+              }
             });
           }
           setStartups(sMap);
         }
+        
+        setFounders(users);
       } catch (error) {
         console.error("Error loading co-founders:", error);
       } finally {

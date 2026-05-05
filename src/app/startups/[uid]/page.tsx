@@ -25,7 +25,8 @@ import {
   MessageSquare,
   ArrowRight,
   ShieldCheck,
-  FileText
+  FileText,
+  AlertCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
@@ -43,16 +44,40 @@ export default function StartupPublicProfilePage() {
   const [existingInterest, setExistingInterest] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingInterest, setIsSubmittingInterest] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
 
   useEffect(() => {
     async function loadData() {
       if (!firestore || !uid) return;
       setIsLoading(true);
       try {
+        // Load Current User Profile (to check roles for visibility)
+        let currentUserRole = 'user';
+        if (user?.uid) {
+          const userSnap = await getDoc(doc(firestore, 'users', user.uid));
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+            setCurrentUserProfile(data);
+            currentUserRole = data.role;
+          }
+        }
+
         // Load Startup Data
         const startupSnap = await getDoc(doc(firestore, 'startups', uid as string));
         if (startupSnap.exists()) {
-          setStartup({ id: startupSnap.id, ...startupSnap.data() });
+          const data = startupSnap.data();
+          
+          // Check Visibility: If hidden, only owner or admin can see
+          const isOwner = user?.uid === uid;
+          const isAdmin = currentUserRole === 'admin' || currentUserRole === 'super_admin';
+          
+          if (data.status === 'hidden' && !isOwner && !isAdmin) {
+            setIsHidden(true);
+            setIsLoading(false);
+            return;
+          }
+
+          setStartup({ id: startupSnap.id, ...data });
         }
 
         // Load Founder Data
@@ -62,12 +87,6 @@ export default function StartupPublicProfilePage() {
         }
 
         if (user?.uid) {
-          // Load Current User Profile (to check roles)
-          const userSnap = await getDoc(doc(firestore, 'users', user.uid));
-          if (userSnap.exists()) {
-            setCurrentUserProfile(userSnap.data());
-          }
-
           // Check if investor has already expressed interest in subcollection
           const interestSnap = await getDoc(doc(firestore, 'startups', uid as string, 'interests', user.uid));
           if (interestSnap.exists()) {
@@ -76,12 +95,14 @@ export default function StartupPublicProfilePage() {
         }
 
         // Record view asynchronously
-        const viewsRef = collection(firestore, 'startups', uid as string, 'views');
-        addDoc(viewsRef, {
-          startupId: uid,
-          viewerId: user?.uid || 'anonymous',
-          timestamp: serverTimestamp(),
-        });
+        if (uid !== user?.uid) {
+          const viewsRef = collection(firestore, 'startups', uid as string, 'views');
+          addDoc(viewsRef, {
+            startupId: uid,
+            viewerId: user?.uid || 'anonymous',
+            timestamp: serverTimestamp(),
+          });
+        }
       } catch (error) {
         console.error("Error loading startup data:", error);
       } finally {
@@ -155,7 +176,7 @@ export default function StartupPublicProfilePage() {
 
   const copyListingLink = () => {
     const url = window.location.href;
-    navigator.clipboard.text(url);
+    navigator.clipboard.writeText(url);
     toast({
       title: "Link Copied",
       description: "Startup listing link copied to clipboard.",
@@ -168,6 +189,29 @@ export default function StartupPublicProfilePage() {
         <PublicHeader />
         <main className="flex-1 items-center justify-center flex">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </main>
+        <PublicFooter />
+      </div>
+    );
+  }
+
+  if (isHidden) {
+    return (
+      <div className="flex min-h-screen flex-col">
+        <PublicHeader />
+        <main className="flex-1 container mx-auto px-4 flex items-center justify-center">
+          <div className="max-w-md w-full text-center space-y-6">
+            <div className="p-6 bg-amber-50 rounded-full w-24 h-24 mx-auto flex items-center justify-center border border-amber-100">
+               <AlertCircle className="h-12 w-12 text-amber-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900">Listing Unavailable</h1>
+            <p className="text-slate-500 leading-relaxed">
+              This startup listing has been temporarily hidden by administrators or the founder for review.
+            </p>
+            <Button variant="outline" className="rounded-xl h-12 px-8" asChild>
+              <Link href="/founders">Explore Other Startups</Link>
+            </Button>
+          </div>
         </main>
         <PublicFooter />
       </div>
@@ -213,6 +257,11 @@ export default function StartupPublicProfilePage() {
                       <Badge className="bg-white/20 hover:bg-white/30 text-white border-white/30 backdrop-blur-md px-4 py-1.5 rounded-xl text-sm">
                         {startup.stage} Stage
                       </Badge>
+                      {startup.status === 'hidden' && (
+                        <Badge variant="destructive" className="rounded-xl px-4 py-1.5 flex items-center gap-1.5">
+                          <EyeOff className="h-3 w-3" /> PRIVATE VIEW
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xl md:text-2xl font-medium opacity-95 line-clamp-2 leading-relaxed italic">
                       "{startup.shortDescription}"
