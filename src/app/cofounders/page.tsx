@@ -40,15 +40,16 @@ export default function CofoundersPage() {
 
           const sMap: Record<string, any> = {};
           for (const chunk of chunks) {
-            // Fetch startups for these users
-            const sQ = query(collection(firestore, 'startups'), where('ownerUid', 'in', chunk));
+            // Fetch ONLY active startups for these users
+            const sQ = query(
+              collection(firestore, 'startups'), 
+              where('ownerUid', 'in', chunk),
+              where('status', '==', 'active')
+            );
             const sSnap = await getDocs(sQ);
             sSnap.docs.forEach(d => {
               const data = d.data();
-              // Only include if NOT hidden
-              if (data.status !== 'hidden') {
-                sMap[data.ownerUid] = data;
-              }
+              sMap[data.ownerUid] = data;
             });
           }
           setStartups(sMap);

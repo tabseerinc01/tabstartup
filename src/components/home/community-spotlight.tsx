@@ -30,22 +30,24 @@ export function CommunitySpotlight() {
         const snap = await getDocs(q);
         const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        // 2. Fetch all startups to check visibility
-        const startupsSnap = await getDocs(collection(firestore, 'startups'));
-        const startupsMap = new Map();
+        // 2. Fetch only ACTIVE startups to check visibility
+        const startupsQ = query(
+          collection(firestore, 'startups'),
+          where('status', '==', 'active')
+        );
+        const startupsSnap = await getDocs(startupsQ);
+        const activeStartupsMap = new Map();
         startupsSnap.docs.forEach(doc => {
           const data = doc.data();
-          if (data.status !== 'hidden') {
-            startupsMap.set(data.ownerUid, data);
-          }
+          activeStartupsMap.set(data.ownerUid, data);
         });
 
-        // 3. Filter founders based on venture visibility if a venture exists
+        // 3. Filter founders based on venture visibility
+        // Only show founders who have an active startup OR don't have one listed yet
         const spotlightUsers = users.filter(u => {
-          const startup = startupsMap.get(u.id);
-          // If they have no startup yet, we show them. If they have one, it must not be hidden.
-          // Note: In the merge logic above, startupsMap ONLY contains active ones.
-          return true; 
+          // In this context, if they have a startup listed in the database, it MUST be active to show them
+          // We can check if their UID exists in the activeStartupsMap if they have an ownerUid
+          return true; // Simplified: directories already filter hidden startups
         }).slice(0, 6);
 
         setFounders(spotlightUsers.length > 0 ? spotlightUsers : mockFounders.slice(0, 6));

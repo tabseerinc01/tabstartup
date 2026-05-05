@@ -39,13 +39,16 @@ export default function FoundersPage() {
         const foundersSnap = await getDocs(foundersQuery);
         const foundersItems = foundersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        // 2. Load Startups (Filter out hidden ones)
-        const startupsSnap = await getDocs(collection(firestore, 'startups'));
+        // 2. Load Active Startups only
+        const startupsQ = query(
+          collection(firestore, 'startups'),
+          where('status', '==', 'active')
+        );
+        const startupsSnap = await getDocs(startupsQ);
         const startupsMap = new Map();
         startupsSnap.docs.forEach(doc => {
           const data = doc.data();
-          // Default to active if status is missing
-          if (data.ownerUid && data.status !== 'hidden') {
+          if (data.ownerUid) {
             startupsMap.set(data.ownerUid, { id: doc.id, ...data });
           }
         });
