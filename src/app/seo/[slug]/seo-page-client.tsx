@@ -58,12 +58,12 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
         const otherPagesQ = query(
           collection(firestore, 'seoPages'), 
           where('status', '==', 'active'),
-          limit(6)
+          limit(10)
         );
         const otherSnap = await getDocs(otherPagesQ);
         const filteredOther = otherSnap.docs
           .map(d => d.data())
-          .filter(p => p.slug !== slug)
+          .filter(p => p.slug !== slug && p.status === 'active')
           .slice(0, 4);
         setOtherPages(filteredOther);
 

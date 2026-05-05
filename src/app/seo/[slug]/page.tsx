@@ -14,10 +14,24 @@ async function getSEOPage(slug: string) {
         structuredQuery: {
           from: [{ collectionId: "seoPages" }],
           where: {
-            fieldFilter: {
-              field: { fieldPath: "slug" },
-              op: "EQUAL",
-              value: { stringValue: slug }
+            compositeFilter: {
+              op: "AND",
+              filters: [
+                {
+                  fieldFilter: {
+                    field: { fieldPath: "slug" },
+                    op: "EQUAL",
+                    value: { stringValue: slug }
+                  }
+                },
+                {
+                  fieldFilter: {
+                    field: { fieldPath: "status" },
+                    op: "EQUAL",
+                    value: { stringValue: "active" }
+                  }
+                }
+              ]
             }
           },
           limit: 1
