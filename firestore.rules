@@ -93,5 +93,11 @@ service cloud.firestore {
         isAdmin()
       );
     }
+
+    // SEO PAGES: Public read, admin write
+    match /seoPages/{pageId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }
