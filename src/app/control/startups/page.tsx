@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, getDocs, query, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { 
   Rocket, 
   Loader2, 
@@ -14,7 +14,8 @@ import {
   CheckCircle2,
   AlertCircle,
   EyeOff,
-  MoreHorizontal
+  MoreHorizontal,
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -95,6 +96,32 @@ export default function StartupOversightPage() {
         variant: "destructive",
         title: "Update Failed",
         description: "Could not change visibility status."
+      });
+    } finally {
+      setIsUpdating(null);
+    }
+  };
+
+  const handleDeleteStartup = async (startupId: string) => {
+    if (!firestore) return;
+    
+    if (!confirm("Are you sure you want to delete this startup? This action is permanent and cannot be undone.")) {
+      return;
+    }
+
+    setIsUpdating(startupId);
+    try {
+      await deleteDoc(doc(firestore, 'startups', startupId));
+      setAllStartups(prev => prev.filter(s => s.id !== startupId));
+      toast({
+        title: "Startup Deleted",
+        description: "The venture listing has been permanently removed."
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Delete Failed",
+        description: "Could not remove the startup listing."
       });
     } finally {
       setIsUpdating(null);
@@ -244,8 +271,11 @@ export default function StartupOversightPage() {
                                 </Link>
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-destructive focus:text-destructive flex items-center gap-2 cursor-not-allowed opacity-50">
-                                <AlertCircle className="h-4 w-4" /> Flag for Review
+                              <DropdownMenuItem 
+                                className="text-destructive focus:text-destructive flex items-center gap-2 cursor-pointer"
+                                onClick={() => handleDeleteStartup(s.id)}
+                              >
+                                <Trash2 className="h-4 w-4" /> Delete Permanently
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
