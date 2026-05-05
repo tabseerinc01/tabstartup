@@ -15,7 +15,8 @@ import {
   AlertCircle,
   EyeOff,
   MoreHorizontal,
-  Trash2
+  Trash2,
+  StarOff
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -96,6 +97,33 @@ export default function StartupOversightPage() {
         variant: "destructive",
         title: "Update Failed",
         description: "Could not change visibility status."
+      });
+    } finally {
+      setIsUpdating(null);
+    }
+  };
+
+  const handleToggleFeatured = async (startupId: string, currentFeatured: boolean) => {
+    if (!firestore) return;
+    const newFeatured = !currentFeatured;
+    
+    setIsUpdating(startupId);
+    try {
+      await updateDoc(doc(firestore, 'startups', startupId), {
+        featured: newFeatured,
+        updatedAt: serverTimestamp()
+      });
+      
+      setAllStartups(prev => prev.map(s => s.id === startupId ? { ...s, featured: newFeatured } : s));
+      toast({
+        title: newFeatured ? "Venture Featured" : "Feature Removed",
+        description: newFeatured ? "This startup is now highlighted for the community." : "Removed from featured listings."
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Toggle Failed",
+        description: "Could not update featured status."
       });
     } finally {
       setIsUpdating(null);
@@ -245,6 +273,18 @@ export default function StartupOversightPage() {
                       </TableCell>
                       <TableCell className="pr-8 text-right">
                         <div className="flex justify-end gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="rounded-xl h-8 gap-1 font-bold text-[10px] uppercase border-slate-200"
+                            onClick={() => handleToggleFeatured(s.id, isFeatured)}
+                            disabled={isUpdating === s.id}
+                          >
+                            {isUpdating === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : (
+                              isFeatured ? <><StarOff className="h-3 w-3 text-slate-400" /> Unfeature</> : <><Star className="h-3 w-3 text-amber-500" /> Feature</>
+                            )}
+                          </Button>
+
                           <Button 
                             variant="outline" 
                             size="sm" 
