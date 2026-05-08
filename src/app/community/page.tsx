@@ -1,14 +1,12 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useFirestore, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirestore, useUser, errorEmitter, FirestorePermissionError, useCollection, useMemoFirebase } from '@/firebase';
 import { 
   collection, 
   query, 
   orderBy, 
   limit, 
-  onSnapshot, 
   addDoc, 
   serverTimestamp,
   doc,
@@ -24,7 +22,6 @@ import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -37,8 +34,6 @@ import {
   Share2,
   Rocket,
   ShieldCheck,
-  TrendingUp,
-  AlertCircle,
   Hash,
   CornerDownRight
 } from 'lucide-react';
@@ -47,67 +42,39 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
 export default function CommunityFeedPage() {
-  const { user, isUserLoading } = useUser();
+  const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const [posts, setPosts] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isPosting, setIsPosting] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
   const [newPostTags, setNewPostTags] = useState('');
   const [userProfile, setUserProfile] = useState<any>(null);
   const [startupProfile, setStartupProfile] = useState<any>(null);
-  const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
 
-  // Fetch posts in real-time
-  useEffect(() => {
-    if (!firestore) return;
-
-    const postsQ = query(
+  // Real-time posts listener
+  const postsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(
       collection(firestore, 'communityPosts'),
       where('status', '==', 'active'),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
-
-    const unsubscribe = onSnapshot(postsQ, (snapshot) => {
-      const list = snapshot.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-        createdAtDate: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date()
-      }));
-      setPosts(list);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Feed error:", error);
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: 'communityPosts',
-        operation: 'list',
-      }));
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
   }, [firestore]);
+  const { data: posts, isLoading: isPostsLoading } = useCollection(postsQuery);
 
-  // Track current user's likes
-  useEffect(() => {
-    if (!firestore || !user?.uid) return;
-
-    const likesQ = query(
+  // Real-time likes listener for the current user
+  const userLikesQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(
       collection(firestore, 'communityPostLikes'),
       where('userUid', '==', user.uid)
     );
-
-    const unsubscribe = onSnapshot(likesQ, (snapshot) => {
-      const likedPostIds = new Set(snapshot.docs.map(d => d.data().postId));
-      setUserLikes(likedPostIds);
-    });
-
-    return () => unsubscribe();
-  }, [firestore, user]);
+  }, [firestore, user?.uid]);
+  const { data: likesData } = useCollection(userLikesQuery);
+  const userLikes = new Set(likesData?.map(l => l.postId) || []);
 
   // Fetch logged-in user profile
   useEffect(() => {
@@ -309,14 +276,14 @@ export default function CommunityFeedPage() {
           )}
 
           <div className="space-y-8">
-            {isLoading ? (
+            {isPostsLoading ? (
               <div className="flex py-24 justify-center">
                 <div className="flex flex-col items-center gap-4">
                   <Loader2 className="h-12 w-12 animate-spin text-primary opacity-20" />
                   <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Feed...</p>
                 </div>
               </div>
-            ) : posts.length === 0 ? (
+            ) : !posts || posts.length === 0 ? (
               <Card className="border-2 border-dashed rounded-[3rem] bg-background/50 py-24 text-center border-slate-200">
                 <CardContent className="space-y-6">
                   <div className="p-6 bg-muted/50 rounded-full w-fit mx-auto">
@@ -371,6 +338,8 @@ export default function CommunityFeedPage() {
 }
 
 function PostCard({ post, isLiked, onLike, isExpanded, onToggleComments, user, userProfile }: any) {
+  const createdAtDate = post.createdAt?.toDate ? post.createdAt.toDate() : new Date();
+
   return (
     <Card className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-50">
       <CardContent className="p-0">
@@ -388,9 +357,9 @@ function PostCard({ post, isLiked, onLike, isExpanded, onToggleComments, user, u
                   <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`} className="text-xl font-black text-slate-900 hover:text-primary transition-colors">
                     {post.authorName}
                   </Link>
-                  {post.authorType === 'admin' || post.authorType === 'super_admin' ? (
+                  {(post.authorType === 'admin' || post.authorType === 'super_admin') && (
                     <ShieldCheck className="h-4 w-4 text-primary fill-primary/10" />
-                  ) : null}
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
                   <Badge variant="secondary" className="bg-primary/5 text-primary border-none rounded-md px-2 h-5 font-bold uppercase text-[9px] tracking-widest">
@@ -403,7 +372,7 @@ function PostCard({ post, isLiked, onLike, isExpanded, onToggleComments, user, u
                   )}
                   <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tight ml-1">
                     <Clock className="h-3 w-3" />
-                    {formatDistanceToNow(post.createdAtDate, { addSuffix: true })}
+                    {formatDistanceToNow(createdAtDate, { addSuffix: true })}
                   </div>
                 </div>
               </div>
@@ -479,35 +448,19 @@ function PostCard({ post, isLiked, onLike, isExpanded, onToggleComments, user, u
 function CommentsSection({ postId, user, userProfile }: any) {
   const firestore = useFirestore();
   const { toast } = useToast();
-  const [comments, setComments] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (!firestore || !postId) return;
-
-    const commentsQ = query(
+  // Real-time comments listener for this post
+  const commentsQuery = useMemoFirebase(() => {
+    if (!firestore || !postId) return null;
+    return query(
       collection(firestore, 'communityComments'),
       where('postId', '==', postId),
       orderBy('createdAt', 'asc')
     );
-
-    const unsubscribe = onSnapshot(commentsQ, (snapshot) => {
-      const list = snapshot.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-        createdAtDate: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date()
-      }));
-      setComments(list);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Comments error:", error);
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
   }, [firestore, postId]);
+  const { data: comments, isLoading: isCommentsLoading } = useCollection(commentsQuery);
 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -548,34 +501,37 @@ function CommentsSection({ postId, user, userProfile }: any) {
   return (
     <div className="bg-slate-50/80 border-t border-slate-100 p-8 space-y-6">
       <div className="space-y-4">
-        {isLoading ? (
+        {isCommentsLoading ? (
           <div className="flex justify-center py-4">
             <Loader2 className="h-6 w-6 animate-spin text-primary/30" />
           </div>
-        ) : comments.length === 0 ? (
+        ) : !comments || comments.length === 0 ? (
           <div className="text-center py-6 text-sm text-slate-400 font-medium italic">
             No thoughts shared yet. Be the first to start the discussion!
           </div>
         ) : (
-          comments.map((comment) => (
-            <div key={comment.id} className="flex gap-3">
-              <Avatar className="h-8 w-8 shrink-0">
-                <AvatarImage src={comment.authorImage} />
-                <AvatarFallback>{comment.authorName.charAt(0)}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 space-y-1">
-                <div className="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm ring-1 ring-slate-100">
-                  <p className="text-xs font-black text-slate-900 mb-1">{comment.authorName}</p>
-                  <p className="text-sm text-slate-600 leading-relaxed font-medium">
-                    {comment.content}
+          comments.map((comment) => {
+            const commentDate = comment.createdAt?.toDate ? comment.createdAt.toDate() : new Date();
+            return (
+              <div key={comment.id} className="flex gap-3">
+                <Avatar className="h-8 w-8 shrink-0">
+                  <AvatarImage src={comment.authorImage} />
+                  <AvatarFallback>{comment.authorName.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 space-y-1">
+                  <div className="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm ring-1 ring-slate-100">
+                    <p className="text-xs font-black text-slate-900 mb-1">{comment.authorName}</p>
+                    <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                      {comment.content}
+                    </p>
+                  </div>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase px-1">
+                    {formatDistanceToNow(commentDate, { addSuffix: true })}
                   </p>
                 </div>
-                <p className="text-[9px] font-bold text-slate-400 uppercase px-1">
-                  {formatDistanceToNow(comment.createdAtDate, { addSuffix: true })}
-                </p>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
