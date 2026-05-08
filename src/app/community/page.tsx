@@ -12,11 +12,12 @@ import {
   addDoc, 
   serverTimestamp,
   doc,
-  getDoc
+  getDoc,
+  where
 } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -48,13 +49,15 @@ export default function CommunityFeedPage() {
   const [isPosting, setIsSubmitting] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [startupProfile, setStartupProfile] = useState<any>(null);
 
-  // Fetch posts in real-time
+  // Fetch posts in real-time from communityPosts collection
   useEffect(() => {
     if (!firestore) return;
 
     const postsQ = query(
-      collection(firestore, 'posts'),
+      collection(firestore, 'communityPosts'),
+      where('status', '==', 'active'),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
@@ -63,14 +66,13 @@ export default function CommunityFeedPage() {
       const list = snapshot.docs.map(d => ({
         id: d.id,
         ...d.data(),
-        // Convert Firestore timestamp to Date safely
         createdAtDate: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date()
       }));
       setPosts(list);
       setIsLoading(false);
     }, (error) => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: 'posts',
+        path: 'communityPosts',
         operation: 'list',
       }));
       setIsLoading(false);
@@ -79,20 +81,23 @@ export default function CommunityFeedPage() {
     return () => unsubscribe();
   }, [firestore]);
 
-  // Fetch logged-in user profile
+  // Fetch logged-in user profile and their startup
   useEffect(() => {
-    async function loadProfile() {
+    async function loadProfiles() {
       if (!firestore || !user?.uid) return;
       try {
-        const snap = await getDoc(doc(firestore, 'users', user.uid));
-        if (snap.exists()) {
-          setUserProfile(snap.data());
-        }
+        const [userSnap, startupSnap] = await Promise.all([
+          getDoc(doc(firestore, 'users', user.uid)),
+          getDoc(doc(firestore, 'startups', user.uid))
+        ]);
+        
+        if (userSnap.exists()) setUserProfile(userSnap.data());
+        if (startupSnap.exists()) setStartupProfile(startupSnap.data());
       } catch (e) {
-        console.warn("Could not load user profile for feed:", e);
+        console.warn("Could not load profiles for feed:", e);
       }
     }
-    loadProfile();
+    loadProfiles();
   }, [firestore, user]);
 
   const handleCreatePost = (e: React.FormEvent) => {
@@ -103,21 +108,26 @@ export default function CommunityFeedPage() {
     const postData = {
       authorUid: user.uid,
       authorName: userProfile?.fullName || user.displayName || user.email?.split('@')[0] || "Member",
-      authorRole: userProfile?.role || "user",
-      authorImageUrl: userProfile?.imageUrl || `https://picsum.photos/seed/${user.uid}/100/100`,
+      authorImage: userProfile?.imageUrl || `https://picsum.photos/seed/${user.uid}/100/100`,
+      authorType: userProfile?.role || "user",
       content: newPostContent.trim(),
+      tags: [],
+      likesCount: 0,
+      commentsCount: 0,
       createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      status: "active",
+      startupName: startupProfile?.name || null,
+      startupId: startupProfile ? user.uid : null
     };
 
-    addDoc(collection(firestore, 'posts'), postData)
+    addDoc(collection(firestore, 'communityPosts'), postData)
       .then(() => {
         setNewPostContent('');
         toast({ title: "Update Shared", description: "Your post is now visible in the community feed." });
       })
       .catch(async (error) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: 'posts',
+          path: 'communityPosts',
           operation: 'create',
           requestResourceData: postData
         }));
@@ -133,7 +143,6 @@ export default function CommunityFeedPage() {
       <main className="flex-1 container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-3xl mx-auto space-y-12">
           
-          {/* Header Section */}
           <div className="text-center space-y-4">
             <div className="flex items-center justify-center gap-2 mb-2">
                <div className="h-1 w-12 bg-primary rounded-full" />
@@ -148,7 +157,6 @@ export default function CommunityFeedPage() {
             </p>
           </div>
 
-          {/* Create Post Card */}
           {user ? (
             <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background">
               <form onSubmit={handleCreatePost}>
@@ -212,7 +220,6 @@ export default function CommunityFeedPage() {
             </Card>
           )}
 
-          {/* Feed Posts List */}
           <div className="space-y-8">
             {isLoading ? (
               <div className="flex py-24 justify-center">
@@ -240,25 +247,30 @@ export default function CommunityFeedPage() {
                     <div className="p-8 space-y-6">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-4">
-                          <Link href={post.authorRole === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}>
+                          <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}>
                             <Avatar className="h-14 w-14 border-4 border-slate-50 group-hover:border-primary/10 transition-colors shadow-sm">
-                              <AvatarImage src={post.authorImageUrl} />
+                              <AvatarImage src={post.authorImage} />
                               <AvatarFallback className="font-black text-xl">{post.authorName.charAt(0)}</AvatarFallback>
                             </Avatar>
                           </Link>
                           <div>
                             <div className="flex items-center gap-2">
-                              <Link href={post.authorRole === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`} className="text-xl font-black text-slate-900 hover:text-primary transition-colors">
+                              <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`} className="text-xl font-black text-slate-900 hover:text-primary transition-colors">
                                 {post.authorName}
                               </Link>
-                              {post.authorRole === 'admin' || post.authorRole === 'super_admin' ? (
+                              {post.authorType === 'admin' || post.authorType === 'super_admin' ? (
                                 <ShieldCheck className="h-4 w-4 text-primary fill-primary/10" />
                               ) : null}
                             </div>
                             <div className="flex items-center gap-3">
                               <Badge variant="secondary" className="bg-primary/5 text-primary border-none rounded-md px-2 h-5 font-bold uppercase text-[9px] tracking-widest">
-                                {post.authorRole}
+                                {post.authorType}
                               </Badge>
+                              {post.startupName && (
+                                <Badge variant="outline" className="border-primary/20 text-primary h-5 text-[9px] font-bold">
+                                  {post.startupName}
+                                </Badge>
+                              )}
                               <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
                                 <Clock className="h-3 w-3" />
                                 {formatDistanceToNow(post.createdAtDate, { addSuffix: true })}
@@ -280,16 +292,20 @@ export default function CommunityFeedPage() {
                       <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
                          <div className="flex items-center gap-4">
                             <Button variant="ghost" size="sm" className="rounded-full gap-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 px-4">
-                               <Heart className="h-4 w-4" />
-                               <span className="text-xs font-bold uppercase tracking-widest">Appreciate</span>
+                               <Heart className={`h-4 w-4 ${post.likesCount > 0 ? 'fill-rose-600 text-rose-600' : ''}`} />
+                               <span className="text-xs font-bold uppercase tracking-widest">
+                                 {post.likesCount > 0 ? post.likesCount : ''} Appreciate
+                               </span>
                             </Button>
                             <Button variant="ghost" size="sm" className="rounded-full gap-2 text-slate-400 hover:text-primary hover:bg-primary/5 px-4">
                                <MessageSquare className="h-4 w-4" />
-                               <span className="text-xs font-bold uppercase tracking-widest">Discuss</span>
+                               <span className="text-xs font-bold uppercase tracking-widest">
+                                 {post.commentsCount > 0 ? post.commentsCount : ''} Discuss
+                               </span>
                             </Button>
                          </div>
                          <Link 
-                          href={post.authorRole === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}
+                          href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}
                           className="text-[10px] font-black text-primary uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity"
                          >
                             View Profile
@@ -302,7 +318,6 @@ export default function CommunityFeedPage() {
             )}
           </div>
 
-          {/* Bottom Conversion Section */}
           <section className="bg-slate-900 rounded-[3rem] p-12 text-center space-y-8 shadow-2xl relative overflow-hidden">
             <div className="space-y-4 relative z-10">
               <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">Support local founders</h2>

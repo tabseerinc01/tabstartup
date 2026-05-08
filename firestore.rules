@@ -25,47 +25,40 @@ service cloud.firestore {
       allow write: if request.auth != null && (request.auth.uid == userId || isSuperAdmin());
     }
 
+    // COMMUNITY POSTS: Public read, authenticated member write
+    match /communityPosts/{postId} {
+      allow read: if resource == null || resource.data.status == 'active';
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (request.auth.uid == resource.data.authorUid || isAdmin());
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.authorUid || isAdmin());
+    }
+    
     // STARTUPS: Public read for listings, owner-only write
     match /startups/{startupId} {
-      // Anyone can view startups (public marketplace)
       allow get, list: if true;
-
-      // Only owner or admin can create/update
-      allow create, update: if request.auth != null 
-        && (request.auth.uid == startupId || isAdmin());
-
-      // Only admin can delete
+      allow create, update: if request.auth != null && (request.auth.uid == startupId || isAdmin());
       allow delete: if isAdmin();
       
-      // Subcollections for tracking
       match /views/{viewId} {
-        // Founder or admin can read their own views. Anyone can record a view.
         allow read: if request.auth != null && (request.auth.uid == startupId || isAdmin());
         allow create: if true; 
       }
       
       match /interests/{interestId} {
-        // Allow the startup owner, the specific investor, or admin to read the interest record.
         allow read: if request.auth != null && (
           request.auth.uid == startupId || 
           request.auth.uid == interestId ||
           isAdmin()
         );
-        // Only the investor or admin can express or update interest.
         allow create, update: if request.auth != null && (request.auth.uid == interestId || isAdmin());
       }
     }
-    
-    // CHATS: Only participants or admin can access
+
     match /chats/{chatId} {
-      // Allow read/update if the user is a participant or admin
       allow read, update: if request.auth != null && (resource.data.participants.hasAny([request.auth.uid]) || isAdmin());
-      
-      // Allow create if the user is one of the participants or admin
       allow create: if request.auth != null && (request.resource.data.participants.hasAny([request.auth.uid]) || isAdmin());
       
       match /messages/{messageId} {
-        // Allow read/create if the user is a participant of the parent chat or admin
         allow read, create: if request.auth != null && (
           get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]) ||
           isAdmin()
@@ -73,7 +66,6 @@ service cloud.firestore {
       }
     }
 
-    // PITCHES (Interest Requests)
     match /pitches/{pitchId} {
       allow create: if request.auth != null;
       allow read, update: if request.auth != null && (
@@ -81,11 +73,9 @@ service cloud.firestore {
         request.auth.uid == resource.data.fromInvestorUid ||
         isAdmin()
       );
-      // Allow admins to list all pitches for the control panel stats
       allow list: if isAdmin();
     }
 
-    // SERVICES: Public read, provider or admin write
     match /services/{serviceId} {
       allow read: if true;
       allow write: if request.auth != null && (
@@ -95,17 +85,9 @@ service cloud.firestore {
       );
     }
 
-    // SEO PAGES: Public read, admin write
     match /seoPages/{pageId} {
       allow read: if true;
       allow write: if isAdmin();
-    }
-
-    // POSTS: Public read, authenticated member write
-    match /posts/{postId} {
-      allow read: if true;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && (request.auth.uid == resource.data.authorUid || isAdmin());
     }
   }
 }

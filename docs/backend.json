@@ -173,210 +173,26 @@
       },
       "required": ["uid", "fullName", "email", "role", "createdAt", "updatedAt"]
     },
-    "Startup": {
+    "CommunityPost": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Startup",
-      "type": "object",
-      "description": "Represents a startup listing created by a Founder.",
-      "properties": {
-        "ownerUid": {
-          "type": "string",
-          "description": "The UID of the founder who owns this startup."
-        },
-        "name": {
-          "type": "string"
-        },
-        "shortDescription": {
-          "type": "string"
-        },
-        "industry": {
-          "type": "string"
-        },
-        "stage": {
-          "type": "string"
-        },
-        "fundingNeed": {
-          "type": "string"
-        },
-        "location": {
-          "type": "string"
-        },
-        "website": {
-          "type": "string"
-        },
-        "tags": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "pitchDeckUrl": {
-            "type": "string",
-            "description": "Link to the pitch deck document."
-        },
-        "equityOffered": {
-            "type": "string",
-            "description": "Percentage of equity offered for the target funding."
-        },
-        "fundraisingStatus": {
-            "type": "string",
-            "enum": ["Open", "Closed", "Paused"]
-        },
-        "problem": {
-          "type": "string",
-          "description": "The problem the startup is solving."
-        },
-        "solution": {
-          "type": "string",
-          "description": "The solution the startup provides."
-        },
-        "targetMarket": {
-          "type": "string",
-          "description": "The target audience or customers."
-        },
-        "businessModel": {
-          "type": "string",
-          "description": "How the startup plans to make money."
-        },
-        "traction": {
-          "type": "string",
-          "description": "Key metrics or proof of growth."
-        },
-        "teamInfo": {
-          "type": "string",
-          "description": "Information about the founding team."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": ["ownerUid", "name", "createdAt", "updatedAt"]
-    },
-    "Chat": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Chat",
-      "type": "object",
-      "description": "A conversation between two users.",
-      "properties": {
-        "participants": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "lastMessage": { "type": "string" },
-        "updatedAt": { "type": "string", format: "date-time" }
-      },
-      "required": ["participants"]
-    },
-    "View": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "View",
-      "type": "object",
-      "description": "Tracks a single view of a startup profile.",
-      "properties": {
-        "startupId": { "type": "string" },
-        "viewerId": { "type": "string" },
-        "timestamp": { "type": "string", format: "date-time" }
-      },
-      "required": ["startupId", "timestamp"]
-    },
-    "Interest": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Interest",
-      "type": "object",
-      "description": "Tracks investor interest in a startup.",
-      "properties": {
-        "startupId": { "type": "string" },
-        "investorId": { "type": "string" },
-        "investorName": { "type": "string" },
-        "investorHeadline": { "type": "string" },
-        "timestamp": { "type": "string", format: "date-time" }
-      },
-      "required": ["startupId", "investorId", "timestamp"]
-    },
-    "Message": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Message",
-      "type": "object",
-      "description": "A private message within a chat.",
-      "properties": {
-        "senderId": { "type": "string" },
-        "text": { "type": "string" },
-        "timestamp": { "type": "string", format: "date-time" }
-      },
-      "required": ["senderId", "text", "timestamp"]
-    },
-    "Pitch": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Pitch",
-      "type": "object",
-      "description": "A pitch sent from an investor to a founder.",
-      "properties": {
-        "fromInvestorUid": { "type": "string" },
-        "toFounderUid": { "type": "string" },
-        "message": { "type": "string" },
-        "status": { "type": "string", enum: ["pending", "accepted", "rejected"] },
-        "createdAt": { "type": "string", format: "date-time" }
-      },
-      "required": ["fromInvestorUid", "toFounderUid", "message", "status", "createdAt"]
-    },
-    "Service": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Service",
-      "type": "object",
-      "description": "Represents a professional service offered to startups.",
-      "properties": {
-        "title": { "type": "string" },
-        "description": { "type": "string" },
-        "category": { "type": "string" },
-        "price": { "type": "string" },
-        "providerName": { "type": "string" },
-        "providerUid": { "type": "string" },
-        "createdAt": { "type": "string", format: "date-time" }
-      },
-      "required": ["title", "description", "category", "price", "providerName", "providerUid", "createdAt"]
-    },
-    "SEOPage": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "SEOPage",
-      "description": "Represents a dynamic SEO-optimized landing page controlled via the system.",
-      "type": "object",
-      "properties": {
-        "slug": { "type": "string" },
-        "type": { "type": "string", "enum": ["startup", "cofounder", "investor", "service"] },
-        "title": { "type": "string" },
-        "metaDescription": { "type": "string" },
-        "h1": { "type": "string" },
-        "intro": { "type": "string" },
-        "filters": {
-          "type": "object",
-          "properties": {
-            "industry": { "type": "string" },
-            "location": { "type": "string" },
-            "stage": { "type": "string" }
-          }
-        },
-        "createdAt": { "type": "string", format: "date-time" },
-        "status": { "type": "string", enum: ["active", "inactive"] }
-      },
-      "required": ["slug", "type", "title", "h1", "createdAt", "status"]
-    },
-    "Post": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Post",
+      "title": "CommunityPost",
       "type": "object",
       "description": "A post in the startup community feed.",
       "properties": {
         "authorUid": { "type": "string" },
         "authorName": { "type": "string" },
-        "authorRole": { "type": "string" },
+        "authorImage": { "type": "string" },
+        "authorType": { "type": "string", "enum": ["founder", "investor", "mentor", "user"] },
         "content": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "likesCount": { "type": "number", "default": 0 },
+        "commentsCount": { "type": "number", "default": 0 },
         "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "status": { "type": "string", "default": "active" },
+        "startupName": { "type": "string" },
+        "startupId": { "type": "string" }
       },
-      "required": ["authorUid", "authorName", "content", "createdAt"]
+      "required": ["authorUid", "authorName", "authorType", "content", "createdAt", "status"]
     }
   },
   "auth": {
@@ -393,59 +209,11 @@
         }
       },
       {
-        "path": "/startups/{startupId}",
+        "path": "/communityPosts/{postId}",
         "definition": {
-          "entityName": "Startup",
-          "schema": { "$ref": "#/backend/entities/Startup" },
-          "description": "Startup listings."
-        }
-      },
-      {
-        "path": "/chats/{chatId}",
-        "definition": {
-          "entityName": "Chat",
-          "schema": { "$ref": "#/backend/entities/Chat" },
-          "description": "Conversations between users."
-        }
-      },
-      {
-        "path": "/chats/{chatId}/messages/{messageId}",
-        "definition": {
-          "entityName": "Message",
-          "schema": { "$ref": "#/backend/entities/Message" },
-          "description": "Messages within a chat."
-        }
-      },
-      {
-        "path": "/pitches/{pitchId}",
-        "definition": {
-          "entityName": "Pitch",
-          "schema": { "$ref": "#/backend/entities/Pitch" },
-          "description": "Investment interest requests."
-        }
-      },
-      {
-        "path": "/services/{serviceId}",
-        "definition": {
-          "entityName": "Service",
-          "schema": { "$ref": "#/backend/entities/Service" },
-          "description": "Professional services directory."
-        }
-      },
-      {
-        "path": "/seoPages/{pageId}",
-        "definition": {
-          "entityName": "SEOPage",
-          "schema": { "$ref": "#/backend/entities/SEOPage" },
-          "description": "Dynamic SEO landing pages."
-        }
-      },
-      {
-        "path": "/posts/{postId}",
-        "definition": {
-          "entityName": "Post",
-          "schema": { "$ref": "#/backend/entities/Post" },
-          "description": "Community feed posts."
+          "entityName": "CommunityPost",
+          "schema": { "$ref": "#/backend/entities/CommunityPost" },
+          "description": "Startup community feed posts."
         }
       }
     ]
