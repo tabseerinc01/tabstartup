@@ -58,6 +58,7 @@ export default function CommunityFeedPage() {
   useEffect(() => {
     if (!firestore) return;
 
+    // Fetch active posts, ordered by creation date
     const postsQ = query(
       collection(firestore, 'communityPosts'),
       where('status', '==', 'active'),
@@ -69,11 +70,13 @@ export default function CommunityFeedPage() {
       const list = snapshot.docs.map(d => ({
         id: d.id,
         ...d.data(),
+        // Handle potentially null server timestamps during local updates
         createdAtDate: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date()
       }));
       setPosts(list);
       setIsLoading(false);
     }, (error) => {
+      console.error("Feed error:", error);
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: 'communityPosts',
         operation: 'list',
@@ -84,7 +87,7 @@ export default function CommunityFeedPage() {
     return () => unsubscribe();
   }, [firestore]);
 
-  // Fetch logged-in user profile and their startup
+  // Fetch logged-in user profile and their startup for metadata automation
   useEffect(() => {
     async function loadProfiles() {
       if (!firestore || !user?.uid) return;
@@ -160,19 +163,19 @@ export default function CommunityFeedPage() {
           <div className="text-center space-y-4">
             <div className="flex items-center justify-center gap-2 mb-2">
                <div className="h-1 w-12 bg-primary rounded-full" />
-               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Community Hub</span>
+               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Ecosystem Social</span>
                <div className="h-1 w-12 bg-primary rounded-full" />
             </div>
             <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-slate-900 leading-tight">
               Startup <span className="text-primary">Community Feed</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto font-medium leading-relaxed">
-              Share updates, ideas, questions, and startup progress with the TabStartup ecosystem.
+              Real-time updates, advice, and insights from the builders and capital partners in the TabStartup network.
             </p>
           </div>
 
           {user ? (
-            <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background">
+            <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
               <form onSubmit={handleCreatePost}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-3">
@@ -269,7 +272,7 @@ export default function CommunityFeedPage() {
               </Card>
             ) : (
               posts.map((post) => (
-                <Card key={post.id} className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background">
+                <Card key={post.id} className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-50">
                   <CardContent className="p-0">
                     <div className="p-8 space-y-6">
                       <div className="flex items-start justify-between">
@@ -289,16 +292,16 @@ export default function CommunityFeedPage() {
                                 <ShieldCheck className="h-4 w-4 text-primary fill-primary/10" />
                               ) : null}
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
                               <Badge variant="secondary" className="bg-primary/5 text-primary border-none rounded-md px-2 h-5 font-bold uppercase text-[9px] tracking-widest">
                                 {post.authorType}
                               </Badge>
                               {post.startupName && (
-                                <Badge variant="outline" className="border-primary/20 text-primary h-5 text-[9px] font-bold">
-                                  {post.startupName}
+                                <Badge variant="outline" className="border-primary/20 text-primary h-5 text-[9px] font-bold flex items-center gap-1">
+                                  <Rocket className="h-2 w-2" /> {post.startupName}
                                 </Badge>
                               )}
-                              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tight ml-1">
                                 <Clock className="h-3 w-3" />
                                 {formatDistanceToNow(post.createdAtDate, { addSuffix: true })}
                               </div>
@@ -359,7 +362,7 @@ export default function CommunityFeedPage() {
             <div className="space-y-4 relative z-10">
               <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">Support local founders</h2>
               <p className="text-slate-400 max-w-2xl mx-auto text-lg font-medium leading-relaxed">
-                Connect with the builders and capital partners shaping the future of Bangladesh.
+                Connect with the builders and capital partners shaping the future of the emerging ecosystem.
               </p>
             </div>
             
