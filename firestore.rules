@@ -5,18 +5,16 @@ service cloud.firestore {
 
     // Helper: Check if user is super admin
     function isSuperAdmin() {
-      return request.auth != null && (
-        request.auth.token.email == 'shahmubaruk05@gmail.com' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin'
-      );
+      return request.auth != null &&
+        request.auth.token.email == 'shahmubaruk05@gmail.com';
     }
 
     // Helper: Check if user is admin or super admin
     function isAdmin() {
-      return request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        isSuperAdmin()
-      );
+      return request.auth != null &&
+        (
+          request.auth.token.email == 'shahmubaruk05@gmail.com'
+        );
     }
 
     // USERS: Public read for profiles, owner-only write
