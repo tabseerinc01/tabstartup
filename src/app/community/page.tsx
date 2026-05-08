@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -20,6 +19,8 @@ import { PublicFooter } from '@/components/public/footer';
 import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -33,7 +34,8 @@ import {
   Rocket,
   ShieldCheck,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  Hash
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -46,8 +48,9 @@ export default function CommunityFeedPage() {
 
   const [posts, setPosts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isPosting, setIsSubmitting] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
+  const [newPostTags, setNewPostTags] = useState('');
   const [userProfile, setUserProfile] = useState<any>(null);
   const [startupProfile, setStartupProfile] = useState<any>(null);
 
@@ -104,14 +107,21 @@ export default function CommunityFeedPage() {
     e.preventDefault();
     if (!firestore || !user || !newPostContent.trim() || isPosting) return;
 
-    setIsSubmitting(true);
+    setIsPosting(true);
+    
+    // Process tags
+    const tags = newPostTags
+      .split(',')
+      .map(tag => tag.trim().replace(/^#/, ''))
+      .filter(tag => tag.length > 0);
+
     const postData = {
       authorUid: user.uid,
       authorName: userProfile?.fullName || user.displayName || user.email?.split('@')[0] || "Member",
       authorImage: userProfile?.imageUrl || `https://picsum.photos/seed/${user.uid}/100/100`,
       authorType: userProfile?.role || "user",
       content: newPostContent.trim(),
-      tags: [],
+      tags: tags,
       likesCount: 0,
       commentsCount: 0,
       createdAt: serverTimestamp(),
@@ -123,7 +133,11 @@ export default function CommunityFeedPage() {
     addDoc(collection(firestore, 'communityPosts'), postData)
       .then(() => {
         setNewPostContent('');
-        toast({ title: "Update Shared", description: "Your post is now visible in the community feed." });
+        setNewPostTags('');
+        toast({ 
+          title: "Update Shared", 
+          description: "Your post is now live in the community feed." 
+        });
       })
       .catch(async (error) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -133,7 +147,7 @@ export default function CommunityFeedPage() {
         }));
       })
       .finally(() => {
-        setIsSubmitting(false);
+        setIsPosting(false);
       });
   };
 
@@ -172,23 +186,36 @@ export default function CommunityFeedPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="pt-2">
+                <CardContent className="pt-2 space-y-4">
                   <Textarea 
-                    placeholder="What's happening in your startup journey?" 
-                    className="min-h-[120px] rounded-2xl border-slate-100 bg-slate-50 focus-visible:ring-primary/20 text-lg resize-none p-4"
+                    placeholder="Share your startup journey, ask questions, or post updates..." 
+                    className="min-h-[140px] rounded-2xl border-slate-100 bg-slate-50 focus-visible:ring-primary/20 text-lg resize-none p-4"
                     value={newPostContent}
                     onChange={(e) => setNewPostContent(e.target.value)}
+                    required
                   />
+                  <div className="relative group">
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-primary transition-colors" />
+                    <Input 
+                      placeholder="Add tags (e.g. fundraising, advice, milestone) separated by commas"
+                      className="pl-9 rounded-xl border-slate-100 bg-slate-50/50 focus-visible:ring-primary/20 text-sm h-11"
+                      value={newPostTags}
+                      onChange={(e) => setNewPostTags(e.target.value)}
+                    />
+                  </div>
                 </CardContent>
                 <CardFooter className="flex justify-between items-center bg-slate-50/50 py-4 border-t border-slate-50">
-                   <div className="flex items-center gap-2 text-slate-400">
+                   <div className="hidden sm:flex items-center gap-2 text-slate-400">
                       <Button type="button" variant="ghost" size="sm" className="rounded-full gap-2 text-xs font-bold hover:bg-slate-100">
-                        <Rocket className="h-4 w-4" /> Share Milestones
+                        <Rocket className="h-4 w-4" /> Milestone
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" className="rounded-full gap-2 text-xs font-bold hover:bg-slate-100">
+                        <Users className="h-4 w-4" /> Question
                       </Button>
                    </div>
                    <Button 
                     type="submit" 
-                    className="rounded-full px-8 font-bold shadow-lg shadow-primary/20 gap-2 h-11"
+                    className="w-full sm:w-auto rounded-full px-8 font-bold shadow-lg shadow-primary/20 gap-2 h-11"
                     disabled={isPosting || !newPostContent.trim()}
                    >
                      {isPosting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -288,6 +315,16 @@ export default function CommunityFeedPage() {
                           {post.content}
                         </p>
                       </div>
+
+                      {post.tags && post.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          {post.tags.map((tag: string) => (
+                            <Badge key={tag} variant="outline" className="rounded-lg text-[10px] border-slate-100 bg-slate-50 text-slate-400 font-bold px-3 py-0.5">
+                              #{tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
 
                       <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
                          <div className="flex items-center gap-4">
