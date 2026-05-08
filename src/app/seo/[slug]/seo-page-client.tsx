@@ -2,10 +2,32 @@
 
 import { useState, useEffect } from 'react';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, limit, QueryConstraint } from 'firebase/firestore';
+import { 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  limit, 
+  QueryConstraint,
+  getCountFromServer 
+} from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
-import { Loader2, AlertCircle, ArrowLeft, Rocket, MapPin, ArrowRight, Globe, Users, Wrench } from 'lucide-react';
+import { 
+  Loader2, 
+  AlertCircle, 
+  ArrowLeft, 
+  Rocket, 
+  MapPin, 
+  ArrowRight, 
+  Globe, 
+  Users, 
+  Wrench,
+  TrendingUp,
+  ShieldCheck,
+  Handshake,
+  UserPlus
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,9 +46,16 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
   const [otherPages, setOtherPages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isStartupsLoading, setIsStartupsLoading] = useState(false);
+  
+  const [stats, setStats] = useState({
+    startups: 0,
+    founders: 0,
+    investors: 0,
+    cofounderOpp: 0
+  });
 
   useEffect(() => {
-    async function fetchFilteredStartups() {
+    async function fetchPageContent() {
       if (!firestore || !pageData || pageData.status !== 'active') {
         setIsLoading(false);
         return;
@@ -34,12 +63,12 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
 
       setIsStartupsLoading(true);
       try {
+        // 1. Fetch filtered startups
         const constraints: QueryConstraint[] = [
           where('status', '==', 'active'),
           limit(20)
         ];
 
-        // Dynamically apply filters from the document provided by the server
         if (pageData.filters?.industry) {
           constraints.push(where('industry', '==', pageData.filters.industry));
         }
@@ -54,7 +83,22 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
         const startupsSnap = await getDocs(startupsQ);
         setStartups(startupsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-        // Also fetch other SEO pages for the "Explore More" section
+        // 2. Fetch ecosystem stats
+        const [sCount, fCount, iCount, cCount] = await Promise.all([
+          getCountFromServer(query(collection(firestore, 'startups'), where('status', '==', 'active'))),
+          getCountFromServer(query(collection(firestore, 'users'), where('role', '==', 'founder'))),
+          getCountFromServer(query(collection(firestore, 'users'), where('role', '==', 'investor'))),
+          getCountFromServer(query(collection(firestore, 'users'), where('lookingForCofounder', '==', true)))
+        ]);
+
+        setStats({
+          startups: sCount.data().count,
+          founders: fCount.data().count,
+          investors: iCount.data().count,
+          cofounderOpp: cCount.data().count
+        });
+
+        // 3. Fetch other SEO pages
         const otherPagesQ = query(
           collection(firestore, 'seoPages'), 
           where('status', '==', 'active'),
@@ -68,14 +112,14 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
         setOtherPages(filteredOther);
 
       } catch (error) {
-        console.error("Error fetching dynamic startups:", error);
+        console.error("Error fetching dynamic content:", error);
       } finally {
         setIsStartupsLoading(false);
         setIsLoading(false);
       }
     }
 
-    fetchFilteredStartups();
+    fetchPageContent();
   }, [firestore, pageData, slug]);
 
   if (isLoading) {
@@ -291,6 +335,33 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
                   </CardContent>
                 </Card>
               </Link>
+            </div>
+          </section>
+
+          {/* Dynamic Platform Stats Section */}
+          <section className="space-y-8 animate-in fade-in slide-in-from-bottom-10 duration-1000">
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Platform Ecosystem</h2>
+              <p className="text-slate-500 font-medium">Real-time metrics from our growing network.</p>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+               {[
+                 { label: 'Startups', value: stats.startups, icon: Rocket, color: 'text-blue-600', bg: 'bg-blue-50' },
+                 { label: 'Founders', value: stats.founders, icon: ShieldCheck, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                 { label: 'Investors', value: stats.investors, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
+                 { label: 'Opportunities', value: stats.cofounderOpp, icon: UserPlus, color: 'text-orange-600', bg: 'bg-orange-50' },
+               ].map((stat, i) => (
+                 <Card key={i} className="border-none shadow-md rounded-2xl overflow-hidden bg-background">
+                    <CardContent className="p-6 text-center space-y-2">
+                       <div className={`p-2 w-fit mx-auto rounded-xl ${stat.bg} ${stat.color} mb-1`}>
+                          <stat.icon className="h-5 w-5" />
+                       </div>
+                       <p className="text-2xl font-black text-slate-900">{stat.value}</p>
+                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>
+                    </CardContent>
+                 </Card>
+               ))}
             </div>
           </section>
 
