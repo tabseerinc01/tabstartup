@@ -26,11 +26,12 @@ import {
   TrendingUp,
   ShieldCheck,
   Handshake,
-  UserPlus
+  UserPlus,
+  Star
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
 
 interface SEOPageClientProps {
@@ -43,6 +44,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
   
   const [pageData] = useState<any>(initialPageData);
   const [startups, setStartups] = useState<any[]>([]);
+  const [featuredStartups, setFeaturedStartups] = useState<any[]>([]);
   const [otherPages, setOtherPages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isStartupsLoading, setIsStartupsLoading] = useState(false);
@@ -83,7 +85,17 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
         const startupsSnap = await getDocs(startupsQ);
         setStartups(startupsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-        // 2. Fetch ecosystem stats
+        // 2. Fetch Featured Startups (Global)
+        const featuredQ = query(
+          collection(firestore, 'startups'),
+          where('status', '==', 'active'),
+          where('featured', '==', true),
+          limit(3)
+        );
+        const featuredSnap = await getDocs(featuredQ);
+        setFeaturedStartups(featuredSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+        // 3. Fetch ecosystem stats
         const [sCount, fCount, iCount, cCount] = await Promise.all([
           getCountFromServer(query(collection(firestore, 'startups'), where('status', '==', 'active'))),
           getCountFromServer(query(collection(firestore, 'users'), where('role', '==', 'founder'))),
@@ -98,7 +110,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
           cofounderOpp: cCount.data().count
         });
 
-        // 3. Fetch other SEO pages
+        // 4. Fetch other SEO pages
         const otherPagesQ = query(
           collection(firestore, 'seoPages'), 
           where('status', '==', 'active'),
@@ -205,7 +217,41 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
             </div>
           </div>
 
-          {/* Startups List Section */}
+          {/* Featured Startups Section */}
+          {featuredStartups.length > 0 && (
+            <section className="space-y-8 animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-100">
+              <div className="flex items-center gap-3 px-4">
+                <div className="p-2 bg-amber-50 rounded-xl">
+                  <Star className="h-6 w-6 text-amber-500 fill-amber-500" />
+                </div>
+                <h2 className="text-2xl font-black text-slate-900">Featured Ventures</h2>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {featuredStartups.map((s) => (
+                  <Card key={s.id} className="group border-none shadow-lg hover:shadow-2xl transition-all duration-300 bg-background rounded-[2rem] overflow-hidden flex flex-col">
+                    <CardHeader className="pb-2">
+                      <div className="flex justify-between items-start mb-2">
+                        <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 text-[9px] font-black uppercase tracking-widest px-2">Featured</Badge>
+                        <Badge variant="secondary" className="text-[9px] font-bold">{s.stage}</Badge>
+                      </div>
+                      <CardTitle className="text-lg font-black group-hover:text-primary transition-colors truncate">{s.name}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-1 space-y-4">
+                      <p className="text-xs text-slate-500 font-medium line-clamp-3 leading-relaxed italic">
+                        "{s.shortDescription || 'A high-potential venture building the future.'}"
+                      </p>
+                      <Button variant="outline" className="w-full rounded-xl font-bold text-xs h-9 border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-all" asChild>
+                        <Link href={`/startups/${s.ownerUid}`}>View Venture</Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Main List Section */}
           <section className="space-y-8 animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-200">
             <div className="flex items-center justify-between px-4">
               <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
@@ -285,6 +331,33 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
             )}
           </section>
 
+          {/* Dynamic Platform Stats Section */}
+          <section className="space-y-8 animate-in fade-in slide-in-from-bottom-10 duration-1000">
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Platform Ecosystem</h2>
+              <p className="text-slate-500 font-medium">Real-time metrics from our growing network.</p>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+               {[
+                 { label: 'Startups', value: stats.startups, icon: Rocket, color: 'text-blue-600', bg: 'bg-blue-50' },
+                 { label: 'Founders', value: stats.founders, icon: ShieldCheck, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                 { label: 'Investors', value: stats.investors, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
+                 { label: 'Opportunities', value: stats.cofounderOpp, icon: UserPlus, color: 'text-orange-600', bg: 'bg-orange-50' },
+               ].map((stat, i) => (
+                 <Card key={i} className="border-none shadow-md rounded-2xl overflow-hidden bg-background">
+                    <CardContent className="p-6 text-center space-y-2">
+                       <div className={`p-2 w-fit mx-auto rounded-xl ${stat.bg} ${stat.color} mb-1`}>
+                          <stat.icon className="h-5 w-5" />
+                       </div>
+                       <p className="text-2xl font-black text-slate-900">{stat.value}</p>
+                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>
+                    </CardContent>
+                 </Card>
+               ))}
+            </div>
+          </section>
+
           {/* Explore More Section */}
           <section className="space-y-8 pt-12 border-t border-slate-200">
             <div>
@@ -335,33 +408,6 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
                   </CardContent>
                 </Card>
               </Link>
-            </div>
-          </section>
-
-          {/* Dynamic Platform Stats Section */}
-          <section className="space-y-8 animate-in fade-in slide-in-from-bottom-10 duration-1000">
-            <div className="text-center space-y-2">
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Platform Ecosystem</h2>
-              <p className="text-slate-500 font-medium">Real-time metrics from our growing network.</p>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-               {[
-                 { label: 'Startups', value: stats.startups, icon: Rocket, color: 'text-blue-600', bg: 'bg-blue-50' },
-                 { label: 'Founders', value: stats.founders, icon: ShieldCheck, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                 { label: 'Investors', value: stats.investors, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
-                 { label: 'Opportunities', value: stats.cofounderOpp, icon: UserPlus, color: 'text-orange-600', bg: 'bg-orange-50' },
-               ].map((stat, i) => (
-                 <Card key={i} className="border-none shadow-md rounded-2xl overflow-hidden bg-background">
-                    <CardContent className="p-6 text-center space-y-2">
-                       <div className={`p-2 w-fit mx-auto rounded-xl ${stat.bg} ${stat.color} mb-1`}>
-                          <stat.icon className="h-5 w-5" />
-                       </div>
-                       <p className="text-2xl font-black text-slate-900">{stat.value}</p>
-                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>
-                    </CardContent>
-                 </Card>
-               ))}
             </div>
           </section>
 
