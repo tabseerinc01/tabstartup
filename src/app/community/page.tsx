@@ -39,7 +39,8 @@ import {
   ShieldCheck,
   TrendingUp,
   AlertCircle,
-  Hash
+  Hash,
+  CornerDownRight
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -58,12 +59,12 @@ export default function CommunityFeedPage() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [startupProfile, setStartupProfile] = useState<any>(null);
   const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
 
-  // Fetch posts in real-time from communityPosts collection
+  // Fetch posts in real-time
   useEffect(() => {
     if (!firestore) return;
 
-    // Fetch active posts, ordered by creation date
     const postsQ = query(
       collection(firestore, 'communityPosts'),
       where('status', '==', 'active'),
@@ -75,7 +76,6 @@ export default function CommunityFeedPage() {
       const list = snapshot.docs.map(d => ({
         id: d.id,
         ...d.data(),
-        // Handle potentially null server timestamps during local updates
         createdAtDate: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date()
       }));
       setPosts(list);
@@ -92,7 +92,7 @@ export default function CommunityFeedPage() {
     return () => unsubscribe();
   }, [firestore]);
 
-  // Track current user's likes to highlight the heart button
+  // Track current user's likes
   useEffect(() => {
     if (!firestore || !user?.uid) return;
 
@@ -109,7 +109,7 @@ export default function CommunityFeedPage() {
     return () => unsubscribe();
   }, [firestore, user]);
 
-  // Fetch logged-in user profile and their startup for metadata automation
+  // Fetch logged-in user profile
   useEffect(() => {
     async function loadProfiles() {
       if (!firestore || !user?.uid) return;
@@ -134,7 +134,6 @@ export default function CommunityFeedPage() {
 
     setIsPosting(true);
     
-    // Process tags
     const tags = newPostTags
       .split(',')
       .map(tag => tag.trim().replace(/^#/, ''))
@@ -159,10 +158,7 @@ export default function CommunityFeedPage() {
       .then(() => {
         setNewPostContent('');
         setNewPostTags('');
-        toast({ 
-          title: "Update Shared", 
-          description: "Your post is now live in the community feed." 
-        });
+        toast({ title: "Update Shared" });
       })
       .catch(async (error) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -182,7 +178,7 @@ export default function CommunityFeedPage() {
       return;
     }
 
-    if (userLikes.has(postId)) return; // Already liked
+    if (userLikes.has(postId)) return;
 
     const likeId = `${postId}_${user.uid}`;
     const likeData = {
@@ -191,10 +187,8 @@ export default function CommunityFeedPage() {
       createdAt: serverTimestamp()
     };
 
-    // Use setDoc with deterministic ID to prevent duplicates at the DB level
     setDoc(doc(firestore, 'communityPostLikes', likeId), likeData)
       .then(() => {
-        // Increment global count on the post itself
         updateDoc(doc(firestore, 'communityPosts', postId), {
           likesCount: increment(1)
         });
@@ -206,6 +200,16 @@ export default function CommunityFeedPage() {
           requestResourceData: likeData
         }));
       });
+  };
+
+  const toggleComments = (postId: string) => {
+    const newExpanded = new Set(expandedComments);
+    if (newExpanded.has(postId)) {
+      newExpanded.delete(postId);
+    } else {
+      newExpanded.add(postId);
+    }
+    setExpandedComments(newExpanded);
   };
 
   return (
@@ -325,99 +329,18 @@ export default function CommunityFeedPage() {
                 </CardContent>
               </Card>
             ) : (
-              posts.map((post) => {
-                const isLiked = userLikes.has(post.id);
-                return (
-                  <Card key={post.id} className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-50">
-                    <CardContent className="p-0">
-                      <div className="p-8 space-y-6">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-4">
-                            <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}>
-                              <Avatar className="h-14 w-14 border-4 border-slate-50 group-hover:border-primary/10 transition-colors shadow-sm">
-                                <AvatarImage src={post.authorImage} />
-                                <AvatarFallback className="font-black text-xl">{post.authorName.charAt(0)}</AvatarFallback>
-                              </Avatar>
-                            </Link>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`} className="text-xl font-black text-slate-900 hover:text-primary transition-colors">
-                                  {post.authorName}
-                                </Link>
-                                {post.authorType === 'admin' || post.authorType === 'super_admin' ? (
-                                  <ShieldCheck className="h-4 w-4 text-primary fill-primary/10" />
-                                ) : null}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2 mt-1">
-                                <Badge variant="secondary" className="bg-primary/5 text-primary border-none rounded-md px-2 h-5 font-bold uppercase text-[9px] tracking-widest">
-                                  {post.authorType}
-                                </Badge>
-                                {post.startupName && (
-                                  <Badge variant="outline" className="border-primary/20 text-primary h-5 text-[9px] font-bold flex items-center gap-1">
-                                    <Rocket className="h-2 w-2" /> {post.startupName}
-                                  </Badge>
-                                )}
-                                <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tight ml-1">
-                                  <Clock className="h-3 w-3" />
-                                  {formatDistanceToNow(post.createdAtDate, { addSuffix: true })}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-50 text-slate-300">
-                            <Share2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-
-                        <div className="prose prose-lg max-w-none">
-                          <p className="text-slate-700 leading-relaxed font-medium whitespace-pre-wrap text-lg">
-                            {post.content}
-                          </p>
-                        </div>
-
-                        {post.tags && post.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-2 pt-2">
-                            {post.tags.map((tag: string) => (
-                              <Badge key={tag} variant="outline" className="rounded-lg text-[10px] border-slate-100 bg-slate-50 text-slate-400 font-bold px-3 py-0.5">
-                                #{tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
-                           <div className="flex items-center gap-4">
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className={`rounded-full gap-2 px-4 transition-colors ${isLiked ? 'text-rose-600 bg-rose-50 hover:bg-rose-100' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}
-                                onClick={() => handleLikePost(post.id)}
-                                disabled={isLiked}
-                              >
-                                 <Heart className={`h-4 w-4 ${isLiked || post.likesCount > 0 ? 'fill-rose-600 text-rose-600' : ''}`} />
-                                 <span className="text-xs font-bold uppercase tracking-widest">
-                                   {post.likesCount > 0 ? post.likesCount : ''} {isLiked ? 'Appreciated' : 'Appreciate'}
-                                 </span>
-                              </Button>
-                              <Button variant="ghost" size="sm" className="rounded-full gap-2 text-slate-400 hover:text-primary hover:bg-primary/5 px-4">
-                                 <MessageSquare className="h-4 w-4" />
-                                 <span className="text-xs font-bold uppercase tracking-widest">
-                                   {post.commentsCount > 0 ? post.commentsCount : ''} Discuss
-                                 </span>
-                              </Button>
-                           </div>
-                           <Link 
-                            href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}
-                            className="text-[10px] font-black text-primary uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity"
-                           >
-                              View Profile
-                           </Link>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
+              posts.map((post) => (
+                <PostCard 
+                  key={post.id} 
+                  post={post} 
+                  isLiked={userLikes.has(post.id)} 
+                  onLike={() => handleLikePost(post.id)}
+                  isExpanded={expandedComments.has(post.id)}
+                  onToggleComments={() => toggleComments(post.id)}
+                  user={user}
+                  userProfile={userProfile}
+                />
+              ))
             )}
           </div>
 
@@ -443,6 +366,244 @@ export default function CommunityFeedPage() {
         </div>
       </main>
       <PublicFooter />
+    </div>
+  );
+}
+
+function PostCard({ post, isLiked, onLike, isExpanded, onToggleComments, user, userProfile }: any) {
+  return (
+    <Card className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-50">
+      <CardContent className="p-0">
+        <div className="p-8 space-y-6">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}>
+                <Avatar className="h-14 w-14 border-4 border-slate-50 group-hover:border-primary/10 transition-colors shadow-sm">
+                  <AvatarImage src={post.authorImage} />
+                  <AvatarFallback className="font-black text-xl">{post.authorName.charAt(0)}</AvatarFallback>
+                </Avatar>
+              </Link>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`} className="text-xl font-black text-slate-900 hover:text-primary transition-colors">
+                    {post.authorName}
+                  </Link>
+                  {post.authorType === 'admin' || post.authorType === 'super_admin' ? (
+                    <ShieldCheck className="h-4 w-4 text-primary fill-primary/10" />
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <Badge variant="secondary" className="bg-primary/5 text-primary border-none rounded-md px-2 h-5 font-bold uppercase text-[9px] tracking-widest">
+                    {post.authorType}
+                  </Badge>
+                  {post.startupName && (
+                    <Badge variant="outline" className="border-primary/20 text-primary h-5 text-[9px] font-bold flex items-center gap-1">
+                      <Rocket className="h-2 w-2" /> {post.startupName}
+                    </Badge>
+                  )}
+                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tight ml-1">
+                    <Clock className="h-3 w-3" />
+                    {formatDistanceToNow(post.createdAtDate, { addSuffix: true })}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-50 text-slate-300">
+              <Share2 className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="prose prose-lg max-w-none">
+            <p className="text-slate-700 leading-relaxed font-medium whitespace-pre-wrap text-lg">
+              {post.content}
+            </p>
+          </div>
+
+          {post.tags && post.tags.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-2">
+              {post.tags.map((tag: string) => (
+                <Badge key={tag} variant="outline" className="rounded-lg text-[10px] border-slate-100 bg-slate-50 text-slate-400 font-bold px-3 py-0.5">
+                  #{tag}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
+             <div className="flex items-center gap-4">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={`rounded-full gap-2 px-4 transition-colors ${isLiked ? 'text-rose-600 bg-rose-50 hover:bg-rose-100' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}
+                  onClick={onLike}
+                  disabled={isLiked}
+                >
+                   <Heart className={`h-4 w-4 ${isLiked || post.likesCount > 0 ? 'fill-rose-600 text-rose-600' : ''}`} />
+                   <span className="text-xs font-bold uppercase tracking-widest">
+                     {post.likesCount > 0 ? post.likesCount : ''} {isLiked ? 'Appreciated' : 'Appreciate'}
+                   </span>
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={`rounded-full gap-2 px-4 transition-colors ${isExpanded ? 'text-primary bg-primary/5' : 'text-slate-400 hover:text-primary hover:bg-primary/5'}`}
+                  onClick={onToggleComments}
+                >
+                   <MessageSquare className={`h-4 w-4 ${post.commentsCount > 0 ? 'fill-primary text-primary' : ''}`} />
+                   <span className="text-xs font-bold uppercase tracking-widest">
+                     {post.commentsCount > 0 ? post.commentsCount : ''} Discuss
+                   </span>
+                </Button>
+             </div>
+             <Link 
+              href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}
+              className="text-[10px] font-black text-primary uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity"
+             >
+                View Profile
+             </Link>
+          </div>
+        </div>
+
+        {isExpanded && (
+          <CommentsSection 
+            postId={post.id} 
+            user={user} 
+            userProfile={userProfile} 
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CommentsSection({ postId, user, userProfile }: any) {
+  const firestore = useFirestore();
+  const { toast } = useToast();
+  const [comments, setComments] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [newComment, setNewComment] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!firestore || !postId) return;
+
+    const commentsQ = query(
+      collection(firestore, 'communityComments'),
+      where('postId', '==', postId),
+      orderBy('createdAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(commentsQ, (snapshot) => {
+      const list = snapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        createdAtDate: d.data().createdAt?.toDate ? d.data().createdAt.toDate() : new Date()
+      }));
+      setComments(list);
+      setIsLoading(false);
+    }, (error) => {
+      console.error("Comments error:", error);
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [firestore, postId]);
+
+  const handleAddComment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!firestore || !user || !newComment.trim() || isSubmitting) {
+      if (!user) toast({ title: "Login Required", description: "Sign in to participate in the discussion." });
+      return;
+    }
+
+    setIsSubmitting(true);
+    const commentData = {
+      postId,
+      authorUid: user.uid,
+      authorName: userProfile?.fullName || user.displayName || user.email?.split('@')[0] || "Member",
+      authorImage: userProfile?.imageUrl || `https://picsum.photos/seed/${user.uid}/50/50`,
+      content: newComment.trim(),
+      createdAt: serverTimestamp(),
+    };
+
+    addDoc(collection(firestore, 'communityComments'), commentData)
+      .then(() => {
+        updateDoc(doc(firestore, 'communityPosts', postId), {
+          commentsCount: increment(1)
+        });
+        setNewComment('');
+      })
+      .catch((error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: 'communityComments',
+          operation: 'create',
+          requestResourceData: commentData
+        }));
+      })
+      .finally(() => {
+        setIsSubmitting(false);
+      });
+  };
+
+  return (
+    <div className="bg-slate-50/80 border-t border-slate-100 p-8 space-y-6">
+      <div className="space-y-4">
+        {isLoading ? (
+          <div className="flex justify-center py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-primary/30" />
+          </div>
+        ) : comments.length === 0 ? (
+          <div className="text-center py-6 text-sm text-slate-400 font-medium italic">
+            No thoughts shared yet. Be the first to start the discussion!
+          </div>
+        ) : (
+          comments.map((comment) => (
+            <div key={comment.id} className="flex gap-3">
+              <Avatar className="h-8 w-8 shrink-0">
+                <AvatarImage src={comment.authorImage} />
+                <AvatarFallback>{comment.authorName.charAt(0)}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 space-y-1">
+                <div className="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm ring-1 ring-slate-100">
+                  <p className="text-xs font-black text-slate-900 mb-1">{comment.authorName}</p>
+                  <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                    {comment.content}
+                  </p>
+                </div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase px-1">
+                  {formatDistanceToNow(comment.createdAtDate, { addSuffix: true })}
+                </p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {user && (
+        <form onSubmit={handleAddComment} className="flex gap-3 items-start pt-4 border-t border-slate-100">
+          <Avatar className="h-8 w-8 shrink-0">
+            <AvatarImage src={userProfile?.imageUrl} />
+            <AvatarFallback>{userProfile?.fullName?.charAt(0) || user.email?.charAt(0).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          <div className="flex-1 relative">
+            <Textarea 
+              placeholder="Add your thoughts..."
+              className="min-h-[60px] rounded-xl border-slate-200 bg-white text-sm resize-none pr-12 focus-visible:ring-primary/20"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              required
+            />
+            <Button 
+              type="submit" 
+              size="icon" 
+              className="absolute bottom-2 right-2 h-8 w-8 rounded-lg shadow-md"
+              disabled={isSubmitting || !newComment.trim()}
+            >
+              {isSubmitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <CornerDownRight className="h-4 w-4" />}
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

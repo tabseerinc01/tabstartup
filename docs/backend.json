@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "User": {
@@ -205,6 +204,21 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["postId", "userUid", "createdAt"]
+    },
+    "CommunityComment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CommunityComment",
+      "type": "object",
+      "description": "A comment on a community post.",
+      "properties": {
+        "postId": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorImage": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["postId", "authorUid", "authorName", "content", "createdAt"]
     }
   },
   "auth": {
@@ -234,6 +248,14 @@
           "entityName": "CommunityPostLike",
           "schema": { "$ref": "#/backend/entities/CommunityPostLike" },
           "description": "Tracks likes on community posts."
+        }
+      },
+      {
+        "path": "/communityComments/{commentId}",
+        "definition": {
+          "entityName": "CommunityComment",
+          "schema": { "$ref": "#/backend/entities/CommunityComment" },
+          "description": "Comments on community posts."
         }
       }
     ]
