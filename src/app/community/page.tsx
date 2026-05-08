@@ -53,19 +53,26 @@ export default function CommunityFeedPage() {
   const [startupProfile, setStartupProfile] = useState<any>(null);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
 
-  // Real-time posts listener - ONLY run when user is logged in to prevent permission errors
+  // Use the simplest possible collection query to ensure permission compatibility
+  // Only execute when user is authenticated to prevent permission errors on page load
   const postsQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(
-      collection(firestore, 'communityPosts'),
-      where('status', '==', 'active'),
-      orderBy('createdAt', 'desc'),
-      limit(50)
-    );
+    return collection(firestore, 'communityPosts');
   }, [firestore, user?.uid]);
-  const { data: posts, isLoading: isPostsLoading } = useCollection(postsQuery);
+  
+  const { data: rawPosts, isLoading: isPostsLoading } = useCollection(postsQuery);
 
-  // Real-time likes listener for the current user
+  // Filter and sort posts client-side for maximum query stability
+  const posts = (rawPosts || [])
+    .filter(p => p.status === 'active')
+    .sort((a, b) => {
+      const timeA = a.createdAt?.toMillis?.() || 0;
+      const timeB = b.createdAt?.toMillis?.() || 0;
+      return timeB - timeA;
+    })
+    .slice(0, 50);
+
+  // Real-time likes listener for the current user to track their personal interactions
   const userLikesQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
@@ -76,7 +83,7 @@ export default function CommunityFeedPage() {
   const { data: likesData } = useCollection(userLikesQuery);
   const userLikes = new Set(likesData?.map(l => l.postId) || []);
 
-  // Fetch logged-in user profile
+  // Load user-specific metadata for post creation context
   useEffect(() => {
     async function loadProfiles() {
       if (!firestore || !user?.uid) return;
@@ -89,7 +96,7 @@ export default function CommunityFeedPage() {
         if (userSnap.exists()) setUserProfile(userSnap.data());
         if (startupSnap.exists()) setStartupProfile(startupSnap.data());
       } catch (e) {
-        console.warn("Could not load profiles for feed:", e);
+        console.warn("Could not load profiles for feed context:", e);
       }
     }
     loadProfiles();
@@ -125,7 +132,7 @@ export default function CommunityFeedPage() {
       .then(() => {
         setNewPostContent('');
         setNewPostTags('');
-        toast({ title: "Update Shared" });
+        toast({ title: "Update Shared", description: "Your post is now live in the community feed." });
       })
       .catch(async (error) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -154,6 +161,7 @@ export default function CommunityFeedPage() {
       createdAt: serverTimestamp()
     };
 
+    // Atomic increment for likesCount ensures consistency
     setDoc(doc(firestore, 'communityPostLikes', likeId), likeData)
       .then(() => {
         updateDoc(doc(firestore, 'communityPosts', postId), {
@@ -179,6 +187,7 @@ export default function CommunityFeedPage() {
     setExpandedComments(newExpanded);
   };
 
+  // Prevent entire page flicker by showing centered loader during initial auth verification
   if (isUserLoading) {
     return (
       <div className="flex min-h-screen flex-col bg-muted/20">
@@ -186,7 +195,7 @@ export default function CommunityFeedPage() {
         <main className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4">
             <Loader2 className="h-12 w-12 animate-spin text-primary opacity-20" />
-            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Authenticating...</p>
+            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Authenticating Session...</p>
           </div>
         </main>
         <PublicFooter />
@@ -215,7 +224,7 @@ export default function CommunityFeedPage() {
           </div>
 
           {user ? (
-            <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
+            <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <form onSubmit={handleCreatePost}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-3">
@@ -295,7 +304,7 @@ export default function CommunityFeedPage() {
               <div className="flex py-24 justify-center">
                 <div className="flex flex-col items-center gap-4">
                   <Loader2 className="h-12 w-12 animate-spin text-primary opacity-20" />
-                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Feed...</p>
+                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Community Feed...</p>
                 </div>
               </div>
             ) : !posts || posts.length === 0 ? (
@@ -360,7 +369,7 @@ function PostCard({ post, isLiked, onLike, isExpanded, onToggleComments, user, u
   const createdAtDate = post.createdAt?.toDate ? post.createdAt.toDate() : new Date();
 
   return (
-    <Card className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-50">
+    <Card className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-50 animate-in fade-in duration-700">
       <CardContent className="p-0">
         <div className="p-8 space-y-6">
           <div className="flex items-start justify-between">
@@ -470,16 +479,22 @@ function CommentsSection({ postId, user, userProfile }: any) {
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Real-time comments listener for this post
+  // Subscribe to comments for this post using the base collection pattern
   const commentsQuery = useMemoFirebase(() => {
     if (!firestore || !postId) return null;
-    return query(
-      collection(firestore, 'communityComments'),
-      where('postId', '==', postId),
-      orderBy('createdAt', 'asc')
-    );
+    return collection(firestore, 'communityComments');
   }, [firestore, postId]);
-  const { data: comments, isLoading: isCommentsLoading } = useCollection(commentsQuery);
+  
+  const { data: rawComments, isLoading: isCommentsLoading } = useCollection(commentsQuery);
+
+  // Filter and sort comments client-side for query stability
+  const comments = (rawComments || [])
+    .filter(c => c.postId === postId)
+    .sort((a, b) => {
+      const timeA = a.createdAt?.toMillis?.() || 0;
+      const timeB = b.createdAt?.toMillis?.() || 0;
+      return timeA - timeB;
+    });
 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -532,7 +547,7 @@ function CommentsSection({ postId, user, userProfile }: any) {
           comments.map((comment) => {
             const commentDate = comment.createdAt?.toDate ? comment.createdAt.toDate() : new Date();
             return (
-              <div key={comment.id} className="flex gap-3">
+              <div key={comment.id} className="flex gap-3 animate-in fade-in slide-in-from-left-2 duration-300">
                 <Avatar className="h-8 w-8 shrink-0">
                   <AvatarImage src={comment.authorImage} />
                   <AvatarFallback>{comment.authorName.charAt(0)}</AvatarFallback>
