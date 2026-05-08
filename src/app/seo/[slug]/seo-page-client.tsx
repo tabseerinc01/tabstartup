@@ -29,7 +29,8 @@ import {
   UserPlus,
   Star,
   EyeOff,
-  Zap
+  Zap,
+  LayoutGrid
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -213,12 +214,20 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
 
       <main className="flex-1 container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-4xl mx-auto space-y-12 pb-20">
-          <Link 
-            href="/founders" 
-            className="inline-flex items-center gap-2 text-sm font-bold text-primary mb-2 hover:opacity-70 transition-opacity"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back to Directory
-          </Link>
+          <div className="flex items-center justify-between mb-2">
+            <Link 
+              href="/seo" 
+              className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:opacity-70 transition-opacity"
+            >
+              <LayoutGrid className="h-4 w-4" /> Full Directory Index
+            </Link>
+            <Link 
+              href="/founders" 
+              className="inline-flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-primary transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" /> Back to Listings
+            </Link>
+          </div>
 
           {/* Hero Section */}
           <div className="bg-background p-8 md:p-16 rounded-[3rem] shadow-2xl border-none space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700">
@@ -400,9 +409,14 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
 
           {/* Explore More Section */}
           <section className="space-y-10 pt-12 border-t border-slate-200">
-            <div className="space-y-2">
-              <h2 className="text-3xl font-black text-slate-900 tracking-tight">Explore More Startup Directories</h2>
-              <p className="text-slate-500 font-medium">Discover other curated niches and resource hubs in the TabStartup ecosystem.</p>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight">Explore More Startup Directories</h2>
+                <p className="text-slate-500 font-medium">Discover other curated niches and resource hubs in the TabStartup ecosystem.</p>
+              </div>
+              <Button variant="ghost" asChild className="hidden sm:flex font-bold text-primary gap-2">
+                <Link href="/seo">View Master Index <ArrowRight className="h-4 w-4" /></Link>
+              </Button>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -458,6 +472,12 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
                   </CardContent>
                 </Card>
               </Link>
+            </div>
+
+            <div className="sm:hidden pt-4">
+               <Button variant="outline" className="w-full h-12 rounded-xl font-bold" asChild>
+                  <Link href="/seo">Full Directory Index</Link>
+               </Button>
             </div>
           </section>
 
