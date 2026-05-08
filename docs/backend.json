@@ -193,6 +193,18 @@
         "startupId": { "type": "string" }
       },
       "required": ["authorUid", "authorName", "authorType", "content", "createdAt", "status"]
+    },
+    "CommunityPostLike": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CommunityPostLike",
+      "type": "object",
+      "description": "A record of a user liking a community post.",
+      "properties": {
+        "postId": { "type": "string" },
+        "userUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["postId", "userUid", "createdAt"]
     }
   },
   "auth": {
@@ -214,6 +226,14 @@
           "entityName": "CommunityPost",
           "schema": { "$ref": "#/backend/entities/CommunityPost" },
           "description": "Startup community feed posts."
+        }
+      },
+      {
+        "path": "/communityPostLikes/{likeId}",
+        "definition": {
+          "entityName": "CommunityPostLike",
+          "schema": { "$ref": "#/backend/entities/CommunityPostLike" },
+          "description": "Tracks likes on community posts."
         }
       }
     ]

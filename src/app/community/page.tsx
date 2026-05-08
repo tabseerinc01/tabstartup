@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,7 +13,10 @@ import {
   serverTimestamp,
   doc,
   getDoc,
-  where
+  where,
+  increment,
+  setDoc,
+  updateDoc
 } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
@@ -53,6 +57,7 @@ export default function CommunityFeedPage() {
   const [newPostTags, setNewPostTags] = useState('');
   const [userProfile, setUserProfile] = useState<any>(null);
   const [startupProfile, setStartupProfile] = useState<any>(null);
+  const [userLikes, setUserLikes] = useState<Set<string>>(new Set());
 
   // Fetch posts in real-time from communityPosts collection
   useEffect(() => {
@@ -86,6 +91,23 @@ export default function CommunityFeedPage() {
 
     return () => unsubscribe();
   }, [firestore]);
+
+  // Track current user's likes to highlight the heart button
+  useEffect(() => {
+    if (!firestore || !user?.uid) return;
+
+    const likesQ = query(
+      collection(firestore, 'communityPostLikes'),
+      where('userUid', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(likesQ, (snapshot) => {
+      const likedPostIds = new Set(snapshot.docs.map(d => d.data().postId));
+      setUserLikes(likedPostIds);
+    });
+
+    return () => unsubscribe();
+  }, [firestore, user]);
 
   // Fetch logged-in user profile and their startup for metadata automation
   useEffect(() => {
@@ -151,6 +173,38 @@ export default function CommunityFeedPage() {
       })
       .finally(() => {
         setIsPosting(false);
+      });
+  };
+
+  const handleLikePost = (postId: string) => {
+    if (!firestore || !user) {
+      toast({ title: "Login Required", description: "Please log in to appreciate posts." });
+      return;
+    }
+
+    if (userLikes.has(postId)) return; // Already liked
+
+    const likeId = `${postId}_${user.uid}`;
+    const likeData = {
+      postId,
+      userUid: user.uid,
+      createdAt: serverTimestamp()
+    };
+
+    // Use setDoc with deterministic ID to prevent duplicates at the DB level
+    setDoc(doc(firestore, 'communityPostLikes', likeId), likeData)
+      .then(() => {
+        // Increment global count on the post itself
+        updateDoc(doc(firestore, 'communityPosts', postId), {
+          likesCount: increment(1)
+        });
+      })
+      .catch(async (error) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: `communityPostLikes/${likeId}`,
+          operation: 'write',
+          requestResourceData: likeData
+        }));
       });
   };
 
@@ -271,90 +325,99 @@ export default function CommunityFeedPage() {
                 </CardContent>
               </Card>
             ) : (
-              posts.map((post) => (
-                <Card key={post.id} className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-50">
-                  <CardContent className="p-0">
-                    <div className="p-8 space-y-6">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-4">
-                          <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}>
-                            <Avatar className="h-14 w-14 border-4 border-slate-50 group-hover:border-primary/10 transition-colors shadow-sm">
-                              <AvatarImage src={post.authorImage} />
-                              <AvatarFallback className="font-black text-xl">{post.authorName.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                          </Link>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`} className="text-xl font-black text-slate-900 hover:text-primary transition-colors">
-                                {post.authorName}
-                              </Link>
-                              {post.authorType === 'admin' || post.authorType === 'super_admin' ? (
-                                <ShieldCheck className="h-4 w-4 text-primary fill-primary/10" />
-                              ) : null}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2 mt-1">
-                              <Badge variant="secondary" className="bg-primary/5 text-primary border-none rounded-md px-2 h-5 font-bold uppercase text-[9px] tracking-widest">
-                                {post.authorType}
-                              </Badge>
-                              {post.startupName && (
-                                <Badge variant="outline" className="border-primary/20 text-primary h-5 text-[9px] font-bold flex items-center gap-1">
-                                  <Rocket className="h-2 w-2" /> {post.startupName}
+              posts.map((post) => {
+                const isLiked = userLikes.has(post.id);
+                return (
+                  <Card key={post.id} className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-50">
+                    <CardContent className="p-0">
+                      <div className="p-8 space-y-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-4">
+                            <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}>
+                              <Avatar className="h-14 w-14 border-4 border-slate-50 group-hover:border-primary/10 transition-colors shadow-sm">
+                                <AvatarImage src={post.authorImage} />
+                                <AvatarFallback className="font-black text-xl">{post.authorName.charAt(0)}</AvatarFallback>
+                              </Avatar>
+                            </Link>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`} className="text-xl font-black text-slate-900 hover:text-primary transition-colors">
+                                  {post.authorName}
+                                </Link>
+                                {post.authorType === 'admin' || post.authorType === 'super_admin' ? (
+                                  <ShieldCheck className="h-4 w-4 text-primary fill-primary/10" />
+                                ) : null}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 mt-1">
+                                <Badge variant="secondary" className="bg-primary/5 text-primary border-none rounded-md px-2 h-5 font-bold uppercase text-[9px] tracking-widest">
+                                  {post.authorType}
                                 </Badge>
-                              )}
-                              <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tight ml-1">
-                                <Clock className="h-3 w-3" />
-                                {formatDistanceToNow(post.createdAtDate, { addSuffix: true })}
+                                {post.startupName && (
+                                  <Badge variant="outline" className="border-primary/20 text-primary h-5 text-[9px] font-bold flex items-center gap-1">
+                                    <Rocket className="h-2 w-2" /> {post.startupName}
+                                  </Badge>
+                                )}
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tight ml-1">
+                                  <Clock className="h-3 w-3" />
+                                  {formatDistanceToNow(post.createdAtDate, { addSuffix: true })}
+                                </div>
                               </div>
                             </div>
                           </div>
+                          <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-50 text-slate-300">
+                            <Share2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-50 text-slate-300">
-                          <Share2 className="h-4 w-4" />
-                        </Button>
-                      </div>
 
-                      <div className="prose prose-lg max-w-none">
-                        <p className="text-slate-700 leading-relaxed font-medium whitespace-pre-wrap text-lg">
-                          {post.content}
-                        </p>
-                      </div>
-
-                      {post.tags && post.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-2 pt-2">
-                          {post.tags.map((tag: string) => (
-                            <Badge key={tag} variant="outline" className="rounded-lg text-[10px] border-slate-100 bg-slate-50 text-slate-400 font-bold px-3 py-0.5">
-                              #{tag}
-                            </Badge>
-                          ))}
+                        <div className="prose prose-lg max-w-none">
+                          <p className="text-slate-700 leading-relaxed font-medium whitespace-pre-wrap text-lg">
+                            {post.content}
+                          </p>
                         </div>
-                      )}
 
-                      <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
-                         <div className="flex items-center gap-4">
-                            <Button variant="ghost" size="sm" className="rounded-full gap-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 px-4">
-                               <Heart className={`h-4 w-4 ${post.likesCount > 0 ? 'fill-rose-600 text-rose-600' : ''}`} />
-                               <span className="text-xs font-bold uppercase tracking-widest">
-                                 {post.likesCount > 0 ? post.likesCount : ''} Appreciate
-                               </span>
-                            </Button>
-                            <Button variant="ghost" size="sm" className="rounded-full gap-2 text-slate-400 hover:text-primary hover:bg-primary/5 px-4">
-                               <MessageSquare className="h-4 w-4" />
-                               <span className="text-xs font-bold uppercase tracking-widest">
-                                 {post.commentsCount > 0 ? post.commentsCount : ''} Discuss
-                               </span>
-                            </Button>
-                         </div>
-                         <Link 
-                          href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}
-                          className="text-[10px] font-black text-primary uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity"
-                         >
-                            View Profile
-                         </Link>
+                        {post.tags && post.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-2 pt-2">
+                            {post.tags.map((tag: string) => (
+                              <Badge key={tag} variant="outline" className="rounded-lg text-[10px] border-slate-100 bg-slate-50 text-slate-400 font-bold px-3 py-0.5">
+                                #{tag}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
+                           <div className="flex items-center gap-4">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className={`rounded-full gap-2 px-4 transition-colors ${isLiked ? 'text-rose-600 bg-rose-50 hover:bg-rose-100' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}
+                                onClick={() => handleLikePost(post.id)}
+                                disabled={isLiked}
+                              >
+                                 <Heart className={`h-4 w-4 ${isLiked || post.likesCount > 0 ? 'fill-rose-600 text-rose-600' : ''}`} />
+                                 <span className="text-xs font-bold uppercase tracking-widest">
+                                   {post.likesCount > 0 ? post.likesCount : ''} {isLiked ? 'Appreciated' : 'Appreciate'}
+                                 </span>
+                              </Button>
+                              <Button variant="ghost" size="sm" className="rounded-full gap-2 text-slate-400 hover:text-primary hover:bg-primary/5 px-4">
+                                 <MessageSquare className="h-4 w-4" />
+                                 <span className="text-xs font-bold uppercase tracking-widest">
+                                   {post.commentsCount > 0 ? post.commentsCount : ''} Discuss
+                                 </span>
+                              </Button>
+                           </div>
+                           <Link 
+                            href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}
+                            className="text-[10px] font-black text-primary uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity"
+                           >
+                              View Profile
+                           </Link>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+                    </CardContent>
+                  </Card>
+                );
+              })
             )}
           </div>
 
