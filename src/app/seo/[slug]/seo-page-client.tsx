@@ -261,9 +261,8 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
                       </div>
                       <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-primary transition-colors" />
                     </CardContent>
-                  </Card>
-                </Link>
-              ))}
+                  </Link>
+                ))}
 
               <Link href="/services">
                 <Card className="hover:border-primary/30 transition-colors cursor-pointer group bg-primary/5 border-primary/10">
@@ -295,21 +294,27 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
             </div>
           </section>
 
-          {/* Call to Action */}
-          <div className="bg-slate-900 rounded-[3rem] p-12 text-center space-y-6 shadow-2xl">
-             <h3 className="text-3xl font-black text-white tracking-tight">Looking for something specific?</h3>
-             <p className="text-slate-400 max-w-md mx-auto font-medium">
-               Join TabStartup today to access our full network of founders, investors, and mentors.
-             </p>
-             <div className="pt-4 flex flex-wrap justify-center gap-4">
-                <Button size="lg" className="rounded-full px-10 h-14 text-base font-bold bg-white text-slate-900 hover:bg-slate-100" asChild>
-                  <Link href="/signup">Join Community</Link>
-                </Button>
-                <Button size="lg" variant="outline" className="rounded-full px-10 h-14 text-base font-bold border-slate-700 text-white hover:bg-slate-800" asChild>
-                  <Link href="/founders">Browse Directory</Link>
-                </Button>
-             </div>
-          </div>
+          {/* Join the Startup Ecosystem CTA */}
+          <section className="bg-slate-900 rounded-[3rem] p-12 md:p-20 text-center space-y-8 shadow-2xl animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-500">
+            <div className="space-y-4">
+              <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight">Join the Startup Ecosystem</h2>
+              <p className="text-slate-400 max-w-2xl mx-auto text-lg font-medium leading-relaxed">
+                Connect with visionary founders, strategic investors, and experienced mentors. Start building the future with TabStartup.
+              </p>
+            </div>
+            
+            <div className="pt-4 flex flex-wrap justify-center gap-4">
+              <Button size="lg" className="rounded-full px-10 h-14 text-base font-bold bg-primary text-white hover:bg-primary/90 shadow-xl shadow-primary/20" asChild>
+                <Link href="/signup">Create Profile</Link>
+              </Button>
+              <Button size="lg" variant="outline" className="rounded-full px-10 h-14 text-base font-bold border-slate-700 text-white hover:bg-slate-800" asChild>
+                <Link href="/founders">Explore Startups</Link>
+              </Button>
+              <Button size="lg" variant="secondary" className="rounded-full px-10 h-14 text-base font-bold bg-white text-slate-900 hover:bg-slate-100" asChild>
+                <Link href="/invest">Invest in TabStartup</Link>
+              </Button>
+            </div>
+          </section>
         </div>
       </main>
       <PublicFooter />
