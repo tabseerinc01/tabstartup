@@ -28,7 +28,8 @@ import {
   Handshake,
   UserPlus,
   Star,
-  EyeOff
+  EyeOff,
+  Zap
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -173,6 +174,27 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
+      
+      {/* Top Conversion Banner */}
+      <div className="bg-primary/10 border-b border-primary/20 py-4 px-4">
+        <div className="container mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 bg-primary rounded-full animate-pulse" />
+            <p className="text-sm font-bold text-slate-900">
+              Connect with founders, investors, and startup talent in Bangladesh.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button size="sm" className="rounded-full px-6 h-10 font-bold shadow-lg shadow-primary/20" asChild>
+              <Link href="/signup">Get Started Free</Link>
+            </Button>
+            <Button size="sm" variant="outline" className="rounded-full px-6 h-10 font-bold bg-background border-primary/20 hover:bg-primary/5 text-primary" asChild>
+              <Link href="/founders">Explore Ecosystem</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+
       <main className="flex-1 container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-4xl mx-auto space-y-12 pb-20">
           <Link 
