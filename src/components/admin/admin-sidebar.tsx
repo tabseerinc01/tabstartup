@@ -10,7 +10,8 @@ import {
   LayoutDashboard,
   ArrowLeft,
   Activity,
-  FileText
+  FileText,
+  Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ export function AdminSidebar() {
     { href: '/control', label: 'Admin Overview', icon: LayoutDashboard, exact: true },
     { href: '/control/users', label: 'Manage Users', icon: Users },
     { href: '/control/startups', label: 'Startups', icon: Rocket },
+    { href: '/control/seo', label: 'SEO Pages', icon: Globe },
     { href: '/control/services', label: 'Services', icon: Wrench },
     { href: '#', label: 'System Logs', icon: Activity, disabled: true },
     { href: '#', label: 'Compliance', icon: FileText, disabled: true },
