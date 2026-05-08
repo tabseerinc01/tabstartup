@@ -14,7 +14,8 @@ import {
   where,
   increment,
   setDoc,
-  updateDoc
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
@@ -35,8 +36,21 @@ import {
   Rocket,
   ShieldCheck,
   Hash,
-  CornerDownRight
+  CornerDownRight,
+  MoreVertical,
+  EyeOff,
+  Trash2,
+  ShieldAlert,
+  Eye
 } from 'lucide-react';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
@@ -54,7 +68,6 @@ export default function CommunityFeedPage() {
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
 
   // Use the simplest possible collection query to ensure permission compatibility
-  // Only execute when user is authenticated to prevent permission errors on page load
   const postsQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return collection(firestore, 'communityPosts');
@@ -62,9 +75,13 @@ export default function CommunityFeedPage() {
   
   const { data: rawPosts, isLoading: isPostsLoading } = useCollection(postsQuery);
 
-  // Filter and sort posts client-side for maximum query stability
+  const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'super_admin';
+
+  // Filter and sort posts client-side
+  // Admins see everything (including hidden) so they can unhide, 
+  // users only see active.
   const posts = (rawPosts || [])
-    .filter(p => p.status === 'active')
+    .filter(p => isAdmin || p.status === 'active')
     .sort((a, b) => {
       const timeA = a.createdAt?.toMillis?.() || 0;
       const timeB = b.createdAt?.toMillis?.() || 0;
@@ -72,7 +89,7 @@ export default function CommunityFeedPage() {
     })
     .slice(0, 50);
 
-  // Real-time likes listener for the current user to track their personal interactions
+  // Real-time likes listener for the current user
   const userLikesQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
@@ -161,7 +178,6 @@ export default function CommunityFeedPage() {
       createdAt: serverTimestamp()
     };
 
-    // Atomic increment for likesCount ensures consistency
     setDoc(doc(firestore, 'communityPostLikes', likeId), likeData)
       .then(() => {
         updateDoc(doc(firestore, 'communityPosts', postId), {
@@ -187,7 +203,42 @@ export default function CommunityFeedPage() {
     setExpandedComments(newExpanded);
   };
 
-  // Prevent entire page flicker by showing centered loader during initial auth verification
+  // Moderation Handlers
+  const handleToggleHide = (postId: string, currentStatus: string) => {
+    if (!firestore || !isAdmin) return;
+    const newStatus = currentStatus === 'hidden' ? 'active' : 'hidden';
+    
+    updateDoc(doc(firestore, 'communityPosts', postId), {
+      status: newStatus,
+      updatedAt: serverTimestamp()
+    }).then(() => {
+      toast({ 
+        title: newStatus === 'hidden' ? "Post Hidden" : "Post Activated", 
+        description: `This post is now ${newStatus}.` 
+      });
+    }).catch(error => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: `communityPosts/${postId}`,
+        operation: 'update',
+        requestResourceData: { status: newStatus }
+      }));
+    });
+  };
+
+  const handleDeletePost = (postId: string) => {
+    if (!firestore || !isAdmin) return;
+    if (!confirm("Are you sure you want to permanently delete this post?")) return;
+
+    deleteDoc(doc(firestore, 'communityPosts', postId)).then(() => {
+      toast({ title: "Post Deleted", description: "The content has been removed from the platform." });
+    }).catch(error => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: `communityPosts/${postId}`,
+        operation: 'delete',
+      }));
+    });
+  };
+
   if (isUserLoading) {
     return (
       <div className="flex min-h-screen flex-col bg-muted/20">
@@ -334,6 +385,9 @@ export default function CommunityFeedPage() {
                   onToggleComments={() => toggleComments(post.id)}
                   user={user}
                   userProfile={userProfile}
+                  isAdmin={isAdmin}
+                  onToggleHide={() => handleToggleHide(post.id, post.status)}
+                  onDelete={() => handleDeletePost(post.id)}
                 />
               ))
             )}
@@ -365,16 +419,28 @@ export default function CommunityFeedPage() {
   );
 }
 
-function PostCard({ post, isLiked, onLike, isExpanded, onToggleComments, user, userProfile }: any) {
+function PostCard({ 
+  post, 
+  isLiked, 
+  onLike, 
+  isExpanded, 
+  onToggleComments, 
+  user, 
+  userProfile, 
+  isAdmin,
+  onToggleHide,
+  onDelete
+}: any) {
   const createdAtDate = post.createdAt?.toDate ? post.createdAt.toDate() : new Date();
+  const profileLink = post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`;
 
   return (
-    <Card className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-50 animate-in fade-in duration-700">
+    <Card className={`group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-50 animate-in fade-in duration-700 ${post.status === 'hidden' ? 'opacity-60 grayscale' : ''}`}>
       <CardContent className="p-0">
         <div className="p-8 space-y-6">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}>
+              <Link href={profileLink}>
                 <Avatar className="h-14 w-14 border-4 border-slate-50 group-hover:border-primary/10 transition-colors shadow-sm">
                   <AvatarImage src={post.authorImage} />
                   <AvatarFallback className="font-black text-xl">{post.authorName.charAt(0)}</AvatarFallback>
@@ -382,11 +448,14 @@ function PostCard({ post, isLiked, onLike, isExpanded, onToggleComments, user, u
               </Link>
               <div>
                 <div className="flex items-center gap-2">
-                  <Link href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`} className="text-xl font-black text-slate-900 hover:text-primary transition-colors">
+                  <Link href={profileLink} className="text-xl font-black text-slate-900 hover:text-primary transition-colors">
                     {post.authorName}
                   </Link>
                   {(post.authorType === 'admin' || post.authorType === 'super_admin') && (
                     <ShieldCheck className="h-4 w-4 text-primary fill-primary/10" />
+                  )}
+                  {post.status === 'hidden' && (
+                    <Badge variant="destructive" className="rounded-lg h-5 px-2 text-[8px] font-black uppercase tracking-widest">Hidden</Badge>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
@@ -405,9 +474,33 @@ function PostCard({ post, isLiked, onLike, isExpanded, onToggleComments, user, u
                 </div>
               </div>
             </div>
-            <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-50 text-slate-300">
-              <Share2 className="h-4 w-4" />
-            </Button>
+            
+            <div className="flex items-center gap-1">
+              {isAdmin && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-50 text-slate-400">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="rounded-2xl w-48">
+                    <DropdownMenuLabel className="flex items-center gap-2">
+                      <ShieldAlert className="h-3 w-3 text-primary" /> Moderation
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={onToggleHide} className="gap-2 cursor-pointer rounded-lg m-1">
+                      {post.status === 'hidden' ? <><Eye className="h-4 w-4" /> Unhide Post</> : <><EyeOff className="h-4 w-4" /> Hide Post</>}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={onDelete} className="gap-2 cursor-pointer text-destructive focus:text-destructive rounded-lg m-1">
+                      <Trash2 className="h-4 w-4" /> Delete Post
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              <Button variant="ghost" size="icon" className="rounded-full hover:bg-slate-50 text-slate-300">
+                <Share2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           <div className="prose prose-lg max-w-none">
@@ -453,7 +546,7 @@ function PostCard({ post, isLiked, onLike, isExpanded, onToggleComments, user, u
                 </Button>
              </div>
              <Link 
-              href={post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`}
+              href={profileLink}
               className="text-[10px] font-black text-primary uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity"
              >
                 View Profile
@@ -479,7 +572,6 @@ function CommentsSection({ postId, user, userProfile }: any) {
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Subscribe to comments for this post using the base collection pattern
   const commentsQuery = useMemoFirebase(() => {
     if (!firestore || !postId) return null;
     return collection(firestore, 'communityComments');
@@ -487,7 +579,6 @@ function CommentsSection({ postId, user, userProfile }: any) {
   
   const { data: rawComments, isLoading: isCommentsLoading } = useCollection(commentsQuery);
 
-  // Filter and sort comments client-side for query stability
   const comments = (rawComments || [])
     .filter(c => c.postId === postId)
     .sort((a, b) => {
