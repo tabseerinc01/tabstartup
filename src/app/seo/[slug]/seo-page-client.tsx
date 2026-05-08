@@ -27,7 +27,8 @@ import {
   ShieldCheck,
   Handshake,
   UserPlus,
-  Star
+  Star,
+  EyeOff
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -110,7 +111,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
           cofounderOpp: cCount.data().count
         });
 
-        // 4. Fetch other SEO pages
+        // 4. Fetch other SEO pages for recommendations
         const otherPagesQ = query(
           collection(firestore, 'seoPages'), 
           where('status', '==', 'active'),
@@ -119,7 +120,8 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
         const otherSnap = await getDocs(otherPagesQ);
         const filteredOther = otherSnap.docs
           .map(d => d.data())
-          .filter(p => p.slug !== slug && p.status === 'active')
+          .filter(p => p.slug !== slug)
+          .sort(() => Math.random() - 0.5) // Semi-randomize
           .slice(0, 4);
         setOtherPages(filteredOther);
 
@@ -359,30 +361,40 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
           </section>
 
           {/* Explore More Section */}
-          <section className="space-y-8 pt-12 border-t border-slate-200">
-            <div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Explore More Curated Hubs</h2>
-              <p className="text-slate-500 font-medium mt-1">Discover other niches in the TabStartup ecosystem.</p>
+          <section className="space-y-10 pt-12 border-t border-slate-200">
+            <div className="space-y-2">
+              <h2 className="text-3xl font-black text-slate-900 tracking-tight">Explore More Startup Directories</h2>
+              <p className="text-slate-500 font-medium">Discover other curated niches and resource hubs in the TabStartup ecosystem.</p>
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {otherPages.map((page) => (
                 <Link key={page.slug} href={`/seo/${page.slug}`}>
-                  <Card className="hover:border-primary/30 transition-colors cursor-pointer group">
-                    <CardContent className="p-5 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-primary/5 rounded-lg text-primary">
-                          <Globe className="h-5 w-5" />
-                        </div>
-                        <span className="font-bold text-slate-700 group-hover:text-primary transition-colors">{page.h1}</span>
+                  <Card className="hover:border-primary/30 transition-all cursor-pointer group bg-background shadow-sm hover:shadow-md h-full rounded-3xl overflow-hidden border-slate-100">
+                    <CardHeader className="p-6 pb-2">
+                      <div className="flex items-center gap-3 mb-2">
+                         <div className="p-2 bg-primary/5 rounded-lg text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+                           <Globe className="h-4 w-4" />
+                         </div>
+                         <CardTitle className="text-lg font-bold group-hover:text-primary transition-colors line-clamp-1">{page.title}</CardTitle>
                       </div>
-                      <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-primary transition-colors" />
+                    </CardHeader>
+                    <CardContent className="p-6 pt-0">
+                       <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed">
+                         {page.metaDescription || "Find top-tier ventures and support networks in this curated ecosystem hub."}
+                       </p>
+                       <div className="mt-4 flex items-center text-xs font-bold text-primary opacity-0 group-hover:opacity-100 transition-all translate-x-[-10px] group-hover:translate-x-0">
+                          Explore Directory <ArrowRight className="ml-1 h-3 w-3" />
+                       </div>
                     </CardContent>
-                  </Link>
-                ))}
+                  </Card>
+                </Link>
+              ))}
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Link href="/services">
-                <Card className="hover:border-primary/30 transition-colors cursor-pointer group bg-primary/5 border-primary/10">
+                <Card className="hover:border-primary/30 transition-colors cursor-pointer group bg-primary/5 border-primary/10 rounded-2xl">
                   <CardContent className="p-5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-primary text-white rounded-lg">
@@ -396,7 +408,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
               </Link>
 
               <Link href="/cofounders">
-                <Card className="hover:border-primary/30 transition-colors cursor-pointer group bg-accent/5 border-accent/10">
+                <Card className="hover:border-primary/30 transition-colors cursor-pointer group bg-accent/5 border-accent/10 rounded-2xl">
                   <CardContent className="p-5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-accent text-white rounded-lg">
