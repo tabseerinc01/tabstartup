@@ -42,7 +42,7 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
 export default function CommunityFeedPage() {
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
 
@@ -53,16 +53,16 @@ export default function CommunityFeedPage() {
   const [startupProfile, setStartupProfile] = useState<any>(null);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
 
-  // Real-time posts listener
+  // Real-time posts listener - ONLY run when user is logged in to prevent permission errors
   const postsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
+    if (!firestore || !user?.uid) return null;
     return query(
       collection(firestore, 'communityPosts'),
       where('status', '==', 'active'),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
-  }, [firestore]);
+  }, [firestore, user?.uid]);
   const { data: posts, isLoading: isPostsLoading } = useCollection(postsQuery);
 
   // Real-time likes listener for the current user
@@ -179,6 +179,21 @@ export default function CommunityFeedPage() {
     setExpandedComments(newExpanded);
   };
 
+  if (isUserLoading) {
+    return (
+      <div className="flex min-h-screen flex-col bg-muted/20">
+        <PublicHeader />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-12 w-12 animate-spin text-primary opacity-20" />
+            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Authenticating...</p>
+          </div>
+        </main>
+        <PublicFooter />
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
@@ -290,8 +305,12 @@ export default function CommunityFeedPage() {
                     <MessageSquare className="h-12 w-12 text-slate-300" />
                   </div>
                   <div>
-                    <p className="text-xl font-bold text-slate-900">The feed is quiet today</p>
-                    <p className="text-slate-500 font-medium">Be the first to share an update with the TabStartup community!</p>
+                    <p className="text-xl font-bold text-slate-900">
+                      {user ? "The feed is quiet today" : "Log in to see updates"}
+                    </p>
+                    <p className="text-slate-500 font-medium">
+                      {user ? "Be the first to share an update with the TabStartup community!" : "Ecosystem updates are only visible to logged-in members."}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
