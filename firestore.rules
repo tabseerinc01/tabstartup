@@ -3,13 +3,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper: Check if user is super admin
+    // Helper: Check if user is super admin by email
     function isSuperAdmin() {
       return request.auth != null &&
         request.auth.token.email == 'shahmubaruk05@gmail.com';
     }
 
-    // Helper: Check if user is admin or super admin
+    // Helper: Check if user is admin or super admin by email
     function isAdmin() {
       return request.auth != null &&
         (
@@ -23,29 +23,27 @@ service cloud.firestore {
       allow write: if request.auth != null && (request.auth.uid == userId || isSuperAdmin());
     }
 
-    // COMMUNITY POSTS
+    // COMMUNITY POSTS - Updated with requested rules
     match /communityPosts/{postId} {
-      // Explicitly allow list and get for authenticated users
       allow read: if request.auth != null;
       allow create: if request.auth != null;
-      // Allow author or admin to update
-      allow update: if request.auth != null && (resource.data.authorUid == request.auth.uid || isAdmin());
-      // Allow author or admin to delete
+      allow update: if request.auth != null
+        && (resource.data.authorUid == request.auth.uid || isAdmin());
       allow delete: if request.auth != null && (resource.data.authorUid == request.auth.uid || isAdmin());
     }
 
-    // COMMUNITY COMMENTS
+    // COMMUNITY COMMENTS - Updated with requested rules
     match /communityComments/{commentId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
       allow update, delete: if request.auth != null && (resource.data.authorUid == request.auth.uid || isAdmin());
     }
 
-    // COMMUNITY POST LIKES
+    // COMMUNITY POST LIKES - Updated with requested rules
     match /communityPostLikes/{likeId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow delete: if request.auth != null && (resource.data.userUid == request.auth.uid || isAdmin());
+      allow delete: if request.auth != null;
     }
     
     // STARTUPS: Public read for listings, owner-only write
