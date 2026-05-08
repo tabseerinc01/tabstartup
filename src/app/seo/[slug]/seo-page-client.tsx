@@ -171,6 +171,22 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
     );
   }
 
+  // Determine dynamic CTA button label and link
+  const getPrimaryCTA = () => {
+    switch (pageData.type) {
+      case 'startup':
+        return { label: 'Create Startup Profile', href: '/signup?role=founder' };
+      case 'cofounder':
+        return { label: 'Find a Co-founder', href: '/cofounders' };
+      case 'investor':
+        return { label: 'Explore Investment Opportunities', href: '/founders' };
+      default:
+        return { label: 'Create Profile', href: '/signup' };
+    }
+  };
+
+  const primaryCTA = getPrimaryCTA();
+
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
@@ -456,7 +472,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
             
             <div className="pt-4 flex flex-wrap justify-center gap-4">
               <Button size="lg" className="rounded-full px-10 h-14 text-base font-bold bg-primary text-white hover:bg-primary/90 shadow-xl shadow-primary/20" asChild>
-                <Link href="/signup">Create Profile</Link>
+                <Link href={primaryCTA.href}>{primaryCTA.label}</Link>
               </Button>
               <Button size="lg" variant="outline" className="rounded-full px-10 h-14 text-base font-bold border-slate-700 text-white hover:bg-slate-800" asChild>
                 <Link href="/founders">Explore Startups</Link>
