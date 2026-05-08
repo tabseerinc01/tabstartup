@@ -15,7 +15,8 @@ import {
   MessageSquare,
   GraduationCap,
   Wrench,
-  ShieldAlert
+  ShieldAlert,
+  Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -77,6 +78,7 @@ export function DashboardSidebar() {
     { href: '/dashboard', label: 'Overview', icon: Home },
     { href: '/dashboard/profile', label: 'My Profile', icon: User },
     { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
+    { href: '/community', label: 'Community', icon: Globe },
     { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
     { href: '/cofounders', label: 'Co-founders', icon: Users },
     { href: '/mentors', label: 'Mentors', icon: GraduationCap },
