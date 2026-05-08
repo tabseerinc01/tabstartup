@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "User": {
@@ -357,10 +358,25 @@
             "stage": { "type": "string" }
           }
         },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "status": { "type": "string", "enum": ["active", "inactive"] }
+        "createdAt": { "type": "string", format: "date-time" },
+        "status": { "type": "string", enum: ["active", "inactive"] }
       },
       "required": ["slug", "type", "title", "h1", "createdAt", "status"]
+    },
+    "Post": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Post",
+      "type": "object",
+      "description": "A post in the startup community feed.",
+      "properties": {
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorUid", "authorName", "content", "createdAt"]
     }
   },
   "auth": {
@@ -422,6 +438,14 @@
           "entityName": "SEOPage",
           "schema": { "$ref": "#/backend/entities/SEOPage" },
           "description": "Dynamic SEO landing pages."
+        }
+      },
+      {
+        "path": "/posts/{postId}",
+        "definition": {
+          "entityName": "Post",
+          "schema": { "$ref": "#/backend/entities/Post" },
+          "description": "Community feed posts."
         }
       }
     ]

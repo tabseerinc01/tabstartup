@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -98,6 +99,13 @@ service cloud.firestore {
     match /seoPages/{pageId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // POSTS: Public read, authenticated member write
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && (request.auth.uid == resource.data.authorUid || isAdmin());
     }
   }
 }
