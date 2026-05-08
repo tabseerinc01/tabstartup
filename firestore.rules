@@ -25,10 +25,12 @@ service cloud.firestore {
 
     // COMMUNITY POSTS
     match /communityPosts/{postId} {
+      // Explicitly allow list and get for authenticated users
       allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow update: if request.auth != null
-        && resource.data.authorUid == request.auth.uid;
+      // Allow author or admin to update
+      allow update: if request.auth != null && (resource.data.authorUid == request.auth.uid || isAdmin());
+      // Allow author or admin to delete
       allow delete: if request.auth != null && (resource.data.authorUid == request.auth.uid || isAdmin());
     }
 
@@ -36,14 +38,14 @@ service cloud.firestore {
     match /communityComments/{commentId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow update, delete: if request.auth != null;
+      allow update, delete: if request.auth != null && (resource.data.authorUid == request.auth.uid || isAdmin());
     }
 
     // COMMUNITY POST LIKES
     match /communityPostLikes/{likeId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow delete: if request.auth != null;
+      allow delete: if request.auth != null && (resource.data.userUid == request.auth.uid || isAdmin());
     }
     
     // STARTUPS: Public read for listings, owner-only write
