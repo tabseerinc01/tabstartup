@@ -30,16 +30,37 @@ export default function FoundersPage() {
       if (!firestore) return;
       setIsLoading(true);
       try {
-        // 1. Load Founders
-        const foundersQuery = query(
+        // 1. Fetch using new multi-role structure
+        const multiRoleQuery = query(
+          collection(firestore, 'users'),
+          where('roles', 'array-contains', 'founder'),
+          limit(100)
+        );
+        
+        // 2. Fetch using legacy role structure for migration compatibility
+        const legacyRoleQuery = query(
           collection(firestore, 'users'),
           where('role', '==', 'founder'),
           limit(100)
         );
-        const foundersSnap = await getDocs(foundersQuery);
-        const foundersItems = foundersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        // 2. Load Active Startups only
+        const [multiSnap, legacySnap] = await Promise.all([
+          getDocs(multiRoleQuery),
+          getDocs(legacyRoleQuery)
+        ]);
+
+        // Merge and deduplicate
+        const userMap = new Map();
+        multiSnap.docs.forEach(d => userMap.set(d.id, { id: d.id, ...d.data() }));
+        legacySnap.docs.forEach(d => {
+          if (!userMap.has(d.id)) {
+            userMap.set(d.id, { id: d.id, ...d.data() });
+          }
+        });
+
+        const foundersItems = Array.from(userMap.values());
+
+        // 3. Load Active Startups only
         const startupsQ = query(
           collection(firestore, 'startups'),
           where('status', '==', 'active')
@@ -53,7 +74,7 @@ export default function FoundersPage() {
           }
         });
 
-        // 3. Merge
+        // 4. Merge
         const mergedFounders = (foundersItems.length > 0 ? foundersItems : mockFounders).map(founder => ({
           ...founder,
           startup: startupsMap.get(founder.uid || founder.id) || null

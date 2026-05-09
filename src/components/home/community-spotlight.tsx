@@ -21,16 +21,34 @@ export function CommunitySpotlight() {
       if (!firestore) return;
       setIsLoading(true);
       try {
-        // 1. Fetch founders
-        const q = query(
+        // 1. Fetch using multi-role support
+        const multiRoleQuery = query(
+          collection(firestore, 'users'),
+          where('roles', 'array-contains', 'founder'),
+          limit(12)
+        );
+        
+        // 2. Legacy check
+        const legacyRoleQuery = query(
           collection(firestore, 'users'),
           where('role', '==', 'founder'),
-          limit(12) // Fetch more to account for hidden startups
+          limit(12)
         );
-        const snap = await getDocs(q);
-        const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        // 2. Fetch only ACTIVE startups to check visibility
+        const [multiSnap, legacySnap] = await Promise.all([
+          getDocs(multiRoleQuery),
+          getDocs(legacyRoleQuery)
+        ]);
+
+        const userMap = new Map();
+        multiSnap.docs.forEach(d => userMap.set(d.id, { id: d.id, ...d.data() }));
+        legacySnap.docs.forEach(d => {
+          if (!userMap.has(d.id)) userMap.set(d.id, { id: d.id, ...d.data() });
+        });
+
+        const users = Array.from(userMap.values());
+
+        // 3. Fetch only ACTIVE startups to check visibility
         const startupsQ = query(
           collection(firestore, 'startups'),
           where('status', '==', 'active')
@@ -42,13 +60,8 @@ export function CommunitySpotlight() {
           activeStartupsMap.set(data.ownerUid, data);
         });
 
-        // 3. Filter founders based on venture visibility
-        // Only show founders who have an active startup OR don't have one listed yet
-        const spotlightUsers = users.filter(u => {
-          // In this context, if they have a startup listed in the database, it MUST be active to show them
-          // We can check if their UID exists in the activeStartupsMap if they have an ownerUid
-          return true; // Simplified: directories already filter hidden startups
-        }).slice(0, 6);
+        // 4. Filter and slice
+        const spotlightUsers = users.slice(0, 6);
 
         setFounders(spotlightUsers.length > 0 ? spotlightUsers : mockFounders.slice(0, 6));
       } catch (error) {

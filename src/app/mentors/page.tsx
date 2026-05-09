@@ -30,10 +30,43 @@ export default function MentorsPage() {
       if (!firestore) return;
       setIsLoading(true);
       try {
-        const q = query(collection(firestore, 'users'), where('isMentor', '==', true), limit(100));
-        const snap = await getDocs(q);
-        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setMentors(items);
+        // 1. Query using multi-role support
+        const multiRoleQuery = query(
+          collection(firestore, 'users'), 
+          where('roles', 'array-contains', 'mentor'), 
+          limit(100)
+        );
+
+        // 2. Legacy check for backward compatibility (where isMentor: true or role: 'mentor')
+        const isMentorQuery = query(
+          collection(firestore, 'users'),
+          where('isMentor', '==', true),
+          limit(100)
+        );
+        
+        const legacyRoleQuery = query(
+          collection(firestore, 'users'),
+          where('role', '==', 'mentor'),
+          limit(100)
+        );
+
+        const [multiSnap, mentorSnap, legacySnap] = await Promise.all([
+          getDocs(multiRoleQuery),
+          getDocs(isMentorQuery),
+          getDocs(legacyRoleQuery)
+        ]);
+
+        // Merge all snaps and deduplicate
+        const userMap = new Map();
+        multiSnap.docs.forEach(d => userMap.set(d.id, { id: d.id, ...d.data() }));
+        mentorSnap.docs.forEach(d => {
+          if (!userMap.has(d.id)) userMap.set(d.id, { id: d.id, ...d.data() });
+        });
+        legacySnap.docs.forEach(d => {
+          if (!userMap.has(d.id)) userMap.set(d.id, { id: d.id, ...d.data() });
+        });
+
+        setMentors(Array.from(userMap.values()));
       } catch (error) {
         console.error("Error loading mentors:", error);
       } finally {

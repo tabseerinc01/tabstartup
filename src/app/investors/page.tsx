@@ -42,10 +42,35 @@ export default function InvestorsPage() {
       if (!firestore) return;
       setIsLoading(true);
       try {
-        const q = query(collection(firestore, 'users'), where('role', '==', 'investor'), limit(100));
-        const snap = await getDocs(q);
-        const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setInvestors(items);
+        // 1. Query by new multi-role array
+        const multiRoleQuery = query(
+          collection(firestore, 'users'), 
+          where('roles', 'array-contains', 'investor'), 
+          limit(100)
+        );
+
+        // 2. Query by legacy single role string for migration compatibility
+        const legacyRoleQuery = query(
+          collection(firestore, 'users'),
+          where('role', '==', 'investor'),
+          limit(100)
+        );
+
+        const [multiSnap, legacySnap] = await Promise.all([
+          getDocs(multiRoleQuery),
+          getDocs(legacyRoleQuery)
+        ]);
+
+        // Merge results and deduplicate by ID
+        const userMap = new Map();
+        multiSnap.docs.forEach(d => userMap.set(d.id, { id: d.id, ...d.data() }));
+        legacySnap.docs.forEach(d => {
+          if (!userMap.has(d.id)) {
+            userMap.set(d.id, { id: d.id, ...d.data() });
+          }
+        });
+
+        setInvestors(Array.from(userMap.values()));
       } catch (error) {
         console.error("Error loading investors:", error);
       } finally {
