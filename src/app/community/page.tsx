@@ -405,7 +405,7 @@ export default function CommunityFeedPage() {
               <Button size="lg" variant="secondary" className="rounded-full px-10 h-14 text-base font-bold shadow-xl" asChild>
                 <Link href="/signup">Join the Ecosystem</Link>
               </Button>
-              <Button size="lg" variant="outline" className="rounded-full px-10 h-14 text-base font-bold border-white/20 text-white hover:bg-white/10" asChild>
+              <Button size="lg" variant="outline" className="rounded-full px-10 h-14 text-base font-bold border-white text-white hover:bg-white hover:text-primary bg-transparent transition-colors" asChild>
                 <Link href="/founders">Explore Startups</Link>
               </Button>
             </div>
