@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -52,7 +51,9 @@ export function DashboardHeader() {
 
   const displayName = profile?.fullName || user?.displayName || user?.email?.split('@')[0] || "User";
   const avatarUrl = profile?.imageUrl || `https://picsum.photos/seed/${user?.uid || 'user'}/40/40`;
-  const roles = profile?.roles || [profile?.role] || ['user'];
+  
+  // Safely extract roles, filtering out any undefined/null values
+  const roles = (profile?.roles || (profile?.role ? [profile.role] : ['user'])).filter(Boolean) as string[];
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur px-4 h-16 flex items-center justify-between">

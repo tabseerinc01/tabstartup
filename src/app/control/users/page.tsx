@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -151,8 +150,8 @@ export default function UserManagementPage() {
       const startupsQ = query(collection(firestore, 'startups'), where('ownerUid', '==', targetUser.id));
       const startupsSnap = await getDocs(startupsQ);
       
-      const roles = targetUser.roles || [targetUser.role] || [];
-      const field = roles.includes('investor') ? 'fromInvestorUid' : 'toFounderUid';
+      const rolesArr = (targetUser.roles || (targetUser.role ? [targetUser.role] : ['user'])).filter(Boolean) as string[];
+      const field = rolesArr.includes('investor') ? 'fromInvestorUid' : 'toFounderUid';
       const pitchesQ = query(collection(firestore, 'pitches'), where(field, '==', targetUser.id));
       const pitchesSnap = await getDocs(pitchesQ);
 
@@ -207,7 +206,7 @@ export default function UserManagementPage() {
                   </TableCell>
                 </TableRow>
               ) : allUsers.map((u) => {
-                const roles = u.roles || [u.role] || ['user'];
+                const rolesArr = (u.roles || (u.role ? [u.role] : ['user'])).filter(Boolean) as string[];
                 return (
                   <TableRow key={u.id} className="group border-b border-slate-50 hover:bg-slate-50/30 transition-colors">
                     <TableCell className="pl-8 py-5">
@@ -226,7 +225,7 @@ export default function UserManagementPage() {
                     </TableCell>
                     <TableCell>
                        <div className="flex flex-wrap gap-1.5">
-                          {roles.map((r: string) => (
+                          {rolesArr.map((r: string) => (
                             <Badge 
                               key={r}
                               variant="secondary" 

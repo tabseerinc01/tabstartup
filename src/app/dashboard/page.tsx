@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -23,12 +22,13 @@ import {
    Zap,
    Briefcase,
    HandCoins,
-   ShieldAlert
+   ShieldAlert,
+   Globe
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useUser, useFirestore } from '@/firebase';
-import { doc, collection, query, where, limit, orderBy, updateDoc, getDoc, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, query, where, limit, orderBy, updateDoc, getDoc, getDocs, addDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Button as ShadButton } from '@/components/ui/button';
 
@@ -82,9 +82,9 @@ export default function DashboardOverviewPage() {
       const chatsSnap = await getDocs(chatsQ);
       setChatsCount(chatsSnap.size);
 
-      const roles = profileData?.roles || [profileData?.role] || [];
-      const isFounder = roles.includes('founder') || roles.includes('super_admin');
-      const isInvestor = roles.includes('investor') || roles.includes('super_admin');
+      const rolesArr = (profileData?.roles || (profileData?.role ? [profileData.role] : ['user'])).filter(Boolean) as string[];
+      const isFounder = rolesArr.includes('founder') || rolesArr.includes('super_admin');
+      const isInvestor = rolesArr.includes('investor') || rolesArr.includes('super_admin');
 
       if (isFounder) {
         try {
@@ -135,10 +135,9 @@ export default function DashboardOverviewPage() {
   }
 
   const displayName = profile?.fullName || user?.email?.split('@')[0] || "User";
-  const roles = profile?.roles || [profile?.role] || [];
+  const roles = (profile?.roles || (profile?.role ? [profile.role] : ['user'])).filter(Boolean) as string[];
   const isFounder = roles.includes('founder') || roles.includes('super_admin');
   const isInvestor = roles.includes('investor') || roles.includes('super_admin');
-  const isSuperAdmin = roles.includes('super_admin');
   
   const handlePitchStatus = async (pitch: any, status: 'accepted' | 'rejected') => {
     if (!firestore || !user?.uid) return;
