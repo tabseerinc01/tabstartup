@@ -393,23 +393,22 @@ export default function CommunityFeedPage() {
             )}
           </div>
 
-          <section className="bg-slate-900 rounded-[3rem] p-12 text-center space-y-8 shadow-2xl relative overflow-hidden">
+          <section className="bg-primary rounded-[3rem] p-12 text-center space-y-8 shadow-2xl shadow-primary/20 relative overflow-hidden">
             <div className="space-y-4 relative z-10">
               <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">Support local founders</h2>
-              <p className="text-slate-400 max-w-2xl mx-auto text-lg font-medium leading-relaxed">
+              <p className="text-white/80 max-w-2xl mx-auto text-lg font-medium leading-relaxed">
                 Connect with the builders and capital partners shaping the future of the emerging ecosystem.
               </p>
             </div>
             
             <div className="pt-4 flex flex-wrap justify-center gap-4 relative z-10">
-              <Button size="lg" className="rounded-full px-10 h-14 text-base font-bold bg-primary text-white hover:bg-primary/90 shadow-xl shadow-primary/20" asChild>
+              <Button size="lg" variant="secondary" className="rounded-full px-10 h-14 text-base font-bold shadow-xl" asChild>
                 <Link href="/signup">Join the Ecosystem</Link>
               </Button>
-              <Button size="lg" variant="outline" className="rounded-full px-10 h-14 text-base font-bold border-slate-700 text-white hover:bg-slate-800" asChild>
+              <Button size="lg" variant="outline" className="rounded-full px-10 h-14 text-base font-bold border-white/20 text-white hover:bg-white/10" asChild>
                 <Link href="/founders">Explore Startups</Link>
               </Button>
             </div>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-accent to-primary opacity-50" />
           </section>
 
         </div>
