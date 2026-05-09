@@ -1,7 +1,8 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, Search, Menu, LogOut, User as UserIcon, Settings } from 'lucide-react';
+import { Bell, Search, Menu, LogOut, User as UserIcon, Settings, ShieldCheck } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { 
@@ -19,6 +20,7 @@ import { useUser, useAuth, initiateSignOut, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { doc, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
 
 export function DashboardHeader() {
   const { user } = useUser();
@@ -50,6 +52,7 @@ export function DashboardHeader() {
 
   const displayName = profile?.fullName || user?.displayName || user?.email?.split('@')[0] || "User";
   const avatarUrl = profile?.imageUrl || `https://picsum.photos/seed/${user?.uid || 'user'}/40/40`;
+  const roles = profile?.roles || [profile?.role] || ['user'];
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur px-4 h-16 flex items-center justify-between">
@@ -76,6 +79,12 @@ export function DashboardHeader() {
       </div>
 
       <div className="flex items-center gap-3">
+        {profile?.isVerified && (
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 border border-green-100 rounded-full text-[10px] font-bold">
+            <ShieldCheck className="h-3 w-3" /> VERIFIED
+          </div>
+        )}
+        
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
           <span className="absolute top-2 right-2 h-2 w-2 bg-primary rounded-full" />
@@ -90,20 +99,27 @@ export function DashboardHeader() {
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56" align="end" forceMount>
+          <DropdownMenuContent className="w-64" align="end" forceMount>
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none">{displayName}</p>
                 <p className="text-xs leading-none text-muted-foreground">
                   {user?.email}
                 </p>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {roles.map(r => (
+                    <Badge key={r} variant="secondary" className="text-[8px] font-bold h-4 px-1.5 capitalize">
+                      {r.replace('_', ' ')}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link href="/dashboard/profile" className="flex items-center gap-2 cursor-pointer">
                 <UserIcon className="h-4 w-4" />
-                <span>Profile</span>
+                <span>Profile Settings</span>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem className="flex items-center gap-2 cursor-pointer">

@@ -41,19 +41,19 @@ export default function SignupPage() {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Following non-blocking pattern: Initiate, then handle results via callbacks
     createUserWithEmailAndPassword(auth, email, password)
       .then((userCredential) => {
         const newUser = userCredential.user;
         
-        // Update profile and create Firestore record
         updateProfile(newUser, { displayName: name });
 
         setDoc(doc(firestore, "users", newUser.uid), {
           uid: newUser.uid,
           fullName: name,
           email: email,
-          role: role,
+          role: role, // Legacy support
+          primaryRole: role,
+          roles: [role],
           headline: "",
           bio: "",
           location: "",
@@ -72,8 +72,6 @@ export default function SignupPage() {
           description: "Welcome to TabStartup." 
         });
         
-        // Navigation will be handled by the auth state observer in most cases, 
-        // but we can also trigger it manually here.
         router.push('/dashboard');
       })
       .catch((error: any) => {

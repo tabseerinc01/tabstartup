@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -49,9 +50,11 @@ export function DashboardSidebar() {
     loadProfile();
   }, [firestore, user?.uid]);
 
-  // Listen for pending pitches (investor interest) for founders
   useEffect(() => {
-    if (!firestore || !user?.uid || profile?.role !== 'founder') return;
+    if (!firestore || !user?.uid || !profile) return;
+    
+    const roles = profile.roles || [profile.role] || [];
+    if (!roles.includes('founder')) return;
 
     const q = query(
       collection(firestore, 'pitches'),
@@ -64,32 +67,43 @@ export function DashboardSidebar() {
     });
 
     return () => unsubscribe();
-  }, [firestore, user?.uid, profile?.role]);
+  }, [firestore, user?.uid, profile]);
 
   const handleLogout = () => {
     initiateSignOut(auth);
     router.push('/login');
   };
 
-  const isFounder = profile?.role === 'founder';
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+  const roles = profile?.roles || [profile?.role] || [];
+  const isFounder = roles.includes('founder');
+  const isInvestor = roles.includes('investor');
+  const isMentor = roles.includes('mentor');
+  const isAdmin = roles.includes('admin') || roles.includes('super_admin');
 
   const menuItems = [
     { href: '/dashboard', label: 'Overview', icon: Home },
     { href: '/dashboard/profile', label: 'My Profile', icon: User },
-    { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
     { href: '/community', label: 'Community', icon: Globe },
     { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
+    
+    // Role-specific sections
+    ...(isFounder ? [
+      { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
+      { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }
+    ] : []),
+    
     { href: '/cofounders', label: 'Co-founders', icon: Users },
     { href: '/mentors', label: 'Mentors', icon: GraduationCap },
+    { href: '/investors', label: 'Investors', icon: ShieldAlert },
     { href: '/services', label: 'Services', icon: Wrench },
+    
     { 
       href: '/dashboard/connections', 
       label: 'Connections', 
       icon: Users,
       showBadge: hasPendingPitches 
     },
-    ...(isFounder ? [{ href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }] : []),
+    
     ...(isAdmin ? [{ href: '/control', label: 'Control Panel', icon: ShieldAlert }] : []),
     { href: '#', label: 'Settings', icon: Settings, disabled: true },
   ];

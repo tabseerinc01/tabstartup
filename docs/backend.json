@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "User": {
@@ -19,7 +20,17 @@
         },
         "role": {
           "type": "string",
+          "enum": ["founder", "mentor", "investor", "user", "admin", "super_admin"],
+          "description": "Legacy field for backward compatibility."
+        },
+        "primaryRole": {
+          "type": "string",
           "enum": ["founder", "mentor", "investor", "user", "admin", "super_admin"]
+        },
+        "roles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of active roles for this user."
         },
         "headline": {
           "type": "string"

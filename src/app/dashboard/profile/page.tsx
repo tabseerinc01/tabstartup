@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -10,11 +11,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore, useStorage } from '@/firebase';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, updateDoc, arrayUnion } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { Loader2, Plus, Trash2, Linkedin, Globe, Image as ImageIcon, Briefcase, Users, Camera, Upload } from 'lucide-react';
+import { Loader2, Plus, Trash2, Linkedin, Globe, Image as ImageIcon, Briefcase, Users, Camera, Upload, ShieldCheck, Zap } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+
+const AVAILABLE_ROLES = [
+  { id: 'founder', label: 'Founder', icon: Zap },
+  { id: 'investor', label: 'Investor', icon: ShieldCheck },
+  { id: 'mentor', label: 'Mentor', icon: Users },
+];
 
 export default function ProfilePage() {
   const { toast } = useToast();
@@ -27,7 +35,8 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [isActivatingRole, setIsActivatingRole] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     fullName: '',
@@ -78,7 +87,8 @@ export default function ProfilePage() {
         const snap = await getDoc(doc(firestore, 'users', user.uid));
         if (snap.exists()) {
           const profile = snap.data();
-          setUserRole(profile.role);
+          const roles = profile.roles || [profile.role] || ['founder'];
+          setUserRoles(roles);
           setFormData({
             fullName: profile.fullName || '',
             imageUrl: profile.imageUrl || '',
@@ -101,7 +111,7 @@ export default function ProfilePage() {
             cofounderRole: profile.cofounderRole || '',
             equityOffer: profile.equityOffer || '',
             commitmentType: profile.commitmentType || '',
-            isMentor: profile.isMentor || false,
+            isMentor: profile.isMentor || roles.includes('mentor') || false,
             mentorSkills: Array.isArray(profile.mentorSkills) ? profile.mentorSkills.join(', ') : '',
             mentorBio: profile.mentorBio || '',
             yearsOfExperience: profile.yearsOfExperience || '',
@@ -125,7 +135,6 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file || !user || !storage) return;
 
-    // Validation
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
       toast({ title: "Invalid format", description: "Please upload a JPEG, PNG, or WebP image.", variant: "destructive" });
@@ -181,6 +190,7 @@ export default function ProfilePage() {
         preferredStage: stageArray,
         cofounderSkills: cofounderSkillsArray,
         mentorSkills: mentorSkillsArray,
+        isMentor: userRoles.includes('mentor'),
         updatedAt: serverTimestamp(),
       };
 
@@ -198,6 +208,24 @@ export default function ProfilePage() {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const activateRole = async (roleId: string) => {
+    if (!firestore || !user?.uid || isActivatingRole) return;
+    
+    setIsActivatingRole(roleId);
+    try {
+      await updateDoc(doc(firestore, 'users', user.uid), {
+        roles: arrayUnion(roleId),
+        updatedAt: serverTimestamp()
+      });
+      setUserRoles(prev => [...new Set([...prev, roleId])]);
+      toast({ title: "Role Activated", description: `You have successfully joined the ecosystem as a ${roleId}.` });
+    } catch (error) {
+      toast({ title: "Activation Failed", variant: "destructive" });
+    } finally {
+      setIsActivatingRole(null);
     }
   };
 
@@ -228,17 +256,21 @@ export default function ProfilePage() {
     );
   }
 
-  const isInvestor = userRole === 'investor';
-  const isFounder = userRole === 'founder';
-  const isMentorRole = userRole === 'mentor';
   const initials = formData.fullName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || '?';
 
   return (
     <div className="max-w-4xl mx-auto w-full space-y-8 pb-20">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">
-          {isInvestor ? 'Investor Profile' : isMentorRole ? 'Mentor Profile' : 'Founder Profile'}
-        </h1>
+        <div>
+          <h1 className="text-3xl font-bold">Profile Settings</h1>
+          <div className="flex gap-1.5 mt-2">
+            {userRoles.map(role => (
+              <Badge key={role} className="capitalize bg-primary/10 text-primary border-none text-[10px] font-bold">
+                {role}
+              </Badge>
+            ))}
+          </div>
+        </div>
         <Button onClick={handleSave} disabled={isSaving || isUploading}>
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
           Save Changes
@@ -247,6 +279,40 @@ export default function ProfilePage() {
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
+          
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" /> Ecosystem Roles
+              </CardTitle>
+              <CardDescription>Activate additional profiles to unlock more features.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {AVAILABLE_ROLES.map(role => {
+                  const isActive = userRoles.includes(role.id);
+                  return (
+                    <Button
+                      key={role.id}
+                      variant={isActive ? "default" : "outline"}
+                      className={`h-auto py-4 flex-col gap-2 rounded-2xl ${isActive ? 'bg-white text-primary shadow-sm hover:bg-white' : 'border-dashed'}`}
+                      onClick={() => !isActive && activateRole(role.id)}
+                      disabled={isActive || isActivatingRole === role.id}
+                    >
+                      {isActivatingRole === role.id ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <role.icon className={`h-6 w-6 ${isActive ? 'text-primary' : 'text-muted-foreground opacity-40'}`} />
+                      )}
+                      <span className="font-bold text-xs">{role.label}</span>
+                      {isActive && <Badge variant="secondary" className="h-4 px-1.5 text-[8px] bg-green-50 text-green-700">ACTIVE</Badge>}
+                    </Button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Basic Information</CardTitle>
@@ -319,51 +385,37 @@ export default function ProfilePage() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="headline">
-                  {isInvestor ? 'Investor Headline' : isMentorRole ? 'Professional Headline' : 'Headline'}
-                </Label>
+                <Label htmlFor="headline">Professional Headline</Label>
                 <Input 
                   id="headline" 
-                  placeholder={isInvestor ? "e.g. Managing Partner at Delta VC" : isMentorRole ? "e.g. 10+ years in Product Strategy" : "e.g. Building the future of AgriTech"}
-                  value={isInvestor ? formData.investorHeadline : formData.headline}
-                  onChange={e => setFormData({...formData, [isInvestor ? 'investorHeadline' : 'headline']: e.target.value})}
+                  placeholder="e.g. Building the future of Fintech in Bangladesh"
+                  value={formData.headline}
+                  onChange={e => setFormData({...formData, headline: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="bio">{isInvestor ? 'Investor Biography' : isMentorRole ? 'About Me' : 'About Me'}</Label>
+                <Label htmlFor="bio">About Me</Label>
                 <Textarea 
                   id="bio" 
                   rows={4} 
-                  placeholder={isInvestor ? "Tell founders about your investment philosophy..." : "Tell us your story..."}
-                  value={isInvestor ? formData.investorBio : formData.bio}
-                  onChange={e => setFormData({...formData, [isInvestor ? 'investorBio' : 'bio']: e.target.value})}
+                  placeholder="Tell the community about your journey and vision..."
+                  value={formData.bio}
+                  onChange={e => setFormData({...formData, bio: e.target.value})}
                 />
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-primary" /> Mentor Profile
-              </CardTitle>
-              <CardDescription>Share your experience and guide others.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center space-x-2 bg-primary/5 p-4 rounded-xl border border-primary/10">
-                <Checkbox 
-                  id="isMentor" 
-                  checked={formData.isMentor}
-                  onCheckedChange={(checked) => setFormData({
-                    ...formData, 
-                    isMentor: !!checked
-                  })}
-                />
-                <Label htmlFor="isMentor" className="font-bold cursor-pointer text-primary">Available as Mentor</Label>
-              </div>
-
-              {formData.isMentor && (
-                <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
+          {userRoles.includes('mentor') && (
+            <Card className="animate-in fade-in slide-in-from-top-4 duration-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" /> Mentor Details
+                </CardTitle>
+                <CardDescription>Share your experience and guide others.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4 pt-2">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="yearsExp">Years of Experience</Label>
@@ -410,88 +462,94 @@ export default function ProfilePage() {
                     />
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {isFounder && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-primary" /> Co-founder
-                </CardTitle>
-                <CardDescription>Looking for a partner to build with?</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center space-x-2 bg-primary/5 p-4 rounded-xl border border-primary/10">
-                  <Checkbox 
-                    id="lookingForCofounder" 
-                    checked={formData.lookingForCofounder}
-                    onCheckedChange={(checked) => setFormData({
-                      ...formData, 
-                      lookingForCofounder: !!checked
-                    })}
-                  />
-                  <Label htmlFor="lookingForCofounder" className="font-bold cursor-pointer text-primary">Looking for Co-founder</Label>
-                </div>
-
-                {formData.lookingForCofounder && (
-                  <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="commitmentType">Expected Commitment</Label>
-                        <Select 
-                          value={formData.commitmentType} 
-                          onValueChange={v => setFormData({...formData, commitmentType: v})}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Full-time">Full-time</SelectItem>
-                            <SelectItem value="Part-time">Part-time</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="equityOffer">Equity Range (%)</Label>
-                        <Input 
-                          id="equityOffer" 
-                          placeholder="e.g. 10-25%"
-                          value={formData.equityOffer}
-                          onChange={e => setFormData({...formData, equityOffer: e.target.value})}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cofounderRole">Role Description</Label>
-                      <Textarea 
-                        id="cofounderRole" 
-                        placeholder="Describe the responsibilities and expectations for your co-founder..."
-                        value={formData.cofounderRole}
-                        rows={3}
-                        onChange={e => setFormData({...formData, cofounderRole: e.target.value})}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cofounderSkills">Required Skills (comma separated)</Label>
-                      <Input 
-                        id="cofounderSkills" 
-                        placeholder="e.g. React, Node.js, Sales, Operations"
-                        value={formData.cofounderSkills}
-                        onChange={e => setFormData({...formData, cofounderSkills: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
           )}
 
-          {isInvestor ? (
-            <Card>
+          {userRoles.includes('founder') && (
+            <Card className="animate-in fade-in slide-in-from-top-4 duration-500">
               <CardHeader>
-                <CardTitle>Investment Strategy</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-primary" /> Founder & Co-founder
+                </CardTitle>
+                <CardDescription>Looking for a partner to build with?</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="why">The "Why" Behind Your Vision</Label>
+                    <Textarea 
+                      id="why" 
+                      rows={4} 
+                      placeholder="Investors look for passion and purpose."
+                      value={formData.whyBuilding}
+                      onChange={e => setFormData({...formData, whyBuilding: e.target.value})}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center space-x-2 bg-primary/5 p-4 rounded-xl border border-primary/10">
+                    <Checkbox 
+                      id="lookingForCofounder" 
+                      checked={formData.lookingForCofounder}
+                      onCheckedChange={(checked) => setFormData({
+                        ...formData, 
+                        lookingForCofounder: !!checked
+                      })}
+                    />
+                    <Label htmlFor="lookingForCofounder" className="font-bold cursor-pointer text-primary">Actively seeking a Co-founder</Label>
+                  </div>
+
+                  {formData.lookingForCofounder && (
+                    <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="commitmentType">Expected Commitment</Label>
+                          <Select 
+                            value={formData.commitmentType} 
+                            onValueChange={v => setFormData({...formData, commitmentType: v})}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Full-time">Full-time</SelectItem>
+                              <SelectItem value="Part-time">Part-time</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="equityOffer">Equity Range (%)</Label>
+                          <Input 
+                            id="equityOffer" 
+                            placeholder="e.g. 10-25%"
+                            value={formData.equityOffer}
+                            onChange={e => setFormData({...formData, equityOffer: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="cofounderRole">Role Description</Label>
+                        <Textarea 
+                          id="cofounderRole" 
+                          placeholder="Describe the responsibilities and expectations for your co-founder..."
+                          value={formData.cofounderRole}
+                          rows={3}
+                          onChange={e => setFormData({...formData, cofounderRole: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {userRoles.includes('investor') && (
+            <Card className="animate-in fade-in slide-in-from-top-4 duration-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-primary" /> Investor Profile
+                </CardTitle>
                 <CardDescription>Define your investment criteria to attract the right founders.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -524,6 +582,16 @@ export default function ProfilePage() {
                     onChange={e => setFormData({...formData, investmentFocus: e.target.value})}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="investorBio">Investment Philosophy</Label>
+                  <Textarea 
+                    id="investorBio" 
+                    rows={4} 
+                    placeholder="Tell founders about your approach to supporting startups..."
+                    value={formData.investorBio}
+                    onChange={e => setFormData({...formData, investorBio: e.target.value})}
+                  />
+                </div>
                 <div className="flex items-center space-x-2 pt-2">
                   <Checkbox 
                     id="openToPitches" 
@@ -537,109 +605,86 @@ export default function ProfilePage() {
                 </div>
               </CardContent>
             </Card>
-          ) : (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Professional Experience</CardTitle>
-                  <CardDescription>Share your career journey.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {formData.experience.map((exp, index) => (
-                    <div key={index} className="space-y-4 p-4 border rounded-lg relative group">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => removeExperience(index)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Company</Label>
-                          <Input 
-                            value={exp.company} 
-                            onChange={e => updateExperience(index, 'company', e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Role</Label>
-                          <Input 
-                            value={exp.role} 
-                            onChange={e => updateExperience(index, 'role', e.target.value)}
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Duration</Label>
-                        <Input 
-                          value={exp.duration} 
-                          onChange={e => updateExperience(index, 'duration', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  <Button variant="outline" className="w-full" onClick={addExperience}>
-                    <Plus className="h-4 w-4 mr-2" /> Add Experience
-                  </Button>
-                </CardContent>
-              </Card>
+          )}
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Motivation & Vision</CardTitle>
-                  <CardDescription>Why are you building this startup?</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Professional Experience</CardTitle>
+              <CardDescription>Share your career journey.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {formData.experience.map((exp, index) => (
+                <div key={index} className="space-y-4 p-4 border rounded-lg relative group">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => removeExperience(index)}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Company</Label>
+                      <Input 
+                        value={exp.company} 
+                        onChange={e => updateExperience(index, 'company', e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Role</Label>
+                      <Input 
+                        value={exp.role} 
+                        onChange={e => updateExperience(index, 'role', e.target.value)}
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    <Label htmlFor="why">The "Why" Behind Your Vision</Label>
-                    <Textarea 
-                      id="why" 
-                      rows={6} 
-                      placeholder="Investors look for passion and purpose."
-                      value={formData.whyBuilding}
-                      onChange={e => setFormData({...formData, whyBuilding: e.target.value})}
+                    <Label>Duration</Label>
+                    <Input 
+                      value={exp.duration} 
+                      onChange={e => updateExperience(index, 'duration', e.target.value)}
                     />
                   </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
+                </div>
+              ))}
+              <Button variant="outline" className="w-full" onClick={addExperience}>
+                <Plus className="h-4 w-4 mr-2" /> Add Experience
+              </Button>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="space-y-6">
-          {!isInvestor && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Availability</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="investment" 
-                    checked={formData.availability.openToInvestment}
-                    onCheckedChange={(checked) => setFormData({
-                      ...formData, 
-                      availability: {...formData.availability, openToInvestment: !!checked}
-                    })}
-                  />
-                  <Label htmlFor="investment" className="font-normal cursor-pointer">Open to Investment</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="hiring" 
-                    checked={formData.availability.hiring}
-                    onCheckedChange={(checked) => setFormData({
-                      ...formData, 
-                      availability: {...formData.availability, hiring: !!checked}
-                    })}
-                  />
-                  <Label htmlFor="hiring" className="font-normal cursor-pointer">Currently Hiring</Label>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          <Card>
+            <CardHeader>
+              <CardTitle>Availability</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="investment" 
+                  checked={formData.availability.openToInvestment}
+                  onCheckedChange={(checked) => setFormData({
+                    ...formData, 
+                    availability: {...formData.availability, openToInvestment: !!checked}
+                  })}
+                />
+                <Label htmlFor="investment" className="font-normal cursor-pointer">Open to Investment</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="hiring" 
+                  checked={formData.availability.hiring}
+                  onCheckedChange={(checked) => setFormData({
+                    ...formData, 
+                    availability: {...formData.availability, hiring: !!checked}
+                  })}
+                />
+                <Label htmlFor="hiring" className="font-normal cursor-pointer">Currently Hiring</Label>
+              </div>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
@@ -671,18 +716,16 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
-          {isInvestor && (
-            <Card className="bg-primary/5 border-primary/20">
-              <CardHeader>
-                <CardTitle className="text-sm">Quick Tips for Investors</CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs space-y-2 text-muted-foreground">
-                <p>• Clear <strong>Investment Focus</strong> helps founders find you faster.</p>
-                <p>• Setting a <strong>Ticket Size</strong> reduces mismatched inquiries.</p>
-                <p>• Being <strong>Open to Pitches</strong> allows verified founders to contact you directly.</p>
-              </CardContent>
-            </Card>
-          )}
+          <Card className="bg-primary/5 border-primary/20">
+            <CardHeader>
+              <CardTitle className="text-sm">Ecosystem Tips</CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs space-y-2 text-muted-foreground leading-relaxed">
+              <p>• <strong>Multiple Roles:</strong> You can be both a builder and a backer. Toggle roles to customize your experience.</p>
+              <p>• <strong>Visibility:</strong> Profiles with photos and completed bios receive 3x more connection requests.</p>
+              <p>• <strong>Mentorship:</strong> Sharing knowledge is the fastest way to grow your own network.</p>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
