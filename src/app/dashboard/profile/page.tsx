@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,18 +9,26 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser, useFirestore, useStorage } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { Loader2, Plus, Trash2, Linkedin, Globe, Twitter, Image as ImageIcon, Briefcase, TrendingUp, Users } from 'lucide-react';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { Loader2, Plus, Trash2, Linkedin, Globe, Image as ImageIcon, Briefcase, Users, Camera, Upload } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
 
 export default function ProfilePage() {
   const { toast } = useToast();
   const { user } = useUser();
   const firestore = useFirestore();
+  const storage = useStorage();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [userRole, setUserRole] = useState<string | null>(null);
+  
   const [formData, setFormData] = useState({
     fullName: '',
     imageUrl: '',
@@ -43,7 +51,6 @@ export default function ProfilePage() {
     cofounderRole: '',
     equityOffer: '',
     commitmentType: '',
-    // Mentor fields
     isMentor: false,
     mentorSkills: '',
     mentorBio: '',
@@ -94,7 +101,6 @@ export default function ProfilePage() {
             cofounderRole: profile.cofounderRole || '',
             equityOffer: profile.equityOffer || '',
             commitmentType: profile.commitmentType || '',
-            // Load Mentor fields
             isMentor: profile.isMentor || false,
             mentorSkills: Array.isArray(profile.mentorSkills) ? profile.mentorSkills.join(', ') : '',
             mentorBio: profile.mentorBio || '',
@@ -115,9 +121,50 @@ export default function ProfilePage() {
     loadProfile();
   }, [firestore, user?.uid]);
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !storage) return;
+
+    // Validation
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({ title: "Invalid format", description: "Please upload a JPEG, PNG, or WebP image.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Image must be less than 5MB.", variant: "destructive" });
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    const storageRef = ref(storage, `profile-images/${user.uid}/${Date.now()}_${file.name}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on('state_changed', 
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadProgress(progress);
+      }, 
+      (error) => {
+        console.error("Upload failed:", error);
+        toast({ title: "Upload Failed", description: "Could not upload image. Try again.", variant: "destructive" });
+        setIsUploading(false);
+      }, 
+      () => {
+        getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+          setFormData(prev => ({ ...prev, imageUrl: downloadURL }));
+          setIsUploading(false);
+          toast({ title: "Success", description: "Profile image uploaded!" });
+        });
+      }
+    );
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !firestore) return;
+    if (!user || !firestore || isUploading) return;
 
     setIsSaving(true);
     try {
@@ -184,6 +231,7 @@ export default function ProfilePage() {
   const isInvestor = userRole === 'investor';
   const isFounder = userRole === 'founder';
   const isMentorRole = userRole === 'mentor';
+  const initials = formData.fullName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || '?';
 
   return (
     <div className="max-w-4xl mx-auto w-full space-y-8 pb-20">
@@ -191,7 +239,7 @@ export default function ProfilePage() {
         <h1 className="text-3xl font-bold">
           {isInvestor ? 'Investor Profile' : isMentorRole ? 'Mentor Profile' : 'Founder Profile'}
         </h1>
-        <Button onClick={handleSave} disabled={isSaving}>
+        <Button onClick={handleSave} disabled={isSaving || isUploading}>
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
           Save Changes
         </Button>
@@ -204,7 +252,53 @@ export default function ProfilePage() {
               <CardTitle>Basic Information</CardTitle>
               <CardDescription>Your public identity on TabStartup.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              <div className="flex flex-col items-center sm:flex-row gap-6 p-4 bg-muted/20 rounded-2xl">
+                <div className="relative group">
+                  <Avatar className="h-24 w-24 border-4 border-background shadow-xl rounded-2xl overflow-hidden">
+                    <AvatarImage src={formData.imageUrl} className="object-cover" />
+                    <AvatarFallback className="text-2xl font-bold rounded-2xl">{initials}</AvatarFallback>
+                  </Avatar>
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"
+                    disabled={isUploading}
+                  >
+                    <Camera className="h-6 w-6 text-white" />
+                  </button>
+                </div>
+                
+                <div className="flex-1 space-y-3 w-full">
+                  <Label>Profile Picture</Label>
+                  <div className="flex flex-col gap-2">
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      accept="image/*" 
+                      onChange={handleImageUpload}
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full sm:w-fit rounded-xl gap-2"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      {formData.imageUrl ? 'Change Photo' : 'Upload Photo'}
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground">Supported: JPG, PNG, WebP. Max 5MB.</p>
+                  </div>
+                  {isUploading && (
+                    <div className="space-y-1">
+                      <Progress value={uploadProgress} className="h-1" />
+                      <p className="text-[9px] text-primary font-bold text-right">{Math.round(uploadProgress)}%</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Full Name</Label>
@@ -223,17 +317,7 @@ export default function ProfilePage() {
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="imageUrl" className="flex items-center gap-2">
-                  <ImageIcon className="h-4 w-4" /> Profile Image URL
-                </Label>
-                <Input 
-                  id="imageUrl" 
-                  placeholder="https://..."
-                  value={formData.imageUrl}
-                  onChange={e => setFormData({...formData, imageUrl: e.target.value})}
-                />
-              </div>
+              
               <div className="space-y-2">
                 <Label htmlFor="headline">
                   {isInvestor ? 'Investor Headline' : isMentorRole ? 'Professional Headline' : 'Headline'}
@@ -258,7 +342,6 @@ export default function ProfilePage() {
             </CardContent>
           </Card>
 
-          {/* Mentor Profile Section */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
