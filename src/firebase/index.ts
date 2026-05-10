@@ -6,21 +6,17 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-// IMPORTANT: DO NOT MODIFY THIS FUNCTION
+/**
+ * Firebase ইনিশিয়ালাইজ করার ফাংশন। 
+ * এটি সবসময় কনফিগারেশন অবজেক্ট ব্যবহার করে যাতে ভেরসেল বা অন্য যেকোনো হোস্টিংয়ে 
+ * ডিপ্লয়মেন্টের সময় 'app/no-options' এরর না আসে।
+ */
 export function initializeFirebase() {
-  if (!getApps().length) {
-    let firebaseApp;
-    try {
-      firebaseApp = initializeApp();
-    } catch (e) {
-      if (process.env.NODE_ENV === "production") {
-        console.warn('Automatic initialization failed. Falling back to firebase config object.', e);
-      }
-      firebaseApp = initializeApp(firebaseConfig);
-    }
-    return getSdks(firebaseApp);
-  }
-  return getSdks(getApp());
+  const firebaseApp = getApps().length === 0 
+    ? initializeApp(firebaseConfig) 
+    : getApp();
+    
+  return getSdks(firebaseApp);
 }
 
 export function getSdks(firebaseApp: FirebaseApp) {
