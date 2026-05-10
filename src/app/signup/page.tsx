@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
@@ -14,6 +15,9 @@ import { useAuth, useUser, useFirestore } from '@/firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
+
+// Force dynamic rendering to prevent prerender errors with useSearchParams on Vercel
+export const dynamic = 'force-dynamic';
 
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -94,14 +98,14 @@ function SignupForm() {
 
   if (isUserLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/20">
+    <div className="flex flex-col items-center justify-center p-4">
       <Logo className="mb-8" />
       <Card className="w-full max-w-md">
         <CardHeader>
@@ -169,12 +173,14 @@ function SignupForm() {
 
 export default function SignupPage() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center bg-muted/20">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    }>
-      <SignupForm />
-    </Suspense>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-muted/20">
+      <Suspense fallback={
+        <div className="flex flex-col items-center justify-center p-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+      }>
+        <SignupForm />
+      </Suspense>
+    </div>
   );
 }
