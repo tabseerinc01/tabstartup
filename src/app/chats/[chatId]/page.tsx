@@ -23,6 +23,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, Send, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { createNotification } from '@/lib/notifications';
 
 export default function ChatPage() {
   const { chatId } = useParams();
@@ -134,6 +135,23 @@ export default function ChatPage() {
           lastMessage: messageText,
           updatedAt: serverTimestamp()
         });
+
+        // Notify other participants
+        if (chat?.participants) {
+          chat.participants.forEach((participantUid: string) => {
+            if (participantUid !== user.uid) {
+              createNotification(firestore, {
+                recipientUid: participantUid,
+                actorUid: user.uid,
+                type: 'message',
+                title: 'New Message',
+                message: 'You received a new message.',
+                targetId: chatId as string,
+                targetType: 'chat'
+              });
+            }
+          });
+        }
       })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({

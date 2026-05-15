@@ -9,7 +9,7 @@ import {
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-export type NotificationType = 'like' | 'comment' | 'pitch' | 'connection' | 'system';
+export type NotificationType = 'like' | 'comment' | 'pitch' | 'connection' | 'system' | 'message';
 export type NotificationTargetType = 'post' | 'pitch' | 'chat' | 'user';
 
 interface CreateNotificationParams {

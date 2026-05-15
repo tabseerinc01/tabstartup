@@ -1,4 +1,3 @@
-
 export interface UserAccount {
   id: string;
   userId: string;
@@ -77,7 +76,7 @@ export interface Notification {
   id: string;
   recipientUid: string;
   actorUid: string;
-  type: 'like' | 'comment' | 'pitch' | 'connection' | 'system';
+  type: 'like' | 'comment' | 'pitch' | 'connection' | 'system' | 'message';
   title: string;
   message: string;
   targetId?: string;
