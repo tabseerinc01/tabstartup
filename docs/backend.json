@@ -230,6 +230,24 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["postId", "authorUid", "authorName", "content", "createdAt"]
+    },
+    "Notification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Notification",
+      "type": "object",
+      "description": "A notification for a user.",
+      "properties": {
+        "recipientUid": { "type": "string" },
+        "actorUid": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "targetId": { "type": "string" },
+        "targetType": { "type": "string" },
+        "read": { "type": "boolean", "default": false },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["recipientUid", "actorUid", "type", "title", "message", "createdAt"]
     }
   },
   "auth": {
@@ -267,6 +285,14 @@
           "entityName": "CommunityComment",
           "schema": { "$ref": "#/backend/entities/CommunityComment" },
           "description": "Comments on community posts."
+        }
+      },
+      {
+        "path": "/notifications/{notificationId}",
+        "definition": {
+          "entityName": "Notification",
+          "schema": { "$ref": "#/backend/entities/Notification" },
+          "description": "Real-time alerts for users."
         }
       }
     ]

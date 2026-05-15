@@ -72,3 +72,16 @@ export interface Transaction {
   paymentLinkId?: string;
   currency: string;
 }
+
+export interface Notification {
+  id: string;
+  recipientUid: string;
+  actorUid: string;
+  type: 'like' | 'comment' | 'pitch' | 'connection' | 'system';
+  title: string;
+  message: string;
+  targetId?: string;
+  targetType?: 'post' | 'pitch' | 'chat' | 'user';
+  read: boolean;
+  createdAt: any; // Firestore Timestamp
+}
