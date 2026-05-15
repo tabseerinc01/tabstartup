@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -8,7 +7,6 @@ import {
   collection, 
   query, 
   where, 
-  orderBy, 
   getDoc, 
   doc,
   addDoc,
@@ -45,6 +43,7 @@ import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceToNow } from 'date-fns';
+import Link from 'next/link';
 
 type ConnType = 'all' | 'investor' | 'mentor' | 'cofounder' | 'service' | 'founder';
 
@@ -59,23 +58,33 @@ export default function ConnectionsManagerPage() {
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
   // Fetch all connections where user is either initiator or recipient
+  // Note: Removed orderBy to avoid requiring a composite index immediately. 
+  // We will sort the merged results client-side.
   const incomingQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid), orderBy('createdAt', 'desc'));
+    return query(
+      collection(firestore, 'connections'), 
+      where('recipientUid', '==', user.uid)
+    );
   }, [firestore, user?.uid]);
 
   const outgoingQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid), orderBy('createdAt', 'desc'));
+    return query(
+      collection(firestore, 'connections'), 
+      where('initiatorUid', '==', user.uid)
+    );
   }, [firestore, user?.uid]);
 
   const { data: incoming, isLoading: isIncomingLoading } = useCollection(incomingQuery);
   const { data: outgoing, isLoading: isOutgoingLoading } = useCollection(outgoingQuery);
 
   const allConns = useMemo(() => {
-    return [...(incoming || []), ...(outgoing || [])].sort((a, b) => 
-      (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
-    );
+    return [...(incoming || []), ...(outgoing || [])].sort((a, b) => {
+      const timeA = a.createdAt?.toMillis?.() || 0;
+      const timeB = b.createdAt?.toMillis?.() || 0;
+      return timeB - timeA;
+    });
   }, [incoming, outgoing]);
 
   // Load profiles for all participants
@@ -115,7 +124,7 @@ export default function ConnectionsManagerPage() {
 
       if (status === 'accepted') {
         // Create Chat
-        const otherUid = conn.initiatorUid;
+        const otherUid = conn.initiatorUid === user.uid ? conn.recipientUid : conn.initiatorUid;
         const chatsQ = query(collection(firestore, 'chats'), where('participants', 'array-contains', user.uid));
         const chatsSnap = await getDocs(chatsQ);
         let existingChatId = null;
@@ -124,7 +133,7 @@ export default function ConnectionsManagerPage() {
         });
 
         if (!existingChatId) {
-          const chatRef = await addDoc(collection(firestore, 'chats'), {
+          await addDoc(collection(firestore, 'chats'), {
             participants: [user.uid, otherUid],
             lastMessage: `You are now connected for ${conn.type}!`,
             updatedAt: serverTimestamp(),
@@ -245,6 +254,7 @@ function ConnectionsList({ items, profiles, onAction, isIncoming, loadingAction,
             onAction={onAction} 
             isIncoming={isIncoming}
             isLoading={loadingAction === c.id}
+            currentUserId={currentUserId}
           />
         );
       })}
@@ -252,11 +262,12 @@ function ConnectionsList({ items, profiles, onAction, isIncoming, loadingAction,
   );
 }
 
-function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading }: any) {
+function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, currentUserId }: any) {
   const router = useRouter();
   const name = profile?.fullName || "Member";
   const headline = profile?.headline || profile?.investorHeadline || "Ecosystem Participant";
   const avatarUrl = profile?.imageUrl || `https://picsum.photos/seed/${profile?.uid || 'user'}/200/200`;
+  const otherUid = conn.initiatorUid === currentUserId ? conn.recipientUid : conn.initiatorUid;
   
   const typeIcons = {
     investor: ShieldCheck,
