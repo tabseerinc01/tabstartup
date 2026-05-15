@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useFirestore, useUser } from '@/firebase';
 import { doc, collection, addDoc, getDoc, getDocs, query, where, limit, serverTimestamp } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
@@ -15,9 +15,11 @@ import { MapPin, Briefcase, Award, CheckCircle2, MessageSquare, Calendar, Globe,
 import Image from 'next/image';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
+import { createNotification } from '@/lib/notifications';
 
 export default function FounderPublicProfilePage() {
   const { uid } = useParams();
+  const router = useRouter();
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
@@ -110,6 +112,17 @@ export default function FounderPublicProfilePage() {
         createdAt: serverTimestamp(),
       });
 
+      // Send Notification
+      createNotification(firestore, {
+        recipientUid: uid as string,
+        actorUid: user.uid,
+        type: 'pitch',
+        title: 'New Investor Interest',
+        message: `${currentUserProfile?.fullName || 'An investor'} expressed interest in your venture.`,
+        targetId: uid as string,
+        targetType: 'user'
+      });
+
       toast({ 
         title: "Success", 
         description: "Interest sent. The founder will review your profile." 
@@ -123,6 +136,32 @@ export default function FounderPublicProfilePage() {
     } finally {
       setIsSendingRequest(false);
     }
+  };
+
+  const handleCofounderConnect = () => {
+    if (!user) {
+      toast({ title: "Login Required", description: "Please sign in to connect." });
+      router.push('/login');
+      return;
+    }
+
+    if (user.uid === uid) {
+      toast({ title: "Note", description: "This is your own profile." });
+      return;
+    }
+
+    // Send Notification for Co-founder Interest
+    createNotification(firestore, {
+      recipientUid: uid as string,
+      actorUid: user.uid,
+      type: 'cofounder_interest',
+      title: 'Co-founder Interest',
+      message: `${currentUserProfile?.fullName || user.displayName || 'Someone'} is interested in your co-founder request.`,
+      targetId: uid as string,
+      targetType: 'user'
+    });
+
+    router.push(`/dashboard/messages?startWith=${uid}`);
   };
 
   if (isLoading) {
@@ -317,8 +356,12 @@ export default function FounderPublicProfilePage() {
                             </div>
                           </div>
                           
-                          <Button className="w-full rounded-2xl h-12 font-bold" variant="secondary" asChild>
-                             <Link href={`/dashboard/messages?startWith=${uid}`}>Connect</Link>
+                          <Button 
+                            className="w-full rounded-2xl h-12 font-bold" 
+                            variant="secondary"
+                            onClick={handleCofounderConnect}
+                          >
+                             Connect
                           </Button>
                         </CardContent>
                       </Card>
