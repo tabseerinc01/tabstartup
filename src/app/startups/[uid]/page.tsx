@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import { createNotification } from '@/lib/notifications';
 
 export default function StartupPublicProfilePage() {
   const { uid } = useParams();
@@ -123,7 +124,8 @@ export default function StartupPublicProfilePage() {
       return;
     }
 
-    if (currentUserProfile.role !== 'investor') {
+    const rolesArr = (currentUserProfile.roles || (currentUserProfile.role ? [currentUserProfile.role] : ['user'])).filter(Boolean);
+    if (!rolesArr.includes('investor')) {
       toast({
         title: "Investors Only",
         description: "Only verified investors can express interest in startups.",
@@ -154,6 +156,17 @@ export default function StartupPublicProfilePage() {
         message: "Expressed interest in your startup listing.",
         status: 'pending',
         createdAt: serverTimestamp(),
+      });
+
+      // Send Notification
+      createNotification(firestore, {
+        recipientUid: uid as string,
+        actorUid: user.uid,
+        type: 'investor_interest',
+        title: 'Investor Interest',
+        message: 'An investor showed interest in your startup.',
+        targetId: uid as string,
+        targetType: 'user'
       });
 
       setExistingInterest(interestData);
@@ -231,7 +244,8 @@ export default function StartupPublicProfilePage() {
     );
   }
 
-  const isInvestor = currentUserProfile?.role === 'investor';
+  const rolesArr = (currentUserProfile?.roles || (currentUserProfile?.role ? [currentUserProfile.role] : ['user'])).filter(Boolean);
+  const isInvestor = rolesArr.includes('investor');
   const isOwnStartup = user?.uid === uid;
   const founderName = founder?.fullName || "Founder";
 

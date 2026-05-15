@@ -81,7 +81,8 @@ export default function FounderPublicProfilePage() {
   const handleSendInterest = async () => {
     if (!user || !firestore || !uid) return;
     
-    if (currentUserProfile?.role !== 'investor') {
+    const rolesArr = (currentUserProfile?.roles || (currentUserProfile?.role ? [currentUserProfile.role] : ['user'])).filter(Boolean);
+    if (!rolesArr.includes('investor')) {
       toast({ 
         title: "Access Denied", 
         description: "Only users with the investor role can express interest.", 
@@ -116,9 +117,9 @@ export default function FounderPublicProfilePage() {
       createNotification(firestore, {
         recipientUid: uid as string,
         actorUid: user.uid,
-        type: 'pitch',
-        title: 'New Investor Interest',
-        message: `${currentUserProfile?.fullName || 'An investor'} expressed interest in your venture.`,
+        type: 'investor_interest',
+        title: 'Investor Interest',
+        message: 'An investor showed interest in your startup.',
         targetId: uid as string,
         targetType: 'user'
       });
@@ -191,7 +192,8 @@ export default function FounderPublicProfilePage() {
 
   const displayName = founder.fullName || founder.name;
   const imageId = founder.uid || founder.id || 'user';
-  const isInvestor = currentUserProfile?.role === 'investor';
+  const rolesArr = (currentUserProfile?.roles || (currentUserProfile?.role ? [currentUserProfile.role] : ['user'])).filter(Boolean);
+  const isInvestor = rolesArr.includes('investor');
   const isOwnProfile = user?.uid === uid;
 
   const isValidImage = (url?: string) => {

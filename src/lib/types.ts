@@ -76,7 +76,7 @@ export interface Notification {
   id: string;
   recipientUid: string;
   actorUid: string;
-  type: 'like' | 'comment' | 'pitch' | 'connection' | 'system' | 'message' | 'cofounder_interest';
+  type: 'like' | 'comment' | 'pitch' | 'connection' | 'system' | 'message' | 'cofounder_interest' | 'investor_interest';
   title: string;
   message: string;
   targetId?: string;
