@@ -323,6 +323,7 @@ export default function DashboardOverviewPage() {
               <div className="text-3xl font-black text-slate-900">{sentPitches.length}</div>
               <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Venture outreach log</p>
             </CardContent>
+          </Card>
         )}
       </div>
 
@@ -587,7 +588,7 @@ export default function DashboardOverviewPage() {
 
         {/* --- SIDEBAR WIDGETS --- */}
         <div className="space-y-6">
-           <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden group">
+           <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden group relative">
             <CardHeader className="pb-4">
               <div className="flex items-center gap-2 mb-2">
                  <div className="h-1 w-6 bg-primary rounded-full" />
@@ -610,7 +611,7 @@ export default function DashboardOverviewPage() {
           </Card>
 
           {isFounder && !startup && (
-            <Card className="border-none shadow-xl rounded-[2.5rem] bg-primary text-white overflow-hidden animate-bounce-subtle">
+            <Card className="border-none shadow-xl rounded-[2.5rem] bg-primary text-white overflow-hidden">
                <CardHeader>
                  <CardTitle className="flex items-center gap-2 text-white">
                    <ShieldAlert className="h-5 w-5" /> Incomplete Listing
