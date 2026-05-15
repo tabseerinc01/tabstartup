@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { createNotification } from '@/lib/notifications';
 import Link from 'next/link';
 
 export default function CommunityFeedPage() {
@@ -171,6 +172,10 @@ export default function CommunityFeedPage() {
 
     if (userLikes.has(postId)) return;
 
+    // Find the post to get the authorUid for notification
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+
     const likeId = `${postId}_${user.uid}`;
     const likeData = {
       postId,
@@ -183,6 +188,19 @@ export default function CommunityFeedPage() {
         updateDoc(doc(firestore, 'communityPosts', postId), {
           likesCount: increment(1)
         });
+
+        // Notify the author if they are not the one liking the post
+        if (post.authorUid !== user.uid) {
+          createNotification(firestore, {
+            recipientUid: post.authorUid,
+            actorUid: user.uid,
+            type: 'like',
+            title: 'New Appreciation',
+            message: `${userProfile?.fullName || user.displayName || 'Someone'} appreciated your post.`,
+            targetId: postId,
+            targetType: 'post'
+          });
+        }
       })
       .catch(async (error) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
