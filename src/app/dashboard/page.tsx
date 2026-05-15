@@ -62,6 +62,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceToNow } from 'date-fns';
 import { createNotification } from '@/lib/notifications';
+import { cn } from '@/lib/utils';
 
 const SUPER_ADMIN_EMAIL = "shahmubaruk05@gmail.com";
 
@@ -655,4 +656,3 @@ export default function DashboardOverviewPage() {
     </div>
   );
 }
-
