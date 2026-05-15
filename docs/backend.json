@@ -183,6 +183,22 @@
       },
       "required": ["uid", "fullName", "email", "role", "createdAt", "updatedAt"]
     },
+    "Connection": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Connection",
+      "type": "object",
+      "description": "A professional request or active relationship between two ecosystem members.",
+      "properties": {
+        "initiatorUid": { "type": "string" },
+        "recipientUid": { "type": "string" },
+        "type": { "type": "string", "enum": ["investor", "founder", "mentor", "cofounder", "service"] },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["initiatorUid", "recipientUid", "type", "status", "createdAt"]
+    },
     "CommunityPost": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "CommunityPost",
@@ -203,33 +219,6 @@
         "startupId": { "type": "string" }
       },
       "required": ["authorUid", "authorName", "authorType", "content", "createdAt", "status"]
-    },
-    "CommunityPostLike": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "CommunityPostLike",
-      "type": "object",
-      "description": "A record of a user liking a community post.",
-      "properties": {
-        "postId": { "type": "string" },
-        "userUid": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["postId", "userUid", "createdAt"]
-    },
-    "CommunityComment": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "CommunityComment",
-      "type": "object",
-      "description": "A comment on a community post.",
-      "properties": {
-        "postId": { "type": "string" },
-        "authorUid": { "type": "string" },
-        "authorName": { "type": "string" },
-        "authorImage": { "type": "string" },
-        "content": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["postId", "authorUid", "authorName", "content", "createdAt"]
     },
     "Notification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -264,27 +253,19 @@
         }
       },
       {
+        "path": "/connections/{connectionId}",
+        "definition": {
+          "entityName": "Connection",
+          "schema": { "$ref": "#/backend/entities/Connection" },
+          "description": "Relationship requests and links between users."
+        }
+      },
+      {
         "path": "/communityPosts/{postId}",
         "definition": {
           "entityName": "CommunityPost",
           "schema": { "$ref": "#/backend/entities/CommunityPost" },
           "description": "Startup community feed posts."
-        }
-      },
-      {
-        "path": "/communityPostLikes/{likeId}",
-        "definition": {
-          "entityName": "CommunityPostLike",
-          "schema": { "$ref": "#/backend/entities/CommunityPostLike" },
-          "description": "Tracks likes on community posts."
-        }
-      },
-      {
-        "path": "/communityComments/{commentId}",
-        "definition": {
-          "entityName": "CommunityComment",
-          "schema": { "$ref": "#/backend/entities/CommunityComment" },
-          "description": "Comments on community posts."
         }
       },
       {

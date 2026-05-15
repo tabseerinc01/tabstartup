@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useFirestore, useUser } from '@/firebase';
+import { useFirestore, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { doc, collection, addDoc, getDoc, getDocs, query, where, limit, serverTimestamp } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
@@ -27,7 +28,7 @@ export default function FounderPublicProfilePage() {
   const [founder, setFounder] = useState<any>(null);
   const [startup, setStartup] = useState<any>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
-  const [hasSentPitch, setHasSentPitch] = useState(false);
+  const [existingConnection, setExistingConnection] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const [interestMessage, setInterestMessage] = useState('');
@@ -39,13 +40,11 @@ export default function FounderPublicProfilePage() {
       if (!firestore || !uid) return;
       setIsLoading(true);
       try {
-        // Load Founder Data
         const founderSnap = await getDoc(doc(firestore, 'users', uid as string));
         if (founderSnap.exists()) {
           setFounder({ id: founderSnap.id, ...founderSnap.data() });
         }
 
-        // Load Startup Data
         const startupSnap = await getDoc(doc(firestore, 'startups', uid as string));
         if (startupSnap.exists()) {
           setStartup({ id: startupSnap.id, ...startupSnap.data() });
@@ -57,16 +56,15 @@ export default function FounderPublicProfilePage() {
             setCurrentUserProfile(userSnap.data());
           }
 
-          // Check if investor has already sent a pitch to this founder
-          const pitchQ = query(
-            collection(firestore, 'pitches'),
-            where('fromInvestorUid', '==', user.uid),
-            where('toFounderUid', '==', uid as string),
+          const connQ = query(
+            collection(firestore, 'connections'),
+            where('initiatorUid', '==', user.uid),
+            where('recipientUid', '==', uid as string),
             limit(1)
           );
-          const pitchSnap = await getDocs(pitchQ);
-          if (!pitchSnap.empty) {
-            setHasSentPitch(true);
+          const connSnap = await getDocs(connQ);
+          if (!connSnap.empty) {
+            setExistingConnection(connSnap.docs[0].data());
           }
         }
       } catch (error) {
@@ -78,91 +76,52 @@ export default function FounderPublicProfilePage() {
     loadData();
   }, [firestore, uid, user?.uid]);
 
-  const handleSendInterest = async () => {
-    if (!user || !firestore || !uid) return;
+  const handleSendRequest = async (type: 'investor' | 'cofounder') => {
+    if (!user || !firestore || !uid) {
+      toast({ title: "Login Required", variant: "destructive" });
+      router.push('/login');
+      return;
+    }
     
-    const rolesArr = (currentUserProfile?.roles || (currentUserProfile?.role ? [currentUserProfile.role] : ['user'])).filter(Boolean);
-    if (!rolesArr.includes('investor')) {
-      toast({ 
-        title: "Access Denied", 
-        description: "Only users with the investor role can express interest.", 
-        variant: "destructive" 
-      });
-      return;
-    }
-
-    if (user.uid === uid) {
-      toast({ 
-        title: "Invalid Request", 
-        description: "You cannot express interest in your own profile.", 
-        variant: "destructive" 
-      });
-      setIsDialogOpen(false);
-      return;
-    }
-
-    if (hasSentPitch || isSendingRequest) return;
+    if (user.uid === uid) return;
 
     setIsSendingRequest(true);
-    try {
-      await addDoc(collection(firestore, 'pitches'), {
-        fromInvestorUid: user.uid,
-        toFounderUid: uid,
-        message: interestMessage,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-      });
+    const connData = {
+      initiatorUid: user.uid,
+      recipientUid: uid,
+      type: type,
+      status: 'pending',
+      message: interestMessage || (type === 'investor' ? "Interested in your startup venture." : "Interested in your co-founder search."),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
 
-      // Send Notification
+    try {
+      await addDoc(collection(firestore, 'connections'), connData);
+
       createNotification(firestore, {
         recipientUid: uid as string,
         actorUid: user.uid,
-        type: 'investor_interest',
-        title: 'Investor Interest',
-        message: 'An investor showed interest in your startup.',
+        type: type === 'investor' ? 'investor_interest' : 'cofounder_interest',
+        title: type === 'investor' ? 'Investor Interest' : 'Co-founder Request',
+        message: `${currentUserProfile?.fullName || 'Someone'} sent you a ${type} connection request.`,
         targetId: uid as string,
         targetType: 'user'
       });
 
-      toast({ 
-        title: "Success", 
-        description: "Interest sent. The founder will review your profile." 
-      });
-      setHasSentPitch(true);
+      toast({ title: "Request Sent", description: "The founder has been notified." });
+      setExistingConnection(connData);
       setInterestMessage('');
       setIsDialogOpen(false);
     } catch (error) {
-      console.error("Error sending interest:", error);
-      toast({ title: "Error", description: "Failed to send request. Please try again.", variant: "destructive" });
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: 'connections',
+        operation: 'create',
+        requestResourceData: connData
+      }));
     } finally {
       setIsSendingRequest(false);
     }
-  };
-
-  const handleCofounderConnect = () => {
-    if (!user) {
-      toast({ title: "Login Required", description: "Please sign in to connect." });
-      router.push('/login');
-      return;
-    }
-
-    if (user.uid === uid) {
-      toast({ title: "Note", description: "This is your own profile." });
-      return;
-    }
-
-    // Send Notification for Co-founder Interest
-    createNotification(firestore, {
-      recipientUid: uid as string,
-      actorUid: user.uid,
-      type: 'cofounder_interest',
-      title: 'Co-founder Interest',
-      message: `${currentUserProfile?.fullName || user.displayName || 'Someone'} is interested in your co-founder request.`,
-      targetId: uid as string,
-      targetType: 'user'
-    });
-
-    router.push(`/dashboard/messages?startWith=${uid}`);
   };
 
   if (isLoading) {
@@ -196,17 +155,7 @@ export default function FounderPublicProfilePage() {
   const isInvestor = rolesArr.includes('investor');
   const isOwnProfile = user?.uid === uid;
 
-  const isValidImage = (url?: string) => {
-    if (!url) return false;
-    if (url.includes('linkedin.com/in')) return false;
-    if (url.includes('facebook.com/')) return false;
-    if (url.includes('twitter.com/')) return false;
-    return url.startsWith('http');
-  };
-
-  const profileImageUrl = isValidImage(founder.imageUrl) 
-    ? founder.imageUrl 
-    : `https://picsum.photos/seed/${imageId}/400/400`;
+  const profileImageUrl = founder.imageUrl || `https://picsum.photos/seed/${imageId}/400/400`;
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
@@ -217,17 +166,12 @@ export default function FounderPublicProfilePage() {
             <Link href="/founders" className="gap-2"><ArrowLeft className="h-4 w-4" /> Back to Directory</Link>
           </Button>
 
-          <Card className="overflow-hidden border-none shadow-xl rounded-3xl">
+          <Card className="overflow-hidden border-none shadow-xl rounded-3xl bg-background">
             <div className="h-48 bg-gradient-to-r from-primary/20 via-accent/20 to-primary/10" />
             <div className="px-6 md:px-12 pb-12 -mt-20">
               <div className="flex flex-col md:flex-row gap-8 items-end mb-10">
                 <div className="relative h-40 w-40 rounded-3xl overflow-hidden border-8 border-background bg-muted shrink-0 shadow-2xl">
-                  <Image 
-                    src={profileImageUrl} 
-                    alt={displayName} 
-                    fill 
-                    className="object-cover" 
-                  />
+                  <Image src={profileImageUrl} alt={displayName} fill className="object-cover" />
                 </div>
                 <div className="flex-1 space-y-3">
                   <div className="flex items-center gap-2">
@@ -245,9 +189,10 @@ export default function FounderPublicProfilePage() {
               <div className="flex flex-wrap gap-4 mb-12">
                 {isInvestor && !isOwnProfile && (
                   <>
-                    {hasSentPitch ? (
-                      <Button disabled className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base bg-muted text-muted-foreground opacity-80">
-                        <Heart className="h-5 w-5 fill-muted-foreground" /> Interest Sent
+                    {existingConnection && existingConnection.type === 'investor' ? (
+                      <Button disabled className="h-12 px-8 gap-2 rounded-2xl text-base bg-muted text-muted-foreground">
+                        {existingConnection.status === 'pending' ? <Clock className="h-5 w-5" /> : <Check className="h-5 w-5" />}
+                        Interest {existingConnection.status}
                       </Button>
                     ) : (
                       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -258,10 +203,8 @@ export default function FounderPublicProfilePage() {
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-md">
                           <DialogHeader>
-                            <DialogTitle>Express Interest in {displayName}</DialogTitle>
-                            <DialogDescription>
-                              Share why you're interested in this founder and their venture.
-                            </DialogDescription>
+                            <DialogTitle>Connect with {displayName}</DialogTitle>
+                            <DialogDescription>Share your vision and why you're interested in this founder.</DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4 py-4">
                             <Textarea 
@@ -272,8 +215,8 @@ export default function FounderPublicProfilePage() {
                             />
                           </div>
                           <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSendingRequest}>Cancel</Button>
-                            <Button onClick={handleSendInterest} disabled={isSendingRequest}>
+                            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                            <Button onClick={() => handleSendRequest('investor')} disabled={isSendingRequest}>
                               {isSendingRequest ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
                               Send Request
                             </Button>
@@ -289,14 +232,9 @@ export default function FounderPublicProfilePage() {
                     <Link href="/dashboard/profile">Edit My Profile</Link>
                   </Button>
                 ) : (
-                  <>
-                    <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base" asChild>
-                      <Link href={`/dashboard/messages?startWith=${uid}`} className="flex items-center gap-2">
-                         <MessageSquare className="h-5 w-5" /> Message Founder
-                      </Link>
-                    </Button>
-                    <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base"><Calendar className="h-5 w-5" /> Schedule Meeting</Button>
-                  </>
+                  <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base" onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}>
+                    <MessageSquare className="h-5 w-5" /> Message Founder
+                  </Button>
                 )}
 
                 <div className="flex gap-2">
@@ -316,22 +254,16 @@ export default function FounderPublicProfilePage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
                 <div className="lg:col-span-2 space-y-12">
                   {founder.lookingForCofounder && (
-                    <section className="animate-in fade-in slide-in-from-left duration-500">
+                    <section>
                       <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
                         <Users className="h-6 w-6 text-primary" /> Looking for Co-founder
                       </h2>
                       <Card className="border-primary/20 bg-primary/5 rounded-[2rem] overflow-hidden">
                         <CardContent className="p-8 space-y-6">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <p className="text-sm font-bold text-primary uppercase tracking-widest mb-1">Role Needed</p>
-                              <p className="text-3xl font-extrabold">{founder.cofounderRole || 'Co-founder'}</p>
-                            </div>
-                            <Badge className="bg-primary text-white px-4 py-1.5 rounded-xl h-auto flex items-center gap-1.5">
-                              <Zap className="h-3 w-3 fill-white" /> {founder.commitmentType || 'Full-time'}
-                            </Badge>
+                          <div>
+                            <p className="text-sm font-bold text-primary uppercase tracking-widest mb-1">Role Needed</p>
+                            <p className="text-3xl font-extrabold">{founder.cofounderRole || 'Co-founder'}</p>
                           </div>
-
                           <div className="grid grid-cols-2 gap-8 py-6 border-y border-primary/10">
                             <div>
                               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Equity Offered</p>
@@ -342,28 +274,13 @@ export default function FounderPublicProfilePage() {
                               <p className="text-lg font-semibold">{founder.commitmentType || 'Flexible'}</p>
                             </div>
                           </div>
-
-                          <div>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Required Skills</p>
-                            <div className="flex flex-wrap gap-2">
-                              {Array.isArray(founder.cofounderSkills) && founder.cofounderSkills.length > 0 ? (
-                                founder.cofounderSkills.map((skill: string) => (
-                                  <Badge key={skill} variant="outline" className="px-3 py-1 rounded-lg bg-background border-primary/20 text-primary">
-                                    {skill}
-                                  </Badge>
-                                ))
-                              ) : (
-                                <span className="text-sm text-muted-foreground italic">Seeking generalist partner</span>
-                              )}
-                            </div>
-                          </div>
-                          
                           <Button 
                             className="w-full rounded-2xl h-12 font-bold" 
                             variant="secondary"
-                            onClick={handleCofounderConnect}
+                            onClick={() => handleSendRequest('cofounder')}
+                            disabled={isSendingRequest || (existingConnection?.type === 'cofounder')}
                           >
-                             Connect
+                             {existingConnection?.type === 'cofounder' ? 'Request Sent' : 'Connect as Co-founder'}
                           </Button>
                         </CardContent>
                       </Card>
@@ -376,40 +293,13 @@ export default function FounderPublicProfilePage() {
                     </h2>
                     {startup ? (
                       <div className="border border-primary/10 rounded-[2rem] p-8 space-y-4 bg-primary/5">
-                        <Link 
-                          href={`/startups/${uid}`} 
-                          className="text-2xl font-bold text-primary hover:underline decoration-primary/30 underline-offset-4"
-                        >
-                          {startup.name}
-                        </Link>
-                        <p className="text-muted-foreground text-lg leading-relaxed">
-                          {startup.shortDescription}
-                        </p>
+                        <Link href={`/startups/${uid}`} className="text-2xl font-bold text-primary hover:underline">{startup.name}</Link>
+                        <p className="text-muted-foreground text-lg leading-relaxed">{startup.shortDescription}</p>
                         <div className="flex gap-3 flex-wrap">
-                          <Badge variant="secondary" className="px-4 py-1.5 rounded-xl bg-background border shadow-sm">
-                            {startup.stage}
-                          </Badge>
-                          <Badge variant="secondary" className="px-4 py-1.5 rounded-xl bg-background border shadow-sm">
-                            {startup.industry}
-                          </Badge>
-                          <Badge variant="outline" className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground border-none">
-                            {startup.fundingNeed || 'Funding Goal TBD'}
-                          </Badge>
+                          <Badge variant="secondary" className="px-4 py-1.5 rounded-xl">{startup.stage}</Badge>
+                          <Badge variant="secondary" className="px-4 py-1.5 rounded-xl">{startup.industry}</Badge>
+                          <Badge variant="outline" className="px-4 py-1.5 rounded-xl bg-primary text-primary-foreground border-none">{startup.fundingNeed || 'Goal TBD'}</Badge>
                         </div>
-                        {startup.website && (
-                          <div className="pt-4">
-                            <Button variant="link" asChild className="px-0 h-auto font-bold text-primary text-base">
-                              <a
-                                href={startup.website.startsWith('http') ? startup.website : `https://${startup.website}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2"
-                              >
-                                Visit Website <ExternalLink className="h-4 w-4" />
-                              </a>
-                            </Button>
-                          </div>
-                        )}
                       </div>
                     ) : (
                       <div className="p-8 border-2 border-dashed rounded-[2rem] text-center bg-muted/20">
@@ -417,127 +307,6 @@ export default function FounderPublicProfilePage() {
                       </div>
                     )}
                   </section>
-
-                  {founder.bio && (
-                    <section>
-                      <h3 className="text-2xl font-bold mb-4">About Me</h3>
-                      <p className="text-muted-foreground text-lg leading-relaxed">{founder.bio}</p>
-                    </section>
-                  )}
-
-                  {founder.whyBuilding && (
-                    <section>
-                      <h3 className="text-2xl font-bold mb-4">The Vision</h3>
-                      <div className="bg-primary/5 p-8 rounded-3xl border border-primary/10 relative">
-                        <span className="absolute -top-4 -left-2 text-6xl text-primary/20 font-serif">“</span>
-                        <p className="text-primary text-xl font-medium italic leading-relaxed">
-                          {founder.whyBuilding}
-                        </p>
-                      </div>
-                    </section>
-                  )}
-
-                  {founder.experience && founder.experience.length > 0 && (
-                    <section>
-                      <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                        <Briefcase className="h-6 w-6 text-primary" /> Professional Experience
-                      </h3>
-                      <div className="space-y-8">
-                        {founder.experience.map((exp: any, i: number) => (
-                          <div key={i} className="flex gap-6 relative">
-                            {i !== founder.experience.length - 1 && (
-                              <div className="absolute left-6 top-14 bottom-0 w-0.5 bg-muted-foreground/10" />
-                            )}
-                            <div className="mt-1 bg-white border shadow-sm rounded-2xl p-3 h-fit z-10">
-                              <Briefcase className="h-6 w-6 text-primary" />
-                            </div>
-                            <div className="space-y-2">
-                              <h4 className="text-xl font-bold">{exp.role}</h4>
-                              <p className="text-lg font-semibold text-primary">{exp.company}</p>
-                              <p className="text-sm text-muted-foreground bg-muted w-fit px-2 py-0.5 rounded-lg">{exp.duration}</p>
-                              <p className="text-muted-foreground leading-relaxed mt-2">{exp.description}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-                </div>
-
-                <div className="space-y-10">
-                  <section className="bg-muted/30 p-6 rounded-3xl border border-muted-foreground/5">
-                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2">Expertise</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {founder.skills?.map((skill: string) => (
-                        <Badge key={skill} variant="outline" className="text-xs px-3 py-1 rounded-xl bg-background border-primary/20 text-primary">
-                          {skill}
-                        </Badge>
-                      ))}
-                    </div>
-                  </section>
-
-                  <section className="bg-white p-6 rounded-3xl border shadow-sm">
-                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2">Status & Goals</h3>
-                    <div className="space-y-3">
-                      {founder.availability?.openToInvestment && (
-                        <div className="flex items-center gap-2 text-green-700 bg-green-50 p-3 rounded-2xl border border-green-100">
-                          <CheckCircle2 className="h-5 w-5 shrink-0" />
-                          <span className="text-sm font-semibold">Open to Investment</span>
-                        </div>
-                      )}
-                      {founder.availability?.hiring && (
-                        <div className="flex items-center gap-2 text-blue-700 bg-blue-50 p-3 rounded-2xl border border-blue-100">
-                          <CheckCircle2 className="h-5 w-5 shrink-0" />
-                          <span className="text-sm font-semibold">Currently Hiring</span>
-                        </div>
-                      )}
-                      {founder.availability?.coFounder && (
-                        <div className="flex items-center gap-2 text-orange-700 bg-orange-50 p-3 rounded-2xl border border-orange-100">
-                          <CheckCircle2 className="h-5 w-5 shrink-0" />
-                          <span className="text-sm font-semibold">Looking for Co-founder</span>
-                        </div>
-                      )}
-                      {founder.lookingFor && (
-                        <div className="mt-4 pt-4 border-t space-y-2">
-                          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Currently seeking</p>
-                          <p className="text-sm font-medium leading-relaxed italic">"{founder.lookingFor}"</p>
-                        </div>
-                      )}
-                    </div>
-                  </section>
-
-                  {founder.achievements && founder.achievements.length > 0 && (
-                    <section>
-                      <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <Award className="h-5 w-5 text-primary" /> Key Achievements
-                      </h3>
-                      <div className="space-y-3">
-                        {founder.achievements.map((ach: string, i: number) => (
-                          <div key={i} className="flex items-start gap-3 p-3 bg-muted/20 rounded-2xl border border-transparent hover:border-primary/10 transition-colors">
-                            <CheckCircle2 className="h-5 w-5 mt-0.5 text-primary shrink-0" />
-                            <span className="text-sm font-medium">{ach}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-
-                  {founder.education && founder.education.length > 0 && (
-                    <section>
-                      <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <GraduationCap className="h-6 w-6 text-primary" /> Education
-                      </h3>
-                      <div className="space-y-4">
-                        {founder.education.map((edu: any, i: number) => (
-                          <div key={i} className="space-y-1 pl-4 border-l-2 border-primary/20">
-                            <p className="font-bold">{edu.school}</p>
-                            <p className="text-sm text-muted-foreground">{edu.degree}</p>
-                            <p className="text-xs font-semibold text-primary">{edu.year}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  )}
                 </div>
               </div>
             </div>

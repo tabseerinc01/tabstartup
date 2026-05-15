@@ -1,3 +1,4 @@
+
 export interface UserAccount {
   id: string;
   userId: string;
@@ -49,27 +50,15 @@ export interface Invoice {
   updatedAt: string;
 }
 
-export interface PaymentLink {
+export interface Connection {
   id: string;
-  userAccountId: string;
-  link: string;
-  amount: number;
-  currency: string;
-  status: "active" | "inactive" | "paid";
-  createdDate: string;
-}
-
-export interface Transaction {
-  id: string;
-  userAccountId: string;
-  transactionDate: string;
-  amount: number;
-  type: "debit" | "credit";
-  status: "pending" | "completed" | "failed";
-  description: string;
-  invoiceId?: string;
-  paymentLinkId?: string;
-  currency: string;
+  initiatorUid: string;
+  recipientUid: string;
+  type: 'investor' | 'founder' | 'mentor' | 'cofounder' | 'service';
+  status: 'pending' | 'accepted' | 'rejected';
+  message: string;
+  createdAt: any;
+  updatedAt?: any;
 }
 
 export interface Notification {

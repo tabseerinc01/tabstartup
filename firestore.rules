@@ -23,6 +23,21 @@ service cloud.firestore {
       allow write: if request.auth != null && (request.auth.uid == userId || isSuperAdmin());
     }
 
+    // CONNECTIONS: Unified relationships
+    match /connections/{connectionId} {
+      allow read: if request.auth != null && (
+        request.auth.uid == resource.data.initiatorUid || 
+        request.auth.uid == resource.data.recipientUid ||
+        isAdmin()
+      );
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.recipientUid ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
     // COMMUNITY POSTS
     match /communityPosts/{postId} {
       allow read: if request.auth != null;
@@ -32,29 +47,10 @@ service cloud.firestore {
       allow delete: if request.auth != null && (resource.data.authorUid == request.auth.uid || isAdmin());
     }
 
-    // COMMUNITY COMMENTS
-    match /communityComments/{commentId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && (resource.data.authorUid == request.auth.uid || isAdmin());
-    }
-
-    // COMMUNITY POST LIKES
-    match /communityPostLikes/{likeId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow delete: if request.auth != null;
-    }
-    
     // NOTIFICATIONS: Secure access - Recipient only
     match /notifications/{notificationId} {
-      // Users can only read notifications intended for them
       allow read: if request.auth != null && resource.data.recipientUid == request.auth.uid;
-      
-      // Authenticated users can create notifications for others (e.g. on like/comment)
       allow create: if request.auth != null;
-      
-      // Users can only update (e.g. mark as read) or delete their own notifications
       allow update, delete: if request.auth != null && resource.data.recipientUid == request.auth.uid;
     }
     
