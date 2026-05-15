@@ -574,6 +574,7 @@ function PostCard({
         {isExpanded && (
           <CommentsSection 
             postId={post.id} 
+            postAuthorUid={post.authorUid}
             user={user} 
             userProfile={userProfile} 
           />
@@ -583,7 +584,7 @@ function PostCard({
   );
 }
 
-function CommentsSection({ postId, user, userProfile }: any) {
+function CommentsSection({ postId, postAuthorUid, user, userProfile }: any) {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [newComment, setNewComment] = useState('');
@@ -626,6 +627,20 @@ function CommentsSection({ postId, user, userProfile }: any) {
         updateDoc(doc(firestore, 'communityPosts', postId), {
           commentsCount: increment(1)
         });
+
+        // Notify post author if they are not the one commenting
+        if (postAuthorUid !== user.uid) {
+          createNotification(firestore, {
+            recipientUid: postAuthorUid,
+            actorUid: user.uid,
+            type: 'comment',
+            title: 'New Discussion',
+            message: `${commentData.authorName} commented on your post.`,
+            targetId: postId,
+            targetType: 'post'
+          });
+        }
+
         setNewComment('');
       })
       .catch((error) => {
