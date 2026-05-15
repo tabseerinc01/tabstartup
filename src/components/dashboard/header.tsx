@@ -12,7 +12,8 @@ import {
   CheckCircle2, 
   Clock,
   Trash2,
-  Inbox
+  Inbox,
+  ArrowRight
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -177,16 +178,18 @@ export function DashboardHeader() {
                 Notifications
                 {unreadCount > 0 && <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">{unreadCount}</Badge>}
               </DropdownMenuLabel>
-              {unreadCount > 0 && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={markAllAsRead}
-                  className="h-7 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
-                >
-                  Clear All
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={markAllAsRead}
+                    className="h-7 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
+                  >
+                    Clear All
+                  </Button>
+                )}
+              </div>
             </div>
             
             <ScrollArea className="h-[400px]">
@@ -231,6 +234,14 @@ export function DashboardHeader() {
                 </div>
               )}
             </ScrollArea>
+            
+            <div className="p-2 border-t bg-slate-50/50">
+               <Button variant="ghost" className="w-full h-9 rounded-lg text-primary font-bold text-xs gap-2" asChild>
+                  <Link href="/dashboard/notifications">
+                    View All Notifications <ArrowRight className="h-3 w-3" />
+                  </Link>
+               </Button>
+            </div>
           </DropdownMenuContent>
         </DropdownMenu>
         
