@@ -27,7 +27,8 @@ import {
    MapPin,
    Info,
    Clock,
-   UserPlus
+   UserPlus,
+   Wrench
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -322,7 +323,6 @@ export default function DashboardOverviewPage() {
               <div className="text-3xl font-black text-slate-900">{sentPitches.length}</div>
               <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Venture outreach log</p>
             </CardContent>
-          </Card>
         )}
       </div>
 
