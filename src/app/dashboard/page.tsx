@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
@@ -17,22 +16,18 @@ import {
    Check,
    X,
    Heart,
-   Send,
    ArrowRight,
    Zap,
-   Briefcase,
-   HandCoins,
    ShieldAlert,
    Globe,
    MapPin,
-   Info,
    Clock,
    UserPlus,
    Wrench
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useUser, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useUser, useFirestore } from '@/firebase';
 import { 
   doc, 
   collection, 
@@ -45,8 +40,7 @@ import {
   getDocs, 
   addDoc, 
   serverTimestamp, 
-  arrayUnion,
-  onSnapshot
+  arrayUnion
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -58,7 +52,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogFooter
 } from "@/components/ui/dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceToNow } from 'date-fns';
@@ -289,7 +282,6 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* --- STATS GRID --- */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card className="border-none shadow-sm hover:shadow-md transition-shadow rounded-[2rem] overflow-hidden bg-background ring-1 ring-slate-100">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -329,8 +321,6 @@ export default function DashboardOverviewPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          
-          {/* --- RECENT INVESTOR INTEREST (UPGRADED) --- */}
           {isFounder && (
             <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
               <CardHeader className="border-b border-slate-50 px-8 py-8">
@@ -458,6 +448,10 @@ export default function DashboardOverviewPage() {
                                     </Button>
                                   </DialogTrigger>
                                   <DialogContent className="sm:max-w-[600px] rounded-[2.5rem] p-0 overflow-hidden">
+                                    <DialogHeader className="sr-only">
+                                      <DialogTitle>Investor Profile Preview</DialogTitle>
+                                      <DialogDescription>Detailed view of the interested investor's profile and investment criteria.</DialogDescription>
+                                    </DialogHeader>
                                     <ScrollArea className="max-h-[85vh]">
                                       <div className="h-32 bg-gradient-to-r from-primary/20 to-accent/20" />
                                       <div className="px-8 pb-10 -mt-12 space-y-8">
@@ -586,7 +580,6 @@ export default function DashboardOverviewPage() {
           )}
         </div>
 
-        {/* --- SIDEBAR WIDGETS --- */}
         <div className="space-y-6">
            <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden group relative">
             <CardHeader className="pb-4">
