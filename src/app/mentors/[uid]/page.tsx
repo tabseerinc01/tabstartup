@@ -26,7 +26,9 @@ import {
   CheckCircle2,
   Target,
   MessageSquare,
-  Award
+  Award,
+  Zap,
+  Rocket
 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -49,7 +51,7 @@ export default function MentorPublicProfilePage() {
       setIsLoading(true);
       try {
         const snap = await getDoc(doc(firestore, 'users', uid));
-        if (snap.exists() && (snap.data().isMentor || snap.data().role === 'mentor')) {
+        if (snap.exists()) {
           setMentor({ id: snap.id, ...snap.data() });
         }
       } catch (error) {
@@ -60,6 +62,36 @@ export default function MentorPublicProfilePage() {
     }
     loadMentor();
   }, [firestore, uid]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen flex-col">
+        <PublicHeader />
+        <main className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </main>
+        <PublicFooter />
+      </div>
+    );
+  }
+
+  const userRoles = (mentor?.roles || (mentor?.role ? [mentor.role] : [])).filter(Boolean);
+  const isMentor = mentor?.isMentor || userRoles.includes('mentor');
+
+  if (!mentor || !isMentor) {
+    return (
+      <div className="flex min-h-screen flex-col">
+        <PublicHeader />
+        <main className="flex-1 flex flex-col items-center justify-center p-4">
+          <h1 className="text-2xl font-bold mb-4 text-slate-900">Mentor profile not found</h1>
+          <Button variant="outline" onClick={() => router.push('/mentors')}>
+            Back to Mentors
+          </Button>
+        </main>
+        <PublicFooter />
+      </div>
+    );
+  }
 
   async function handleConnect() {
     if (!firestore || !currentUser?.uid || !uid || isOpeningChat) {
@@ -72,7 +104,6 @@ export default function MentorPublicProfilePage() {
     
     setIsOpeningChat(true);
     try {
-      // Check for existing chat
       const q = query(
         collection(firestore, "chats"),
         where("participants", "array-contains", currentUser.uid)
@@ -106,33 +137,6 @@ export default function MentorPublicProfilePage() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen flex-col">
-        <PublicHeader />
-        <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </main>
-        <PublicFooter />
-      </div>
-    );
-  }
-
-  if (!mentor) {
-    return (
-      <div className="flex min-h-screen flex-col">
-        <PublicHeader />
-        <main className="flex-1 flex flex-col items-center justify-center p-4">
-          <h1 className="text-2xl font-bold mb-4 text-slate-900">Mentor profile not found</h1>
-          <Button variant="outline" onClick={() => router.push('/mentors')}>
-            Back to Mentors
-          </Button>
-        </main>
-        <PublicFooter />
-      </div>
-    );
-  }
-
   const name = mentor.fullName || 'Mentor';
   const initials = name.split(' ').map((n: any) => n[0]).join('').toUpperCase();
   const isOwnProfile = currentUser?.uid === uid;
@@ -162,7 +166,13 @@ export default function MentorPublicProfilePage() {
                       {name}
                     </h1>
                     {mentor.isVerified && <CheckCircle2 className="h-8 w-8 text-primary fill-primary/10" />}
-                    <Badge className="bg-primary/10 text-primary border-none px-4 py-1 rounded-xl">Mentor</Badge>
+                    <div className="flex gap-1">
+                      {userRoles.map((role: string) => (
+                        <Badge key={role} className="bg-primary/10 text-primary border-none px-4 py-1 rounded-xl capitalize font-bold text-[10px]">
+                          {role}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                   <p className="text-xl text-primary font-semibold">{mentor.headline || "Industry Expert"}</p>
                   <div className="flex flex-wrap gap-6 text-sm text-muted-foreground font-medium">
@@ -199,12 +209,12 @@ export default function MentorPublicProfilePage() {
                 <div className="flex gap-2">
                   {mentor.socialLinks?.linkedin && (
                     <Button variant="ghost" size="icon" className="h-14 w-14 rounded-2xl border border-muted" asChild>
-                      <a href={mentor.socialLinks.linkedin} target="_blank" rel="noopener noreferrer"><Linkedin className="h-6 w-6 text-[#0077b5]" /></a>
+                      <a href={mentor.socialLinks.linkedin.startsWith('http') ? mentor.socialLinks.linkedin : `https://${mentor.socialLinks.linkedin}`} target="_blank" rel="noopener noreferrer"><Linkedin className="h-6 w-6 text-[#0077b5]" /></a>
                     </Button>
                   )}
                   {mentor.socialLinks?.website && (
                     <Button variant="ghost" size="icon" className="h-14 w-14 rounded-2xl border border-muted" asChild>
-                      <a href={mentor.socialLinks.website} target="_blank" rel="noopener noreferrer"><Globe className="h-6 w-6" /></a>
+                      <a href={mentor.socialLinks.website.startsWith('http') ? mentor.socialLinks.website : `https://${mentor.socialLinks.website}`} target="_blank" rel="noopener noreferrer"><Globe className="h-6 w-6" /></a>
                     </Button>
                   )}
                 </div>
@@ -249,6 +259,30 @@ export default function MentorPublicProfilePage() {
                           </div>
                         ))}
                       </div>
+                    </section>
+                  )}
+
+                  {(userRoles.includes('founder') || userRoles.includes('investor')) && (
+                    <section className="space-y-6 pt-12 border-t">
+                       <h3 className="text-xl font-bold text-slate-900">Ecosystem Connections</h3>
+                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                         {userRoles.includes('founder') && (
+                           <Link href={`/founders/${uid}`}>
+                             <Card className="hover:border-primary/30 transition-colors p-4 flex items-center gap-3 group">
+                               <Rocket className="h-5 w-5 text-primary group-hover:scale-110 transition-transform" />
+                               <span className="font-bold text-sm">View Founder Profile</span>
+                             </Card>
+                           </Link>
+                         )}
+                         {userRoles.includes('investor') && (
+                           <Link href={`/investors/${uid}`}>
+                             <Card className="hover:border-primary/30 transition-colors p-4 flex items-center gap-3 group">
+                               <Zap className="h-5 w-5 text-primary group-hover:scale-110 transition-transform" />
+                               <span className="font-bold text-sm">View Investor Profile</span>
+                             </Card>
+                           </Link>
+                         )}
+                       </div>
                     </section>
                   )}
                 </div>

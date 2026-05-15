@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -28,7 +27,9 @@ import {
   CheckCircle2,
   Mail,
   Target,
-  Zap
+  Zap,
+  Users,
+  Rocket
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -72,7 +73,11 @@ export default function InvestorPublicProfilePage() {
     );
   }
 
-  if (!investor || investor.role !== 'investor') {
+  // Check if user has investor role in either legacy or new format
+  const userRoles = (investor?.roles || (investor?.role ? [investor.role] : [])).filter(Boolean);
+  const isInvestor = userRoles.includes('investor');
+
+  if (!investor || !isInvestor) {
     return (
       <div className="flex min-h-screen flex-col">
         <PublicHeader />
@@ -94,11 +99,12 @@ export default function InvestorPublicProfilePage() {
     .slice(0, 2)
     .toUpperCase() || 'I';
 
-  const displayName = investor.fullName;
-  const headline = investor.investorHeadline || investor.headline;
+  const displayName = investor.fullName || 'Ecosystem Member';
+  const headline = investor.investorHeadline || investor.headline || "Active Investor";
   const bio = investor.investorBio || investor.bio;
   const linkedin = investor.linkedinUrl || investor.socialLinks?.linkedin;
   const isOwnProfile = currentUser?.uid === uid;
+  const profileImageUrl = investor.imageUrl || `https://picsum.photos/seed/${uid}/400/400`;
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
@@ -116,15 +122,22 @@ export default function InvestorPublicProfilePage() {
             <div className="px-6 md:px-12 pb-12 -mt-20">
               <div className="flex flex-col md:flex-row gap-8 items-end mb-10">
                 <Avatar className="h-40 w-40 rounded-3xl border-8 border-background bg-muted shrink-0 shadow-2xl">
-                  <AvatarImage src={investor.imageUrl} alt={displayName} className="object-cover" />
+                  <AvatarImage src={profileImageUrl} alt={displayName} className="object-cover" />
                   <AvatarFallback className="text-4xl">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 space-y-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h1 className="text-4xl font-extrabold tracking-tight">
                       {displayName}
                     </h1>
                     {investor.isVerified && <CheckCircle2 className="h-8 w-8 text-primary fill-primary/10" />}
+                    <div className="flex gap-1">
+                      {userRoles.map((role: string) => (
+                        <Badge key={role} variant="secondary" className="capitalize text-[10px] font-bold h-6 px-3 bg-primary/5 text-primary border-none">
+                          {role}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                   <p className="text-xl text-primary font-semibold">{headline}</p>
                   <div className="flex flex-wrap gap-6 text-sm text-muted-foreground font-medium">
@@ -137,7 +150,7 @@ export default function InvestorPublicProfilePage() {
                       {investor.isOpenToPitches ? (
                         <span className="flex items-center gap-1.5"><Zap className="h-3 w-3 fill-white" /> Open to Pitches</span>
                       ) : (
-                        'Not accepting pitches'
+                        'Referral Only'
                       )}
                     </Badge>
                   </div>
@@ -149,7 +162,7 @@ export default function InvestorPublicProfilePage() {
                   {bio && (
                     <section>
                       <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                        <TrendingUp className="h-6 w-6 text-primary" /> About & Vision
+                        <TrendingUp className="h-6 w-6 text-primary" /> Investment Philosophy
                       </h3>
                       <div className="bg-primary/5 p-8 rounded-3xl border border-primary/10 relative">
                         <span className="absolute -top-4 -left-2 text-6xl text-primary/20 font-serif">“</span>
@@ -161,32 +174,49 @@ export default function InvestorPublicProfilePage() {
                   )}
 
                   <section className="bg-muted/30 p-8 rounded-3xl border border-dashed border-primary/20">
-                    <h3 className="text-xl font-bold mb-6">Social Presence</h3>
+                    <h3 className="text-xl font-bold mb-6">Contact & Social</h3>
                     <div className="flex flex-wrap gap-4">
                       {linkedin && (
                         <Button variant="outline" className="gap-2 rounded-xl h-12 px-6" asChild>
-                          <a href={linkedin} target="_blank" rel="noopener noreferrer">
+                          <a href={linkedin.startsWith('http') ? linkedin : `https://${linkedin}`} target="_blank" rel="noopener noreferrer">
                             <Linkedin className="h-5 w-5 text-[#0077b5]" /> LinkedIn Profile
                           </a>
                         </Button>
                       )}
                       {investor.socialLinks?.website && (
                         <Button variant="outline" className="gap-2 rounded-xl h-12 px-6" asChild>
-                          <a href={investor.socialLinks.website} target="_blank" rel="noopener noreferrer">
-                            <Globe className="h-5 w-5" /> Official Website
+                          <a href={investor.socialLinks.website.startsWith('http') ? investor.socialLinks.website : `https://${investor.socialLinks.website}`} target="_blank" rel="noopener noreferrer">
+                            <Globe className="h-5 w-5" /> Website
                           </a>
                         </Button>
                       )}
-                      {!linkedin && !investor.socialLinks?.website && (
-                        <p className="text-sm text-muted-foreground italic">No social links provided.</p>
+                      {isOwnProfile ? null : (
+                        <Button className="rounded-xl h-12 px-6 gap-2" asChild>
+                           <Link href={`/dashboard/messages?startWith=${uid}`}>
+                             <Mail className="h-4 w-4" /> Send Message
+                           </Link>
+                        </Button>
                       )}
                     </div>
                   </section>
                   
                   {isOwnProfile && (
                     <Button variant="outline" asChild className="w-full h-12 rounded-2xl">
-                      <Link href="/dashboard/profile">Update My Investor Profile</Link>
+                      <Link href="/dashboard/profile">Update My Profile</Link>
                     </Button>
+                  )}
+
+                  {userRoles.includes('founder') && (
+                    <section className="space-y-4">
+                       <h3 className="text-xl font-bold flex items-center gap-2">
+                         <Rocket className="h-5 w-5 text-primary" /> Also building as a Founder
+                       </h3>
+                       <Button variant="ghost" className="h-auto p-0 hover:bg-transparent" asChild>
+                         <Link href={`/founders/${uid}`} className="flex items-center gap-2 text-primary font-bold">
+                           View Founder Profile <ArrowRight className="h-4 w-4" />
+                         </Link>
+                       </Button>
+                    </section>
                   )}
                 </div>
 
@@ -208,7 +238,7 @@ export default function InvestorPublicProfilePage() {
                               </Badge>
                             ))
                           ) : (
-                            <span className="text-sm text-muted-foreground italic">No preferred stages set.</span>
+                            <span className="text-sm text-muted-foreground italic">Flexible</span>
                           )}
                         </div>
                       </div>
@@ -244,7 +274,7 @@ export default function InvestorPublicProfilePage() {
                   {investor.experience && investor.experience.length > 0 && (
                     <section>
                       <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <Briefcase className="h-5 w-5 text-primary" /> Professional Background
+                        <Briefcase className="h-5 w-5 text-primary" /> Background
                       </h3>
                       <div className="space-y-4">
                         {investor.experience.map((exp: any, i: number) => (
