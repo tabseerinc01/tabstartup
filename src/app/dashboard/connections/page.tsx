@@ -9,8 +9,6 @@ import {
   where, 
   getDoc, 
   doc,
-  addDoc,
-  getDocs,
   updateDoc,
   serverTimestamp
 } from 'firebase/firestore';
@@ -54,56 +52,79 @@ export default function ConnectionsManagerPage() {
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
-  // Fetch incoming requests
+  // 1. Unified Connections Queries
   const incomingQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(
-      collection(firestore, 'connections'), 
-      where('recipientUid', '==', user.uid)
-    );
+    return query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid));
   }, [firestore, user?.uid]);
 
-  // Fetch outgoing requests
   const outgoingQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(
-      collection(firestore, 'connections'), 
-      where('initiatorUid', '==', user.uid)
-    );
+    return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+
+  // 2. Legacy Pitches Queries (for transition compatibility)
+  const legacyIncomingPitchesQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'pitches'), where('toFounderUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+
+  const legacyOutgoingPitchesQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'pitches'), where('fromInvestorUid', '==', user.uid));
   }, [firestore, user?.uid]);
 
   const { data: incoming, isLoading: isIncomingLoading } = useCollection(incomingQuery);
   const { data: outgoing, isLoading: isOutgoingLoading } = useCollection(outgoingQuery);
+  const { data: legacyIncoming, isLoading: isLegacyIncomingLoading } = useCollection(legacyIncomingPitchesQuery);
+  const { data: legacyOutgoing, isLoading: isLegacyOutgoingLoading } = useCollection(legacyOutgoingPitchesQuery);
 
+  // Merge and Normalize Data
   const allConns = useMemo(() => {
-    const combined = [...(incoming || []), ...(outgoing || [])];
-    // Deduplicate by ID just in case
+    const rawConnections = [...(incoming || []), ...(outgoing || [])];
+    
+    // Normalize legacy pitches to look like connections
+    const normalizedLegacy = [...(legacyIncoming || []), ...(legacyOutgoing || [])].map(p => ({
+      id: p.id,
+      initiatorUid: p.fromInvestorUid,
+      recipientUid: p.toFounderUid,
+      type: 'investor', // All legacy pitches were investor interests
+      status: p.status || 'pending',
+      message: p.message || '',
+      createdAt: p.createdAt,
+      isLegacy: true
+    }));
+
+    const combined = [...rawConnections, ...normalizedLegacy];
+    
+    // Deduplicate by ID
     const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+    
+    // Client-side Sort
     return unique.sort((a, b) => {
-      const timeA = a.createdAt?.toMillis?.() || 0;
-      const timeB = b.createdAt?.toMillis?.() || 0;
+      const timeA = a.createdAt?.toMillis?.() || a.createdAt?.seconds * 1000 || 0;
+      const timeB = b.createdAt?.toMillis?.() || b.createdAt?.seconds * 1000 || 0;
       return timeB - timeA;
     });
-  }, [incoming, outgoing]);
+  }, [incoming, outgoing, legacyIncoming, legacyOutgoing]);
 
-  // Load profiles for all participants
+  // Load profiles
   useEffect(() => {
     async function loadProfiles() {
       if (!firestore || allConns.length === 0) return;
       const uidsToFetch = new Set<string>();
       allConns.forEach(c => {
-        if (c.initiatorUid !== user?.uid) uidsToFetch.add(c.initiatorUid);
-        if (c.recipientUid !== user?.uid) uidsToFetch.add(c.recipientUid);
+        if (c.initiatorUid && c.initiatorUid !== user?.uid) uidsToFetch.add(c.initiatorUid);
+        if (c.recipientUid && c.recipientUid !== user?.uid) uidsToFetch.add(c.recipientUid);
       });
 
       const fetchPromises = Array.from(uidsToFetch)
         .filter(uid => !profiles[uid])
         .map(async (uid) => {
-          const snap = await getDoc(doc(firestore, 'users', uid));
-          if (snap.exists()) {
-            return { uid, data: snap.data() };
-          }
-          return null;
+          try {
+            const snap = await getDoc(doc(firestore, 'users', uid));
+            return snap.exists() ? { uid, data: snap.data() } : null;
+          } catch (e) { return null; }
         });
 
       const results = await Promise.all(fetchPromises);
@@ -115,7 +136,6 @@ export default function ConnectionsManagerPage() {
           changed = true;
         }
       });
-
       if (changed) setProfiles(newProfiles);
     }
     loadProfiles();
@@ -124,55 +144,49 @@ export default function ConnectionsManagerPage() {
   const handleStatus = async (conn: any, status: 'accepted' | 'rejected') => {
     if (!firestore || !user || isActionLoading) return;
     setIsActionLoading(conn.id);
+    const collectionName = conn.isLegacy ? 'pitches' : 'connections';
+    
     try {
-      await updateDoc(doc(firestore, 'connections', conn.id), { 
+      await updateDoc(doc(firestore, collectionName, conn.id), { 
         status,
         updatedAt: serverTimestamp() 
       });
 
       if (status === 'accepted') {
         const otherUid = conn.initiatorUid === user.uid ? conn.recipientUid : conn.initiatorUid;
-        
-        // Notification for the initiator
         createNotification(firestore, {
           recipientUid: otherUid,
           actorUid: user.uid,
           type: 'connection',
-          title: 'Connection Established',
+          title: 'Connection Accepted',
           message: `${user.displayName || 'Someone'} accepted your connection request.`,
           targetId: conn.id,
           targetType: 'user'
         });
-
-        toast({ title: "Connected!", description: "You can now start collaborating." });
+        toast({ title: "Connected!" });
       } else {
-        toast({ title: "Request Declined" });
+        toast({ title: "Declined" });
       }
     } catch (e) {
-      toast({ title: "Update failed", variant: "destructive" });
+      toast({ title: "Action failed", variant: "destructive" });
     } finally {
       setIsActionLoading(null);
     }
   };
 
   const filtered = allConns.filter(c => activeType === 'all' || c.type === activeType);
-
-  // Incoming pending requests
   const pending = filtered.filter(c => c.recipientUid === user?.uid && c.status === 'pending');
-  // All accepted connections
   const accepted = filtered.filter(c => c.status === 'accepted');
-  // Requests I sent that are still pending
   const sent = filtered.filter(c => c.initiatorUid === user?.uid && c.status === 'pending');
-  // Requests that were rejected (either by me or by the other party)
   const rejected = filtered.filter(c => c.status === 'rejected');
 
-  const isLoading = isUserLoading || isIncomingLoading || isOutgoingLoading;
+  const isLoading = isUserLoading || isIncomingLoading || isOutgoingLoading || isLegacyIncomingLoading || isLegacyOutgoingLoading;
 
   if (isLoading && allConns.length === 0) {
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Loading Relationships...</p>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Relationships...</p>
       </div>
     );
   }
@@ -182,7 +196,7 @@ export default function ConnectionsManagerPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-4xl font-black tracking-tight text-slate-900">Connections</h1>
-          <p className="text-slate-500 font-medium">Manage and track all professional relationships in the ecosystem.</p>
+          <p className="text-slate-500 font-medium">Manage all professional relationships and interests.</p>
         </div>
         <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
           {(['all', 'investor', 'mentor', 'cofounder', 'service', 'founder'] as ConnType[]).map(t => (
@@ -203,13 +217,13 @@ export default function ConnectionsManagerPage() {
       </div>
 
       <Tabs defaultValue="pending" className="space-y-6">
-        <TabsList className="bg-slate-100 p-1 rounded-2xl w-full sm:w-auto h-auto grid grid-cols-4 sm:flex sm:gap-1">
-          <TabsTrigger value="pending" className="rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+        <TabsList className="bg-slate-100 p-1 rounded-2xl w-full sm:w-auto h-auto flex gap-1">
+          <TabsTrigger value="pending" className="flex-1 sm:flex-none rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white shadow-sm">
             Pending {pending.length > 0 && <Badge variant="destructive" className="ml-2 h-4 px-1">{pending.length}</Badge>}
           </TabsTrigger>
-          <TabsTrigger value="accepted" className="rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white">Accepted</TabsTrigger>
-          <TabsTrigger value="sent" className="rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white">Sent</TabsTrigger>
-          <TabsTrigger value="rejected" className="rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white">Rejected</TabsTrigger>
+          <TabsTrigger value="accepted" className="flex-1 sm:flex-none rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white">Accepted</TabsTrigger>
+          <TabsTrigger value="sent" className="flex-1 sm:flex-none rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white">Sent</TabsTrigger>
+          <TabsTrigger value="rejected" className="flex-1 sm:flex-none rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white">Rejected</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending">
@@ -270,7 +284,7 @@ function ConnectionsList({ items, profiles, onAction, isIncoming, loadingAction,
 function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, currentUserId }: any) {
   const router = useRouter();
   const name = profile?.fullName || "Ecosystem Member";
-  const headline = profile?.headline || profile?.investorHeadline || "Active Participant";
+  const headline = profile?.investorHeadline || profile?.headline || "Active Participant";
   const avatarUrl = profile?.imageUrl || `https://picsum.photos/seed/${profile?.uid || conn.id}/200/200`;
   const otherUid = conn.initiatorUid === currentUserId ? conn.recipientUid : conn.initiatorUid;
   
@@ -297,7 +311,7 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
               <div>
                 <h4 className="text-xl font-black text-slate-900 truncate">{name}</h4>
                 <div className="flex items-center gap-1.5 text-[10px] font-black text-primary uppercase tracking-[0.15em] mt-1">
-                  <Icon className="h-3.5 w-3.5" /> {conn.type} request
+                  <Icon className="h-3.5 w-3.5" /> {conn.type} {conn.isLegacy ? 'interest' : 'request'}
                 </div>
               </div>
               <Badge className={cn(
@@ -311,7 +325,7 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
             </div>
             
             <p className="text-sm text-slate-600 font-medium line-clamp-3 mt-4 leading-relaxed italic border-l-2 border-primary/10 pl-4 bg-primary/5 py-3 rounded-r-xl">
-              "{conn.message || "I'd like to connect and explore potential collaboration opportunities within the ecosystem."}"
+              "{conn.message || "I'd like to connect and explore potential collaboration opportunities."}"
             </p>
 
             <div className="flex items-center gap-4 mt-6 pt-6 border-t border-slate-50">
@@ -343,7 +357,7 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
               ) : (
                 <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">
                    <Clock className="h-3.5 w-3.5" /> 
-                   {conn.createdAt?.toDate ? formatDistanceToNow(conn.createdAt.toDate(), { addSuffix: true }) : 'Processing...'}
+                   {conn.createdAt?.toDate ? formatDistanceToNow(conn.createdAt.toDate(), { addSuffix: true }) : 'Recently'}
                 </div>
               )}
               

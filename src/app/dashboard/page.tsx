@@ -23,7 +23,8 @@ import {
    MapPin,
    Clock,
    UserPlus,
-   Wrench
+   Wrench,
+   HandCoins
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -34,7 +35,6 @@ import {
   query, 
   where, 
   limit, 
-  orderBy, 
   updateDoc, 
   getDoc, 
   getDocs, 
@@ -70,7 +70,7 @@ export default function DashboardOverviewPage() {
   const [startup, setStartup] = useState<any>(null);
   const [viewsCount, setViewsCount] = useState(0);
   const [incomingPitches, setIncomingPitches] = useState<any[]>([]);
-  const [sentPitches, setSentPitches] = useState<any[]>([]);
+  const [sentPitchesCount, setSentPitchesCount] = useState(0);
   const [chatsCount, setChatsCount] = useState(0);
   const [recommendedStartups, setRecommendedStartups] = useState<any[]>([]);
   const [investorProfiles, setInvestorProfiles] = useState<Record<string, any>>({});
@@ -88,7 +88,6 @@ export default function DashboardOverviewPage() {
       const profileData = profileSnap.exists() ? profileSnap.data() : null;
       setProfile(profileData);
 
-      // Super Admin Promotion Logic
       if (user.email === SUPER_ADMIN_EMAIL && profileData && profileData.role !== 'super_admin') {
         await updateDoc(doc(firestore, 'users', user.uid), {
           role: 'super_admin',
@@ -103,7 +102,6 @@ export default function DashboardOverviewPage() {
       const startupData = startupSnap.exists() ? startupSnap.data() : null;
       setStartup(startupData);
 
-      // Fetch Chat count
       const chatsQ = query(collection(firestore, 'chats'), where('participants', 'array-contains', user.uid));
       const chatsSnap = await getDocs(chatsQ);
       setChatsCount(chatsSnap.size);
@@ -116,17 +114,19 @@ export default function DashboardOverviewPage() {
         try {
           const viewsSnap = await getDocs(collection(firestore, 'startups', user.uid, 'views'));
           setViewsCount(viewsSnap.size);
-        } catch (e) { console.warn("Could not fetch views", e); }
-        
+        } catch (e) { }
         loadIncomingPitches();
       }
 
       if (isInvestor) {
-        const sentQ = query(collection(firestore, 'pitches'), where('fromInvestorUid', '==', user.uid), orderBy('createdAt', 'desc'), limit(10));
-        const sentSnap = await getDocs(sentQ);
-        setSentPitches(sentSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        // Query connections and legacy pitches for count
+        const connSentQ = query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid), where('type', '==', 'investor'));
+        const pitchSentQ = query(collection(firestore, 'pitches'), where('fromInvestorUid', '==', user.uid));
+        
+        const [connSnap, pitchSnap] = await Promise.all([getDocs(connSentQ), getDocs(pitchSentQ)]);
+        setSentPitchesCount(connSnap.size + pitchSnap.size);
 
-        const recQ = query(collection(firestore, 'startups'), orderBy('createdAt', 'desc'), limit(3));
+        const recQ = query(collection(firestore, 'startups'), limit(3));
         const recSnap = await getDocs(recQ);
         setRecommendedStartups(recSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       }
@@ -141,32 +141,41 @@ export default function DashboardOverviewPage() {
     if (!firestore || !user?.uid) return;
     setIsPitchesLoading(true);
     try {
-      const incomingQ = query(
-        collection(firestore, 'pitches'), 
-        where('toFounderUid', '==', user.uid), 
-        orderBy('createdAt', 'desc'), 
-        limit(10)
-      );
+      // Fetch both new connections and legacy pitches
+      const incomingConnQ = query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid), where('type', '==', 'investor'));
+      const incomingPitchQ = query(collection(firestore, 'pitches'), where('toFounderUid', '==', user.uid));
       
-      const snap = await getDocs(incomingQ);
-      const pitches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setIncomingPitches(pitches);
+      const [connSnap, pitchSnap] = await Promise.all([getDocs(incomingConnQ), getDocs(incomingPitchQ)]);
+      
+      const connections = connSnap.docs.map(d => ({ id: d.id, ...d.data(), isLegacy: false }));
+      const pitches = pitchSnap.docs.map(d => ({ 
+        id: d.id, 
+        ...d.data(), 
+        isLegacy: true, 
+        initiatorUid: d.data().fromInvestorUid, 
+        type: 'investor' 
+      }));
+      
+      const combined = [...connections, ...pitches].sort((a: any, b: any) => {
+        const tA = a.createdAt?.toMillis?.() || 0;
+        const tB = b.createdAt?.toMillis?.() || 0;
+        return tB - tA;
+      }).slice(0, 5);
+      
+      setIncomingPitches(combined);
 
-      // Fetch detailed profiles for all investors
-      const uids = Array.from(new Set(pitches.map((p: any) => p.fromInvestorUid)));
+      const uids = Array.from(new Set(combined.map((p: any) => p.initiatorUid || p.fromInvestorUid)));
       const profilesMap: Record<string, any> = { ...investorProfiles };
       
       for (const uid of uids) {
         if (!profilesMap[uid as string]) {
           const pSnap = await getDoc(doc(firestore, 'users', uid as string));
-          if (pSnap.exists()) {
-            profilesMap[uid as string] = pSnap.data();
-          }
+          if (pSnap.exists()) profilesMap[uid as string] = pSnap.data();
         }
       }
       setInvestorProfiles(profilesMap);
     } catch (e) {
-      console.error("Error loading incoming pitches:", e);
+      console.error("Error loading incoming interests:", e);
     } finally {
       setIsPitchesLoading(false);
     }
@@ -178,19 +187,17 @@ export default function DashboardOverviewPage() {
 
   const handlePitchStatus = async (pitch: any, status: 'accepted' | 'rejected') => {
     if (!firestore || !user?.uid || processingPitchId) return;
-    
     setProcessingPitchId(pitch.id);
-    const investorUid = pitch.fromInvestorUid;
-    const investorProfile = investorProfiles[investorUid];
+    const investorUid = pitch.initiatorUid || pitch.fromInvestorUid;
+    const collectionName = pitch.isLegacy ? 'pitches' : 'connections';
 
     try {
-      await updateDoc(doc(firestore, 'pitches', pitch.id), { 
+      await updateDoc(doc(firestore, collectionName, pitch.id), { 
         status,
         updatedAt: serverTimestamp()
       });
 
       if (status === 'accepted') {
-        // 1. Create/Check Chat
         const chatsQ = query(collection(firestore, "chats"), where("participants", "array-contains", user.uid));
         const chatsSnap = await getDocs(chatsQ);
         let existingChatId = null;
@@ -201,34 +208,29 @@ export default function DashboardOverviewPage() {
         if (!existingChatId) {
           await addDoc(collection(firestore, 'chats'), {
             participants: [user.uid, investorUid],
-            lastMessage: "You are now connected! Start building together.",
+            lastMessage: "Connection established!",
             updatedAt: serverTimestamp(),
             createdAt: serverTimestamp(),
           });
         }
 
-        // 2. Notify Investor
         createNotification(firestore, {
           recipientUid: investorUid,
           actorUid: user.uid,
           type: 'connection',
           title: 'Interest Accepted',
-          message: `${profile?.fullName || 'A founder'} accepted your interest request. You can now chat!`,
+          message: `${profile?.fullName || 'A founder'} accepted your interest request.`,
           targetId: user.uid,
           targetType: 'user'
         });
 
-        toast({ 
-          title: "Connection Established", 
-          description: `You are now connected with ${investorProfile?.fullName || 'the investor'}.`,
-        });
+        toast({ title: "Connected!" });
       } else {
         toast({ title: "Request Declined" });
       }
 
       setIncomingPitches(prev => prev.map(p => p.id === pitch.id ? { ...p, status } : p));
     } catch (error) {
-      console.error("Error processing pitch:", error);
       toast({ title: "Update Failed", variant: "destructive" });
     } finally {
       setProcessingPitchId(null);
@@ -240,7 +242,7 @@ export default function DashboardOverviewPage() {
       <div className="flex h-full items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Worskpace...</p>
+          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Workspace...</p>
         </div>
       </div>
     );
@@ -312,7 +314,7 @@ export default function DashboardOverviewPage() {
               <div className="p-2 bg-rose-50 rounded-lg"><Heart className="h-4 w-4 text-rose-600" /></div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-black text-slate-900">{sentPitches.length}</div>
+              <div className="text-3xl font-black text-slate-900">{sentPitchesCount}</div>
               <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Venture outreach log</p>
             </CardContent>
           </Card>
@@ -353,15 +355,16 @@ export default function DashboardOverviewPage() {
                     </div>
                   ) : incomingPitches.length > 0 ? (
                     incomingPitches.map((pitch: any) => {
-                      const inv = investorProfiles[pitch.fromInvestorUid];
+                      const investorUid = pitch.initiatorUid || pitch.fromInvestorUid;
+                      const inv = investorProfiles[investorUid];
                       const isPending = pitch.status === 'pending';
-                      const createdAt = pitch.createdAt?.toDate?.() || new Date();
+                      const createdAt = pitch.createdAt?.toDate?.() || new Date(pitch.createdAt?.seconds * 1000) || new Date();
 
                       return (
                         <div key={pitch.id} className="p-6 md:p-8 hover:bg-slate-50/50 transition-colors group">
                           <div className="flex flex-col md:flex-row md:items-start gap-6">
-                            <Avatar className="h-16 w-16 rounded-2xl border-4 border-white shadow-md shadow-slate-200/50 shrink-0">
-                              <AvatarImage src={inv?.imageUrl || `https://picsum.photos/seed/${pitch.fromInvestorUid}/200/200`} className="object-cover" />
+                            <Avatar className="h-16 w-16 rounded-2xl border-4 border-white shadow-md shrink-0">
+                              <AvatarImage src={inv?.imageUrl || `https://picsum.photos/seed/${investorUid}/200/200`} className="object-cover" />
                               <AvatarFallback className="bg-slate-100 font-black text-slate-400">
                                 {inv?.fullName?.charAt(0) || 'I'}
                               </AvatarFallback>
@@ -393,24 +396,10 @@ export default function DashboardOverviewPage() {
                                 </Badge>
                               </div>
 
-                              <div className="bg-white/50 border border-slate-100 p-4 rounded-2xl relative overflow-hidden">
-                                 <p className="text-sm text-slate-600 leading-relaxed font-medium line-clamp-2">
-                                   "{pitch.message || inv?.investorBio || inv?.bio || 'Interested in learning more about your venture and exploring potential synergies.'}"
+                              <div className="bg-white/50 border border-slate-100 p-4 rounded-2xl">
+                                 <p className="text-sm text-slate-600 font-medium line-clamp-2 italic">
+                                   "{pitch.message || "Interested in learning more about your venture."}"
                                  </p>
-                                 <div className="absolute top-0 right-0 p-2 opacity-5">
-                                   <Zap className="h-8 w-8 text-primary" />
-                                 </div>
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-6 text-[11px] font-bold text-slate-400">
-                                 <div className="flex items-center gap-1.5">
-                                   <MapPin className="h-3.5 w-3.5 text-primary opacity-60" />
-                                   {inv?.location || 'Remote'}
-                                 </div>
-                                 <div className="flex items-center gap-1.5">
-                                   <Target className="h-3.5 w-3.5 text-primary opacity-60" />
-                                   {Array.isArray(inv?.investmentFocus) ? inv.investmentFocus.slice(0, 2).join(', ') : 'Generalist'}
-                                 </div>
                               </div>
 
                               <div className="pt-2 flex flex-wrap items-center gap-3">
@@ -435,7 +424,7 @@ export default function DashboardOverviewPage() {
                                   </>
                                 ) : pitch.status === 'accepted' ? (
                                   <Button variant="outline" className="rounded-xl h-10 px-6 font-bold border-primary/20 text-primary gap-2" asChild>
-                                    <Link href="/dashboard/messages">
+                                    <Link href={`/dashboard/messages?startWith=${investorUid}`}>
                                       <MessageSquare className="h-4 w-4" /> Open Chat
                                     </Link>
                                   </Button>
@@ -450,7 +439,7 @@ export default function DashboardOverviewPage() {
                                   <DialogContent className="sm:max-w-[600px] rounded-[2.5rem] p-0 overflow-hidden">
                                     <DialogHeader className="sr-only">
                                       <DialogTitle>Investor Profile Preview</DialogTitle>
-                                      <DialogDescription>Detailed view of the interested investor's profile and investment criteria.</DialogDescription>
+                                      <DialogDescription>Detailed view of the interested investor's profile.</DialogDescription>
                                     </DialogHeader>
                                     <ScrollArea className="max-h-[85vh]">
                                       <div className="h-32 bg-gradient-to-r from-primary/20 to-accent/20" />
@@ -462,49 +451,20 @@ export default function DashboardOverviewPage() {
                                           </Avatar>
                                           <div className="flex-1 space-y-1">
                                             <h2 className="text-3xl font-black text-slate-900">{inv?.fullName || 'Investor'}</h2>
-                                            <p className="text-lg font-bold text-primary">{inv?.investorHeadline || inv?.headline || 'Venture Partner'}</p>
+                                            <p className="text-lg font-bold text-primary">{inv?.investorHeadline || 'Venture Partner'}</p>
                                           </div>
                                         </div>
-
                                         <div className="space-y-6">
                                            <div className="space-y-2">
-                                              <h5 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Investment Philosophy</h5>
+                                              <h5 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bio</h5>
                                               <p className="text-slate-600 font-medium leading-relaxed italic">
-                                                "{inv?.investorBio || inv?.bio || 'Focused on supporting the next generation of founders in emerging markets.'}"
+                                                "{inv?.investorBio || inv?.bio || 'No bio provided.'}"
                                               </p>
                                            </div>
-
-                                           <div className="grid grid-cols-2 gap-6 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
-                                              <div className="space-y-1">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Ticket Size</p>
-                                                <p className="text-lg font-black text-slate-900">{inv?.ticketSize || 'Varies'}</p>
-                                              </div>
-                                              <div className="space-y-1">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Preferred Stage</p>
-                                                <p className="text-lg font-black text-slate-900">{Array.isArray(inv?.preferredStage) ? inv.preferredStage.join(', ') : (inv?.preferredStage || 'Flexible')}</p>
-                                              </div>
-                                           </div>
-
-                                           <div className="space-y-3">
-                                              <h5 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Vertical Focus</h5>
-                                              <div className="flex flex-wrap gap-2">
-                                                {(inv?.investmentFocus || ['SaaS', 'Fintech', 'AI']).map((f: string) => (
-                                                  <Badge key={f} className="rounded-lg bg-primary/5 text-primary border-none px-3 py-1 font-bold">{f}</Badge>
-                                                ))}
-                                              </div>
-                                           </div>
                                         </div>
-
-                                        <div className="pt-6 border-t border-slate-100 flex gap-3">
-                                           <Button className="flex-1 h-12 rounded-xl font-bold" onClick={() => router.push(`/investors/${pitch.fromInvestorUid}`)}>
-                                              Full Public Profile
-                                           </Button>
-                                           {inv?.linkedinUrl && (
-                                             <Button variant="outline" size="icon" className="h-12 w-12 rounded-xl" asChild>
-                                               <a href={inv.linkedinUrl} target="_blank" rel="noopener"><Globe className="h-5 w-5" /></a>
-                                             </Button>
-                                           )}
-                                        </div>
+                                        <Button className="w-full h-12 rounded-xl font-bold" onClick={() => router.push(`/investors/${investorUid}`)}>
+                                           Full Public Profile
+                                        </Button>
                                       </div>
                                     </ScrollArea>
                                   </DialogContent>
@@ -521,25 +481,18 @@ export default function DashboardOverviewPage() {
                         <HandCoins className="h-12 w-12 text-slate-200" />
                       </div>
                       <div className="space-y-2">
-                        <h4 className="text-xl font-black text-slate-900">No investor outreach yet</h4>
+                        <h4 className="text-xl font-black text-slate-900">No interests yet</h4>
                         <p className="text-slate-500 font-medium max-w-sm mx-auto leading-relaxed">
-                          Build momentum by completing your startup profile. Verified profiles with clear traction get 5x more investor interest.
+                          Complete your startup profile to attract verified investors.
                         </p>
                       </div>
-                      <Button size="lg" className="rounded-full px-8 h-12 font-bold shadow-xl shadow-primary/20" asChild>
-                        <Link href="/dashboard/startup">Complete Startup Profile</Link>
+                      <Button size="lg" className="rounded-full px-8 h-12 font-bold shadow-xl" asChild>
+                        <Link href="/dashboard/startup">Build Profile</Link>
                       </Button>
                     </div>
                   )}
                 </div>
               </CardContent>
-              {incomingPitches.length > 5 && (
-                <CardFooter className="bg-slate-50/50 p-4 border-t border-slate-50 flex justify-center">
-                  <Button variant="ghost" size="sm" className="font-bold text-xs text-primary uppercase tracking-widest gap-2">
-                    View full history <ArrowRight className="h-3 w-3" />
-                  </Button>
-                </CardFooter>
-              )}
             </Card>
           )}
 
@@ -556,14 +509,12 @@ export default function DashboardOverviewPage() {
                   {recommendedStartups.map(s => (
                     <Card key={s.id} className="group border-none shadow-lg hover:shadow-2xl transition-all duration-300 rounded-[2rem] overflow-hidden bg-slate-50/50 flex flex-col">
                       <CardHeader className="pb-2">
-                        <div className="flex justify-between items-start mb-2">
-                          <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest px-2">{s.industry}</Badge>
-                        </div>
-                        <CardTitle className="text-lg font-black truncate text-slate-900 group-hover:text-primary transition-colors">{s.name}</CardTitle>
+                        <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest px-2 w-fit">{s.industry}</Badge>
+                        <CardTitle className="text-lg font-black truncate text-slate-900 group-hover:text-primary transition-colors mt-2">{s.name}</CardTitle>
                       </CardHeader>
                       <CardContent className="flex-1 pb-4">
                         <p className="text-xs text-slate-500 font-medium line-clamp-2 h-8 leading-relaxed mb-4 italic">
-                          "{s.shortDescription || 'A promising venture building the future.'}"
+                          "{s.shortDescription || 'A promising venture.'}"
                         </p>
                         <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                            <span className="text-[10px] font-black text-primary uppercase tracking-widest">{s.stage}</span>
@@ -612,10 +563,10 @@ export default function DashboardOverviewPage() {
                </CardHeader>
                <CardContent className="space-y-4 pb-8">
                   <p className="text-sm font-medium opacity-90 leading-relaxed">
-                    You haven't listed your startup yet. Investors can't discover you without a professional profile.
+                    Investors can't discover you without a professional profile.
                   </p>
                   <Button className="w-full rounded-xl h-11 bg-white text-primary hover:bg-slate-50 font-black shadow-lg" asChild>
-                    <Link href="/dashboard/startup">Build My Profile</Link>
+                    <Link href="/dashboard/startup">Build Listing</Link>
                   </Button>
                </CardContent>
             </Card>
@@ -638,7 +589,7 @@ export default function DashboardOverviewPage() {
                   </div>
                 </div>
                 <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                  Join 240+ builders and backers shaping the emerging startup ecosystem.
+                  Join 240+ builders and backers in the network.
                 </p>
                 <Button variant="link" className="p-0 h-auto font-black text-[10px] uppercase tracking-[0.2em] text-primary" asChild>
                    <Link href="/founders">Explore Directory <ArrowRight className="ml-1 h-3 w-3" /></Link>
