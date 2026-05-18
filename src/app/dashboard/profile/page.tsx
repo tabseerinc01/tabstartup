@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -12,11 +11,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore, useStorage } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp, updateDoc, arrayUnion } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { Loader2, Plus, Trash2, Linkedin, Globe, Image as ImageIcon, Briefcase, Users, Camera, Upload, ShieldCheck, Zap } from 'lucide-react';
+import { Loader2, Plus, Trash2, Linkedin, Globe, Camera, Upload, ShieldCheck, Zap, Users } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { validateImage, uploadProfileImage } from '@/lib/storage-helpers';
 
 const AVAILABLE_ROLES = [
   { id: 'founder', label: 'Founder', icon: Zap },
@@ -131,44 +130,43 @@ export default function ProfilePage() {
     loadProfile();
   }, [firestore, user?.uid]);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user || !storage) return;
+    if (!file || !user || !storage || !firestore) return;
 
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      toast({ title: "Invalid format", description: "Please upload a JPEG, PNG, or WebP image.", variant: "destructive" });
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Image must be less than 5MB.", variant: "destructive" });
+    // 1. Validation
+    const { error } = validateImage(file);
+    if (error) {
+      toast({ title: "Validation Error", description: error, variant: "destructive" });
       return;
     }
 
     setIsUploading(true);
     setUploadProgress(0);
 
-    const storageRef = ref(storage, `profile-images/${user.uid}/${Date.now()}_${file.name}`);
-    const uploadTask = uploadBytesResumable(storageRef, file);
-
-    uploadTask.on('state_changed', 
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+    try {
+      // 2. Upload to Storage
+      const downloadURL = await uploadProfileImage(storage, user.uid, file, (progress) => {
         setUploadProgress(progress);
-      }, 
-      (error) => {
-        console.error("Upload failed:", error);
-        toast({ title: "Upload Failed", description: "Could not upload image. Try again.", variant: "destructive" });
-        setIsUploading(false);
-      }, 
-      () => {
-        getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
-          setFormData(prev => ({ ...prev, imageUrl: downloadURL }));
-          setIsUploading(false);
-          toast({ title: "Success", description: "Profile image uploaded!" });
-        });
-      }
-    );
+      });
+
+      // 3. Update Firestore immediately
+      await updateDoc(doc(firestore, 'users', user.uid), {
+        imageUrl: downloadURL,
+        updatedAt: serverTimestamp()
+      });
+
+      // 4. Update Local State
+      setFormData(prev => ({ ...prev, imageUrl: downloadURL }));
+      
+      toast({ title: "Image Uploaded", description: "Your profile picture has been updated." });
+    } catch (error: any) {
+      console.error("Upload failed:", error);
+      toast({ title: "Upload Failed", description: error.message || "Could not upload image.", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -341,7 +339,7 @@ export default function ProfilePage() {
                       type="file" 
                       ref={fileInputRef} 
                       className="hidden" 
-                      accept="image/*" 
+                      accept="image/jpeg,image/png,image/webp" 
                       onChange={handleImageUpload}
                     />
                     <Button 
