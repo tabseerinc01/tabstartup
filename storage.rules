@@ -1,17 +1,17 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // প্রোফাইল ইমেজের জন্য রুলস
+    // Profile images folder rules
     match /profile-images/{userId}/{allPaths=**} {
-      // প্রোফাইল পিকচার সবাই দেখতে পারবে
+      // Publicly readable so everyone can see profile pictures
       allow read: if true;
       
-      // শুধুমাত্র লগইন করা ইউজার তার নিজের ফোল্ডারে ইমেজ আপলোড/ডিলিট করতে পারবে
-      // এখানে userId এবং request.auth.uid মিলিয়ে দেখা হচ্ছে
-      allow write: if request.auth != null && request.auth.uid == userId;
+      // Ownership check for writes: user can only upload to their own UID folder
+      // request.auth.uid must exactly match the userId segment in the path
+      allow create, update, delete: if request.auth != null && request.auth.uid == userId;
     }
     
-    // ডিফল্টভাবে অন্য সব পাথ সুরক্ষিত রাখা হয়েছে
+    // Default security: allow authenticated read, deny all writes for other paths
     match /{allPaths=**} {
       allow read: if request.auth != null;
       allow write: if false;
