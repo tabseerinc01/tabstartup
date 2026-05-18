@@ -1,13 +1,25 @@
 rules_version = '2';
 
+// Firebase Storage rules for TabStartup
 service firebase.storage {
   match /b/{bucket}/o {
 
-    match /profile-images/{userId}/{allPaths=**} {
+    // প্রোফাইল ইমেজের জন্য রুলস
+    // পাথ: profile-images/{userId}/{fileName}
+    match /profile-images/{userId} {
+      // যে কেউ প্রোফাইল পিকচার দেখতে পারবে
       allow read: if true;
-      allow write: if request.auth != null
-                   && request.auth.uid == userId;
+      
+      // শুধুমাত্র লগইন করা ইউজার যার UID এই ফোল্ডারের সাথে মিলে, সে আপলোড করতে পারবে
+      match /{allPaths=**} {
+        allow write: if request.auth != null 
+                     && request.auth.uid == userId;
+      }
     }
 
+    // অন্য সব পাথের জন্য ডিফল্ট ডিনাই
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
   }
 }
