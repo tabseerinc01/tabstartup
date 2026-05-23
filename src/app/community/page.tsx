@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -76,11 +77,9 @@ export default function CommunityFeedPage() {
   
   const { data: rawPosts, isLoading: isPostsLoading } = useCollection(postsQuery);
 
-  const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'super_admin';
+  const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'super_admin' || userProfile?.primaryRole === 'super_admin';
 
   // Filter and sort posts client-side
-  // Admins see everything (including hidden) so they can unhide, 
-  // users only see active.
   const posts = (rawPosts || [])
     .filter(p => isAdmin || p.status === 'active')
     .sort((a, b) => {
@@ -135,7 +134,7 @@ export default function CommunityFeedPage() {
       authorUid: user.uid,
       authorName: userProfile?.fullName || user.displayName || user.email?.split('@')[0] || "Member",
       authorImage: userProfile?.imageUrl || `https://picsum.photos/seed/${user.uid}/100/100`,
-      authorType: userProfile?.role || "user",
+      authorType: userProfile?.role || userProfile?.primaryRole || "user",
       content: newPostContent.trim(),
       tags: tags,
       likesCount: 0,
@@ -196,7 +195,7 @@ export default function CommunityFeedPage() {
             actorUid: user.uid,
             type: 'like',
             title: 'New Appreciation',
-            message: `${userProfile?.fullName || user.displayName || 'Someone'} appreciated your post.`,
+            message: `${userProfile?.fullName || 'Someone'} appreciated your post.`,
             targetId: postId,
             targetType: 'post'
           });
@@ -222,11 +221,11 @@ export default function CommunityFeedPage() {
   };
 
   // Moderation Handlers
-  const handleToggleHide = (postId: string, currentStatus: string) => {
+  const handleToggleHide = (post: any) => {
     if (!firestore || !isAdmin) return;
-    const newStatus = currentStatus === 'hidden' ? 'active' : 'hidden';
+    const newStatus = post.status === 'hidden' ? 'active' : 'hidden';
     
-    updateDoc(doc(firestore, 'communityPosts', postId), {
+    updateDoc(doc(firestore, 'communityPosts', post.id), {
       status: newStatus,
       updatedAt: serverTimestamp()
     }).then(() => {
@@ -234,24 +233,52 @@ export default function CommunityFeedPage() {
         title: newStatus === 'hidden' ? "Post Hidden" : "Post Activated", 
         description: `This post is now ${newStatus}.` 
       });
+
+      // Notify User
+      if (post.authorUid !== user?.uid) {
+        createNotification(firestore, {
+          recipientUid: post.authorUid,
+          actorUid: user?.uid || 'admin',
+          type: 'moderation',
+          title: newStatus === 'hidden' ? 'Post Hidden by Admin' : 'Post Restored',
+          message: newStatus === 'hidden' 
+            ? 'Your post was hidden because it may violate our community standards.' 
+            : 'Your post has been restored to the feed.',
+          targetId: post.id,
+          targetType: 'post'
+        });
+      }
     }).catch(error => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: `communityPosts/${postId}`,
+        path: `communityPosts/${post.id}`,
         operation: 'update',
         requestResourceData: { status: newStatus }
       }));
     });
   };
 
-  const handleDeletePost = (postId: string) => {
+  const handleDeletePost = (post: any) => {
     if (!firestore || !isAdmin) return;
     if (!confirm("Are you sure you want to permanently delete this post?")) return;
 
-    deleteDoc(doc(firestore, 'communityPosts', postId)).then(() => {
+    deleteDoc(doc(firestore, 'communityPosts', post.id)).then(() => {
       toast({ title: "Post Deleted", description: "The content has been removed from the platform." });
+      
+      // Notify User
+      if (post.authorUid !== user?.uid) {
+        createNotification(firestore, {
+          recipientUid: post.authorUid,
+          actorUid: user?.uid || 'admin',
+          type: 'moderation',
+          title: 'Post Deleted by Admin',
+          message: 'Your post was deleted because it violated community standards.',
+          targetId: post.id,
+          targetType: 'post'
+        });
+      }
     }).catch(error => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: `communityPosts/${postId}`,
+        path: `communityPosts/${post.id}`,
         operation: 'delete',
       }));
     });
@@ -404,8 +431,8 @@ export default function CommunityFeedPage() {
                   user={user}
                   userProfile={userProfile}
                   isAdmin={isAdmin}
-                  onToggleHide={() => handleToggleHide(post.id, post.status)}
-                  onDelete={() => handleDeletePost(post.id)}
+                  onToggleHide={() => handleToggleHide(post)}
+                  onDelete={() => handleDeletePost(post)}
                 />
               ))
             )}

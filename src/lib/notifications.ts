@@ -1,3 +1,4 @@
+
 'use client';
 
 import { 
@@ -9,7 +10,7 @@ import {
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
-export type NotificationType = 'like' | 'comment' | 'pitch' | 'connection' | 'system' | 'message' | 'cofounder_interest' | 'investor_interest';
+export type NotificationType = 'like' | 'comment' | 'pitch' | 'connection' | 'system' | 'message' | 'cofounder_interest' | 'investor_interest' | 'rejection' | 'moderation';
 export type NotificationTargetType = 'post' | 'pitch' | 'chat' | 'user';
 
 interface CreateNotificationParams {

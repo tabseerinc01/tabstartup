@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -27,7 +28,9 @@ import {
   Inbox,
   Loader2,
   ChevronRight,
-  Zap
+  Zap,
+  ShieldCheck,
+  XCircle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,15 +52,21 @@ export default function NotificationsPage() {
   useEffect(() => {
     if (!firestore || !user?.uid) return;
 
+    // Simplified query for max reliability without composite indexing
     const q = query(
       collection(firestore, 'notifications'),
-      where('recipientUid', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('recipientUid', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setNotifications(list);
+      // Client-side sort to avoid index requirements
+      const sorted = list.sort((a: any, b: any) => {
+        const tA = a.createdAt?.toMillis?.() || 0;
+        const tB = b.createdAt?.toMillis?.() || 0;
+        return tB - tA;
+      });
+      setNotifications(sorted);
       setIsLoading(false);
     }, (error) => {
       console.error("Error fetching notifications:", error);
@@ -112,9 +121,9 @@ export default function NotificationsPage() {
     // Logic for routing based on notification target
     if (n.type === 'message' && n.targetId) {
       router.push(`/chats/${n.targetId}`);
-    } else if ((n.type === 'like' || n.type === 'comment') && n.targetId) {
+    } else if ((n.type === 'like' || n.type === 'comment' || n.type === 'moderation') && n.targetType === 'post') {
       router.push('/community');
-    } else if (n.type === 'cofounder_interest' || n.type === 'investor_interest') {
+    } else if (['investor_interest', 'cofounder_interest', 'connection', 'rejection'].includes(n.type)) {
       router.push('/dashboard/connections');
     }
   };
@@ -126,6 +135,9 @@ export default function NotificationsPage() {
       case 'comment': return <Inbox className="h-5 w-5 text-emerald-500" />;
       case 'cofounder_interest': return <Users className="h-5 w-5 text-amber-500" />;
       case 'investor_interest': return <Zap className="h-5 w-5 text-primary fill-primary" />;
+      case 'connection': return <ShieldCheck className="h-5 w-5 text-green-500" />;
+      case 'rejection': return <XCircle className="h-5 w-5 text-slate-400" />;
+      case 'moderation': return <ShieldAlert className="h-5 w-5 text-destructive" />;
       default: return <Bell className="h-5 w-5 text-slate-400" />;
     }
   };
@@ -157,15 +169,17 @@ export default function NotificationsPage() {
         </div>
         
         {notifications.length > 0 && (
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="rounded-full gap-2 font-bold text-xs uppercase tracking-widest border-primary/20 hover:bg-primary/5 text-primary"
-            onClick={handleMarkAllAsRead}
-            disabled={unreadCount === 0}
-          >
-            <CheckCheck className="h-4 w-4" /> Mark all as read
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="rounded-full gap-2 font-bold text-xs uppercase tracking-widest border-primary/20 hover:bg-primary/5 text-primary"
+              onClick={handleMarkAllAsRead}
+              disabled={unreadCount === 0}
+            >
+              <CheckCheck className="h-4 w-4" /> Mark all as read
+            </Button>
+          </div>
         )}
       </div>
 

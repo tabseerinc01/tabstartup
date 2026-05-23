@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -226,6 +227,15 @@ export default function DashboardOverviewPage() {
 
         toast({ title: "Connected!" });
       } else {
+        createNotification(firestore, {
+          recipientUid: investorUid,
+          actorUid: user.uid,
+          type: 'rejection',
+          title: 'Pitch Declined',
+          message: `${profile?.fullName || 'A founder'} declined your pitch for now.`,
+          targetId: user.uid,
+          targetType: 'user'
+        });
         toast({ title: "Request Declined" });
       }
 
@@ -249,9 +259,9 @@ export default function DashboardOverviewPage() {
   }
 
   const displayName = profile?.fullName || user?.email?.split('@')[0] || "User";
-  const roles = (profile?.roles || (profile?.role ? [profile.role] : ['user'])).filter(Boolean) as string[];
-  const isFounder = roles.includes('founder') || roles.includes('super_admin');
-  const isInvestor = roles.includes('investor') || roles.includes('super_admin');
+  const rolesArr = (profile?.roles || (profile?.role ? [profile.role] : ['user'])).filter(Boolean) as string[];
+  const isFounder = rolesArr.includes('founder') || rolesArr.includes('super_admin');
+  const isInvestor = rolesArr.includes('investor') || rolesArr.includes('super_admin');
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -265,7 +275,7 @@ export default function DashboardOverviewPage() {
             Welcome, {displayName} {profile?.isVerified && <CheckCircle2 className="h-6 w-6 text-primary" />}
           </h1>
           <div className="flex flex-wrap gap-2 mt-3">
-            {roles.map(r => (
+            {rolesArr.map(r => (
               <Badge key={r} variant="secondary" className="capitalize text-[9px] font-black tracking-wider py-0.5 px-2 bg-primary/5 text-primary border-none">
                 {r.replace('_', ' ')}
               </Badge>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -52,7 +53,7 @@ export default function ConnectionsManagerPage() {
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
-  // 1. Unified Connections Queries
+  // 1. Unified Connections Queries (Simplified for max reliability)
   const incomingQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid));
@@ -63,7 +64,7 @@ export default function ConnectionsManagerPage() {
     return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid));
   }, [firestore, user?.uid]);
 
-  // 2. Legacy Pitches Queries (for transition compatibility)
+  // 2. Legacy Pitches Queries
   const legacyIncomingPitchesQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'pitches'), where('toFounderUid', '==', user.uid));
@@ -83,12 +84,12 @@ export default function ConnectionsManagerPage() {
   const allConns = useMemo(() => {
     const rawConnections = [...(incoming || []), ...(outgoing || [])];
     
-    // Normalize legacy pitches to look like connections
+    // Normalize legacy pitches
     const normalizedLegacy = [...(legacyIncoming || []), ...(legacyOutgoing || [])].map(p => ({
       id: p.id,
       initiatorUid: p.fromInvestorUid,
       recipientUid: p.toFounderUid,
-      type: 'investor', // All legacy pitches were investor interests
+      type: 'investor',
       status: p.status || 'pending',
       message: p.message || '',
       createdAt: p.createdAt,
@@ -102,8 +103,8 @@ export default function ConnectionsManagerPage() {
     
     // Client-side Sort
     return unique.sort((a, b) => {
-      const timeA = a.createdAt?.toMillis?.() || a.createdAt?.seconds * 1000 || 0;
-      const timeB = b.createdAt?.toMillis?.() || b.createdAt?.seconds * 1000 || 0;
+      const timeA = a.createdAt?.toMillis?.() || 0;
+      const timeB = b.createdAt?.toMillis?.() || 0;
       return timeB - timeA;
     });
   }, [incoming, outgoing, legacyIncoming, legacyOutgoing]);
@@ -152,19 +153,29 @@ export default function ConnectionsManagerPage() {
         updatedAt: serverTimestamp() 
       });
 
+      const otherUid = conn.initiatorUid === user.uid ? conn.recipientUid : conn.initiatorUid;
+      
       if (status === 'accepted') {
-        const otherUid = conn.initiatorUid === user.uid ? conn.recipientUid : conn.initiatorUid;
         createNotification(firestore, {
           recipientUid: otherUid,
           actorUid: user.uid,
           type: 'connection',
           title: 'Connection Accepted',
-          message: `${user.displayName || 'Someone'} accepted your connection request.`,
+          message: `${profiles[user.uid]?.fullName || 'Someone'} accepted your connection request.`,
           targetId: conn.id,
           targetType: 'user'
         });
         toast({ title: "Connected!" });
       } else {
+        createNotification(firestore, {
+          recipientUid: otherUid,
+          actorUid: user.uid,
+          type: 'rejection',
+          title: 'Request Declined',
+          message: `Your connection request to ${profiles[user.uid]?.fullName || 'a member'} was not accepted at this time.`,
+          targetId: conn.id,
+          targetType: 'user'
+        });
         toast({ title: "Declined" });
       }
     } catch (e) {
@@ -186,7 +197,7 @@ export default function ConnectionsManagerPage() {
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Relationships...</p>
+        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Relationships...</p>
       </div>
     );
   }
@@ -398,7 +409,7 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
                       </div>
                       <div className="pt-2">
                         <Button className="w-full h-14 rounded-2xl font-black text-base shadow-xl" asChild>
-                          <Link href={profile?.role === 'investor' ? `/investors/${otherUid}` : `/founders/${otherUid}`}>
+                          <Link href={profile?.role === 'investor' || profile?.primaryRole === 'investor' ? `/investors/${otherUid}` : `/founders/${otherUid}`}>
                             View Full Public Profile <ArrowRight className="ml-2 h-5 w-5" />
                           </Link>
                         </Button>

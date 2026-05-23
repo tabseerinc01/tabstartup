@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -77,17 +78,23 @@ export function DashboardHeader() {
   useEffect(() => {
     if (!firestore || !user?.uid) return;
 
+    // Simplified query for reliability
     const q = query(
       collection(firestore, 'notifications'),
-      where('recipientUid', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-      limit(20)
+      where('recipientUid', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setNotifications(list);
-      setUnreadCount(list.filter((n: any) => !n.read).length);
+      // Sort client-side to avoid index requirements
+      const sorted = list.sort((a: any, b: any) => {
+        const tA = a.createdAt?.toMillis?.() || 0;
+        const tB = b.createdAt?.toMillis?.() || 0;
+        return tB - tA;
+      }).slice(0, 20);
+      
+      setNotifications(sorted);
+      setUnreadCount(sorted.filter((n: any) => !n.read).length);
     }, (error) => {
       console.error("Notification listener error:", error);
     });
