@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect } from 'react';
@@ -26,12 +27,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (!user) {
-    return null; // Don't render dashboard content if not logged in (redirecting)
+    return null; 
   }
 
   return (
-    <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
-      <DashboardSidebar />
+    <div className="grid min-h-screen w-full md:grid-cols-[240px_1fr] lg:grid-cols-[280px_1fr]">
+      {/* Desktop Sidebar Wrapper */}
+      <aside className="hidden md:block border-r bg-background h-screen sticky top-0">
+        <DashboardSidebar />
+      </aside>
+      
       <div className="flex flex-col">
         <DashboardHeader />
         <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-muted/40">

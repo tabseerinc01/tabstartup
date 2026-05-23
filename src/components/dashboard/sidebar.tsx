@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth, initiateSignOut, useUser, useFirestore } from '@/firebase';
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 
-export function DashboardSidebar() {
+export function DashboardSidebar({ className }: { className?: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const auth = useAuth();
@@ -57,8 +57,8 @@ export function DashboardSidebar() {
     if (!roles.includes('founder')) return;
 
     const q = query(
-      collection(firestore, 'pitches'),
-      where('toFounderUid', '==', user.uid),
+      collection(firestore, 'connections'),
+      where('recipientUid', '==', user.uid),
       where('status', '==', 'pending')
     );
 
@@ -74,10 +74,8 @@ export function DashboardSidebar() {
     router.push('/login');
   };
 
-  const roles = profile?.roles || [profile?.role] || [];
+  const roles = profile?.roles || (profile?.role ? [profile.role] : []) || [];
   const isFounder = roles.includes('founder');
-  const isInvestor = roles.includes('investor');
-  const isMentor = roles.includes('mentor');
   const isAdmin = roles.includes('admin') || roles.includes('super_admin');
 
   const menuItems = [
@@ -109,20 +107,20 @@ export function DashboardSidebar() {
   ];
 
   return (
-    <aside className="hidden md:flex flex-col w-64 border-r bg-background h-screen sticky top-0">
+    <div className={cn("flex flex-col h-full bg-background", className)}>
       <div className="p-6">
         <Logo />
       </div>
       
-      <nav className="flex-1 px-4 py-2 space-y-1">
+      <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto">
         {menuItems.map((item) => (
           <Link
             key={item.label}
             href={item.disabled ? '#' : item.href}
             className={cn(
-              "flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all group",
+              "flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group",
               pathname === item.href 
-                ? "bg-primary text-primary-foreground" 
+                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
               item.disabled && "opacity-50 cursor-not-allowed"
             )}
@@ -137,22 +135,22 @@ export function DashboardSidebar() {
                 </span>
               )}
             </div>
-            {item.disabled && <span className="text-[10px] bg-muted px-1.5 rounded-full text-muted-foreground">Soon</span>}
+            {item.disabled && <span className="text-[9px] font-black uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Soon</span>}
             {!item.disabled && pathname === item.href && <ChevronRight className="h-3 w-3" />}
           </Link>
         ))}
       </nav>
 
-      <div className="p-4 border-t">
+      <div className="p-4 border-t mt-auto">
         <Button 
           variant="ghost" 
-          className="w-full justify-start gap-3 text-muted-foreground" 
+          className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/5 rounded-xl h-11" 
           onClick={handleLogout}
         >
           <LogOut className="h-4 w-4" />
           Logout
         </Button>
       </div>
-    </aside>
+    </div>
   );
 }
