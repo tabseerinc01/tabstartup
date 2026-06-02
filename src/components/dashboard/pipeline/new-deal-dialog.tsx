@@ -37,6 +37,7 @@ export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
   
   const [formData, setFormData] = useState({
     title: '',
@@ -48,19 +49,38 @@ export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal
     expectedCloseDate: ''
   });
 
+  // Unified initialization logic to prevent state resets while typing
   useEffect(() => {
-    if (editingDeal) {
-      setFormData({
-        title: editingDeal.title || '',
-        contactId: editingDeal.contactId || '',
-        value: editingDeal.value?.toString() || '',
-        currency: editingDeal.currency || 'USD',
-        stage: editingDeal.stage || 'Lead',
-        description: editingDeal.description || '',
-        expectedCloseDate: editingDeal.expectedCloseDate || ''
-      });
+    if (!isOpen) {
+      setIsInitialized(false);
+      return;
     }
-  }, [editingDeal]);
+
+    if (isOpen && !isInitialized) {
+      if (editingDeal) {
+        setFormData({
+          title: editingDeal.title || '',
+          contactId: editingDeal.contactId || '',
+          value: editingDeal.value?.toString() || '',
+          currency: editingDeal.currency || 'USD',
+          stage: editingDeal.stage || 'Lead',
+          description: editingDeal.description || '',
+          expectedCloseDate: editingDeal.expectedCloseDate || ''
+        });
+      } else {
+        setFormData({
+          title: '',
+          contactId: '',
+          value: '',
+          currency: 'USD',
+          stage: 'Lead',
+          description: '',
+          expectedCloseDate: ''
+        });
+      }
+      setIsInitialized(true);
+    }
+  }, [isOpen, editingDeal, isInitialized]);
 
   useEffect(() => {
     async function loadContacts() {
@@ -101,9 +121,6 @@ export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal
         toast({ title: "Deal Created" });
       }
       setIsOpen(false);
-      if (!editingDeal) setFormData({
-        title: '', contactId: '', value: '', currency: 'USD', stage: 'Lead', description: '', expectedCloseDate: ''
-      });
       onSuccess?.();
     } catch (error: any) {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -181,6 +198,7 @@ export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal
                    <Input 
                     id="value" 
                     type="number"
+                    step="any"
                     placeholder="0.00"
                     className="pl-7"
                     value={formData.value}
