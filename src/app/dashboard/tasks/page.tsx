@@ -18,7 +18,8 @@ import {
   Circle,
   AlertCircle,
   Flag,
-  ChevronRight
+  User,
+  Briefcase
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -55,15 +56,15 @@ export default function TasksPage() {
     if (!rawTasks) return [];
     const filtered = rawTasks.filter(t => 
       t.title.toLowerCase().includes(search.toLowerCase()) || 
-      t.description?.toLowerCase().includes(search.toLowerCase())
+      t.description?.toLowerCase().includes(search.toLowerCase()) ||
+      t.contactName?.toLowerCase().includes(search.toLowerCase()) ||
+      t.dealTitle?.toLowerCase().includes(search.toLowerCase())
     );
 
     return filtered.sort((a, b) => {
-      // Completed tasks at bottom
       if (a.status === 'Completed' && b.status !== 'Completed') return 1;
       if (b.status === 'Completed' && a.status !== 'Completed') return -1;
       
-      // Due date sorting
       const dateA = a.dueDate?.toDate?.() || new Date(8640000000000000);
       const dateB = b.dueDate?.toDate?.() || new Date(8640000000000000);
       return dateA.getTime() - dateB.getTime();
@@ -124,7 +125,7 @@ export default function TasksPage() {
           <h1 className="text-4xl font-black tracking-tight text-slate-900 flex items-center gap-3">
              Tasks
           </h1>
-          <p className="text-slate-500 font-medium">Organize your startup operations and daily goals.</p>
+          <p className="text-slate-500 font-medium">Organize your actions for contacts and business deals.</p>
         </div>
 
         <NewTaskDialog />
@@ -135,7 +136,7 @@ export default function TasksPage() {
           <div className="relative group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input 
-              placeholder="Search tasks or notes..." 
+              placeholder="Search tasks, contacts or notes..." 
               className="pl-11 h-12 rounded-2xl border-none shadow-sm bg-background text-sm"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -279,9 +280,18 @@ function TaskItem({ task, onToggle, onDelete }: { task: any, onToggle: (task: an
                )}>
                  {task.title}
                </h4>
-               {task.description && (
-                  <p className="text-sm text-slate-500 line-clamp-1 italic font-medium">{task.description}</p>
-               )}
+               <div className="flex flex-wrap items-center gap-3">
+                  {task.contactName && (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-primary">
+                       <User className="h-3.5 w-3.5" /> {task.contactName}
+                    </div>
+                  )}
+                  {task.dealTitle && (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                       <Briefcase className="h-3.5 w-3.5" /> {task.dealTitle}
+                    </div>
+                  )}
+               </div>
             </div>
             
             <div className="flex items-center gap-3 shrink-0">
@@ -327,8 +337,12 @@ function TaskItem({ task, onToggle, onDelete }: { task: any, onToggle: (task: an
                 <Badge variant="secondary" className="capitalize h-5 px-2 text-[9px] font-black tracking-widest bg-primary/5 text-primary border-none">
                   {task.status}
                 </Badge>
-                <div className="h-1 w-1 bg-slate-200 rounded-full" />
-                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-tighter">ID: {task.id.slice(0, 8)}</span>
+                {task.description && (
+                  <>
+                    <div className="h-1 w-1 bg-slate-200 rounded-full" />
+                    <span className="text-[10px] font-medium text-slate-400 truncate max-w-[200px]">{task.description}</span>
+                  </>
+                )}
              </div>
           </div>
         </div>

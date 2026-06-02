@@ -25,7 +25,7 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Calendar as CalendarIcon, Flag } from 'lucide-react';
+import { Loader2, Plus, Calendar as CalendarIcon, User, Briefcase } from 'lucide-react';
 import { createNotification } from '@/lib/notifications';
 
 const STATUSES = ["Pending", "In Progress", "Completed"];
@@ -39,12 +39,14 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [deals, setDeals] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     dealId: initialDealId || '',
+    contactId: '',
     status: 'Pending',
     priority: 'Medium',
     dueDate: ''
@@ -62,6 +64,7 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
           title: editingTask.title || '',
           description: editingTask.description || '',
           dealId: editingTask.dealId || '',
+          contactId: editingTask.contactId || '',
           status: editingTask.status || 'Pending',
           priority: editingTask.priority || 'Medium',
           dueDate: editingTask.dueDate ? new Date(editingTask.dueDate.seconds * 1000).toISOString().split('T')[0] : ''
@@ -71,6 +74,7 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
           title: '',
           description: '',
           dealId: initialDealId || '',
+          contactId: '',
           status: 'Pending',
           priority: 'Medium',
           dueDate: ''
@@ -81,17 +85,21 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
   }, [isOpen, editingTask, isInitialized, initialDealId]);
 
   useEffect(() => {
-    async function loadDeals() {
+    async function loadWorkspaceData() {
       if (!firestore || !user?.uid || !isOpen) return;
       try {
-        const q = query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid));
-        const snap = await getDocs(q);
-        setDeals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const [dealsSnap, contactsSnap] = await Promise.all([
+          getDocs(query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid))),
+          getDocs(query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid)))
+        ]);
+        
+        setDeals(dealsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setContacts(contactsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       } catch (e) {
-        console.error("Error loading deals for task:", e);
+        console.error("Error loading workspace data for task:", e);
       }
     }
-    loadDeals();
+    loadWorkspaceData();
   }, [firestore, user?.uid, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -100,9 +108,14 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
 
     setIsSaving(true);
     
+    const selectedContact = contacts.find(c => c.id === formData.contactId);
+    const selectedDeal = deals.find(d => d.id === formData.dealId);
+
     const taskData = {
       ...formData,
       ownerUid: user.uid,
+      contactName: selectedContact?.contactName || null,
+      dealTitle: selectedDeal?.title || null,
       dueDate: formData.dueDate ? new Date(formData.dueDate) : null,
       updatedAt: serverTimestamp(),
       ...(editingTask ? {} : { createdAt: serverTimestamp() }),
@@ -117,13 +130,12 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
         await addDoc(collection(firestore, 'tasks'), taskData);
         toast({ title: "Task Created" });
         
-        // Internal notification for context
         createNotification(firestore, {
           recipientUid: user.uid,
           actorUid: user.uid,
           type: 'system',
           title: 'Task Created',
-          message: `Work reminder: "${formData.title}" was added to your workspace.`,
+          message: `Task: "${formData.title}" added for ${taskData.contactName || 'Workspace'}.`,
           targetId: 'tasks',
           targetType: 'user'
         });
@@ -150,10 +162,10 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[550px] rounded-[2.5rem]">
+      <DialogContent className="sm:max-w-[600px] rounded-[2.5rem]">
         <DialogHeader>
           <DialogTitle className="text-2xl font-black">{editingTask ? 'Edit Task' : 'Add New Task'}</DialogTitle>
-          <DialogDescription>Set reminders and stay on top of your workflow.</DialogDescription>
+          <DialogDescription>Set reminders for contacts and deals to stay on top of your workflow.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="grid gap-4">
@@ -162,13 +174,27 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
               <Input 
                 id="taskTitle" 
                 required 
-                placeholder="e.g. Follow up call with investor"
+                placeholder="e.g. Call client for follow-up"
                 value={formData.title}
                 onChange={e => setFormData({...formData, title: e.target.value})}
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="contact">Related Contact (Who is this for?)</Label>
+                <Select value={formData.contactId} onValueChange={v => setFormData({...formData, contactId: v})}>
+                  <SelectTrigger id="contact">
+                    <SelectValue placeholder="Select Contact" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {contacts.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.contactName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="deal">Related Deal (Optional)</Label>
                 <Select value={formData.dealId} onValueChange={v => setFormData({...formData, dealId: v})}>
@@ -183,6 +209,9 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="dueDate">Due Date</Label>
                 <div className="relative">
@@ -196,9 +225,6 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
                   />
                 </div>
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="priority">Priority</Label>
                 <Select value={formData.priority} onValueChange={v => setFormData({...formData, priority: v})}>
@@ -232,7 +258,7 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
               <Textarea 
                 id="desc" 
                 rows={3}
-                placeholder="What needs to be done?"
+                placeholder="What needs to be discussed or done?"
                 value={formData.description}
                 onChange={e => setFormData({...formData, description: e.target.value})}
               />
