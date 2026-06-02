@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -25,20 +26,12 @@ service cloud.firestore {
 
     // CONNECTIONS: Unified relationships
     match /connections/{connectionId} {
-      // Allow read if the user is a participant OR is an admin
       allow read: if request.auth != null && (
         request.auth.uid == resource.data.initiatorUid || 
         request.auth.uid == resource.data.recipientUid ||
         isAdmin()
       );
-      // Allow list (listing the collection) if admin OR if the request is filtered by UID
-      // Note: Firestore enforces that list rules must be checkable by the query.
-      // Standard users must filter by their own UID to read connections.
-      allow list: if request.auth != null && (
-        isAdmin() ||
-        request.query.limit <= 100 // Basic safety for users
-      );
-      
+      allow list: if request.auth != null;
       allow create: if request.auth != null;
       allow update: if request.auth != null && (
         request.auth.uid == resource.data.recipientUid ||
@@ -72,6 +65,11 @@ service cloud.firestore {
       allow read: if request.auth != null && (resource.data.recipientUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null;
       allow update, delete: if request.auth != null && (resource.data.recipientUid == request.auth.uid || isAdmin());
+    }
+
+    // CONTACTS: Private CRM - Owner Only
+    match /contacts/{contactId} {
+      allow read, write: if request.auth != null && (request.auth.uid == resource.data.ownerUid || request.auth.uid == request.resource.data.ownerUid || isAdmin());
     }
     
     // STARTUPS: Public read for listings, owner-only write

@@ -237,6 +237,25 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["recipientUid", "actorUid", "type", "title", "message", "createdAt"]
+    },
+    "Contact": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Contact",
+      "type": "object",
+      "description": "A private professional contact managed by a user.",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "contactName": { "type": "string" },
+        "companyName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "type": { "type": "string", "enum": ["lead", "partner", "investor", "founder", "mentor", "client", "other"] },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "contactName", "createdAt", "updatedAt"]
     }
   },
   "auth": {
@@ -274,6 +293,14 @@
           "entityName": "Notification",
           "schema": { "$ref": "#/backend/entities/Notification" },
           "description": "Real-time alerts for users."
+        }
+      },
+      {
+        "path": "/contacts/{contactId}",
+        "definition": {
+          "entityName": "Contact",
+          "schema": { "$ref": "#/backend/entities/Contact" },
+          "description": "Private contact directory for users."
         }
       }
     ]

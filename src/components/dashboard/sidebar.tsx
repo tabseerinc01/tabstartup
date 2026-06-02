@@ -17,7 +17,8 @@ import {
   GraduationCap,
   Wrench,
   ShieldAlert,
-  Globe
+  Globe,
+  Contact2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -79,22 +80,26 @@ export function DashboardSidebar({ className }: { className?: string }) {
   const isAdmin = roles.includes('admin') || roles.includes('super_admin');
 
   const menuItems = [
+    { type: 'label', label: 'Main' },
     { href: '/dashboard', label: 'Overview', icon: Home },
     { href: '/dashboard/profile', label: 'My Profile', icon: User },
     { href: '/community', label: 'Community', icon: Globe },
     { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
     
-    // Role-specific sections
+    { type: 'label', label: 'Workspace' },
+    { href: '/dashboard/contacts', label: 'Contacts', icon: Contact2 },
     ...(isFounder ? [
       { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
       { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }
     ] : []),
     
+    { type: 'label', label: 'Discovery' },
     { href: '/cofounders', label: 'Co-founders', icon: Users },
     { href: '/mentors', label: 'Mentors', icon: GraduationCap },
     { href: '/investors', label: 'Investors', icon: ShieldAlert },
     { href: '/services', label: 'Services', icon: Wrench },
     
+    { type: 'label', label: 'Network' },
     { 
       href: '/dashboard/connections', 
       label: 'Connections', 
@@ -102,7 +107,11 @@ export function DashboardSidebar({ className }: { className?: string }) {
       showBadge: hasPendingPitches 
     },
     
-    ...(isAdmin ? [{ href: '/control', label: 'Control Panel', icon: ShieldAlert }] : []),
+    ...(isAdmin ? [
+      { type: 'label', label: 'Admin' },
+      { href: '/control', label: 'Control Panel', icon: ShieldAlert }
+    ] : []),
+    { type: 'label', label: 'System' },
     { href: '#', label: 'Settings', icon: Settings, disabled: true },
   ];
 
@@ -113,32 +122,42 @@ export function DashboardSidebar({ className }: { className?: string }) {
       </div>
       
       <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto">
-        {menuItems.map((item) => (
-          <Link
-            key={item.label}
-            href={item.disabled ? '#' : item.href}
-            className={cn(
-              "flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group",
-              pathname === item.href 
-                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              item.disabled && "opacity-50 cursor-not-allowed"
-            )}
-          >
-            <div className="flex items-center gap-3 relative">
-              <item.icon className="h-4 w-4" />
-              {item.label}
-              {item.showBadge && (
-                <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
-                </span>
+        {menuItems.map((item, idx) => {
+          if (item.type === 'label') {
+            return (
+              <p key={`label-${idx}`} className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-3 mt-6 mb-2">
+                {item.label}
+              </p>
+            );
+          }
+
+          return (
+            <Link
+              key={item.label}
+              href={item.disabled ? '#' : item.href!}
+              className={cn(
+                "flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group",
+                pathname === item.href 
+                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                item.disabled && "opacity-50 cursor-not-allowed"
               )}
-            </div>
-            {item.disabled && <span className="text-[9px] font-black uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Soon</span>}
-            {!item.disabled && pathname === item.href && <ChevronRight className="h-3 w-3" />}
-          </Link>
-        ))}
+            >
+              <div className="flex items-center gap-3 relative">
+                <item.icon className="h-4 w-4" />
+                {item.label}
+                {item.showBadge && (
+                  <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
+                  </span>
+                )}
+              </div>
+              {item.disabled && <span className="text-[9px] font-black uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Soon</span>}
+              {!item.disabled && pathname === item.href && <ChevronRight className="h-3 w-3" />}
+            </Link>
+          );
+        })}
       </nav>
 
       <div className="p-4 border-t mt-auto">
