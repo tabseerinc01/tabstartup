@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -25,11 +25,14 @@ import {
    Clock,
    UserPlus,
    Wrench,
-   HandCoins
+   HandCoins,
+   CheckSquare,
+   AlertCircle,
+   Calendar
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useUser, useFirestore } from '@/firebase';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { 
   doc, 
   collection, 
@@ -55,7 +58,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, isToday, isPast } from 'date-fns';
 import { createNotification } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
 
@@ -79,6 +82,24 @@ export default function DashboardOverviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPitchesLoading, setIsPitchesLoading] = useState(false);
   const [processingPitchId, setProcessingPitchId] = useState<string | null>(null);
+
+  // Real-time Tasks Query
+  const tasksQ = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+  const { data: allTasks } = useCollection(tasksQ);
+
+  const dashboardTasks = useMemo(() => {
+    if (!allTasks) return { today: [], overdue: [], upcoming: [] };
+    
+    const active = allTasks.filter(t => t.status !== 'Completed');
+    return {
+      today: active.filter(t => t.dueDate && isToday(t.dueDate.toDate())),
+      overdue: active.filter(t => t.dueDate && isPast(t.dueDate.toDate()) && !isToday(t.dueDate.toDate())),
+      upcoming: active.filter(t => t.dueDate && !isPast(t.dueDate.toDate()) && !isToday(t.dueDate.toDate())).slice(0, 5)
+    };
+  }, [allTasks]);
 
   async function loadInitialData() {
     if (!firestore || !user?.uid) return;
@@ -294,7 +315,7 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-none shadow-sm hover:shadow-md transition-shadow rounded-[2rem] overflow-hidden bg-background ring-1 ring-slate-100">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-400">Conversations</CardTitle>
@@ -305,6 +326,18 @@ export default function DashboardOverviewPage() {
             <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Active communication channels</p>
           </CardContent>
         </Card>
+        
+        <Card className="border-none shadow-sm hover:shadow-md transition-shadow rounded-[2rem] overflow-hidden bg-background ring-1 ring-slate-100">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-400">Active Tasks</CardTitle>
+            <div className="p-2 bg-amber-50 rounded-lg"><CheckSquare className="h-4 w-4 text-amber-600" /></div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-black text-slate-900">{allTasks?.filter(t => t.status !== 'Completed').length || 0}</div>
+            <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Pending reminders</p>
+          </CardContent>
+        </Card>
+
         {isFounder && (
           <Card className="border-none shadow-sm hover:shadow-md transition-shadow rounded-[2rem] overflow-hidden bg-background ring-1 ring-slate-100">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -313,7 +346,7 @@ export default function DashboardOverviewPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-black text-slate-900">{viewsCount}</div>
-              <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Cumulative profile impressions</p>
+              <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Profile impressions</p>
             </CardContent>
           </Card>
         )}
@@ -333,184 +366,98 @@ export default function DashboardOverviewPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          {isFounder && (
-            <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
-              <CardHeader className="border-b border-slate-50 px-8 py-8">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl font-black flex items-center gap-3">
-                      <Zap className="h-5 w-5 text-primary fill-primary/20" /> Recent Investor Interest
-                    </CardTitle>
-                    <CardDescription className="text-slate-400 font-medium">Professional capital partners looking to connect.</CardDescription>
-                  </div>
-                  <Badge variant="outline" className="rounded-full px-3 py-1 font-bold text-[10px] uppercase border-slate-200">
-                    {incomingPitches.filter(p => p.status === 'pending').length} Pending
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y divide-slate-50">
-                  {isPitchesLoading ? (
-                    <div className="p-8 space-y-6">
-                      {[1, 2].map(i => (
-                        <div key={i} className="flex items-start gap-4">
-                          <Skeleton className="h-14 w-14 rounded-2xl" />
-                          <div className="flex-1 space-y-2">
-                             <Skeleton className="h-4 w-1/3" />
-                             <Skeleton className="h-3 w-1/2" />
-                             <Skeleton className="h-10 w-full rounded-xl" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : incomingPitches.length > 0 ? (
-                    incomingPitches.map((pitch: any) => {
-                      const investorUid = pitch.initiatorUid || pitch.fromInvestorUid;
-                      const inv = investorProfiles[investorUid];
-                      const isPending = pitch.status === 'pending';
-                      const createdAt = pitch.createdAt?.toDate?.() || new Date(pitch.createdAt?.seconds * 1000) || new Date();
-
-                      return (
-                        <div key={pitch.id} className="p-6 md:p-8 hover:bg-slate-50/50 transition-colors group">
-                          <div className="flex flex-col md:flex-row md:items-start gap-6">
-                            <Avatar className="h-16 w-16 rounded-2xl border-4 border-white shadow-md shrink-0">
-                              <AvatarImage src={inv?.imageUrl || `https://picsum.photos/seed/${investorUid}/200/200`} className="object-cover" />
-                              <AvatarFallback className="bg-slate-100 font-black text-slate-400">
-                                {inv?.fullName?.charAt(0) || 'I'}
-                              </AvatarFallback>
-                            </Avatar>
-                            
-                            <div className="flex-1 min-w-0 space-y-4">
-                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="text-xl font-black text-slate-900 truncate">{inv?.fullName || 'Professional Investor'}</h4>
-                                    {inv?.isVerified && <CheckCircle2 className="h-4 w-4 text-primary fill-primary/10" />}
-                                  </div>
-                                  <div className="flex flex-wrap items-center gap-3 mt-1">
-                                    <p className="text-xs font-bold text-primary uppercase tracking-tight">
-                                      {inv?.investorHeadline || inv?.headline || 'Capital Partner'}
-                                    </p>
-                                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                                      <Clock className="h-3 w-3" /> {formatDistanceToNow(createdAt, { addSuffix: true })}
-                                    </div>
-                                  </div>
-                                </div>
-                                <Badge className={cn(
-                                  "w-fit rounded-lg px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest border-none shadow-sm",
-                                  pitch.status === 'accepted' ? "bg-green-100 text-green-700" :
-                                  pitch.status === 'rejected' ? "bg-red-100 text-red-700" :
-                                  "bg-amber-100 text-amber-700"
-                                )}>
-                                  {pitch.status}
-                                </Badge>
-                              </div>
-
-                              <div className="bg-white/50 border border-slate-100 p-4 rounded-2xl">
-                                 <p className="text-sm text-slate-600 font-medium line-clamp-2 italic">
-                                   "{pitch.message || "Interested in learning more about your venture."}"
-                                 </p>
-                              </div>
-
-                              <div className="pt-2 flex flex-wrap items-center gap-3">
-                                {isPending ? (
-                                  <>
-                                    <Button 
-                                      className="rounded-xl h-10 px-6 font-bold shadow-lg shadow-primary/20 gap-2"
-                                      disabled={processingPitchId === pitch.id}
-                                      onClick={() => handlePitchStatus(pitch, 'accepted')}
-                                    >
-                                      {processingPitchId === pitch.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                                      Accept & Connect
-                                    </Button>
-                                    <Button 
-                                      variant="ghost" 
-                                      className="rounded-xl h-10 px-4 font-bold text-slate-400 hover:text-red-600 hover:bg-red-50 gap-2"
-                                      disabled={processingPitchId === pitch.id}
-                                      onClick={() => handlePitchStatus(pitch, 'rejected')}
-                                    >
-                                      <X className="h-4 w-4" /> Reject
-                                    </Button>
-                                  </>
-                                ) : pitch.status === 'accepted' ? (
-                                  <Button variant="outline" className="rounded-xl h-10 px-6 font-bold border-primary/20 text-primary gap-2" asChild>
-                                    <Link href={`/dashboard/messages?startWith=${investorUid}`}>
-                                      <MessageSquare className="h-4 w-4" /> Open Chat
-                                    </Link>
-                                  </Button>
-                                ) : null}
-                                
-                                <Dialog>
-                                  <DialogTrigger asChild>
-                                    <Button variant="outline" className="rounded-xl h-10 px-4 font-bold border-slate-200">
-                                      View Profile
-                                    </Button>
-                                  </DialogTrigger>
-                                  <DialogContent className="sm:max-w-[600px] rounded-[2.5rem] p-0 overflow-hidden">
-                                    <DialogHeader className="sr-only">
-                                      <DialogTitle>Investor Profile Preview</DialogTitle>
-                                      <DialogDescription>Detailed view of the interested investor's profile.</DialogDescription>
-                                    </DialogHeader>
-                                    <ScrollArea className="max-h-[85vh]">
-                                      <div className="h-32 bg-gradient-to-r from-primary/20 to-accent/20" />
-                                      <div className="px-8 pb-10 -mt-12 space-y-8">
-                                        <div className="flex flex-col md:flex-row gap-6 items-end">
-                                          <Avatar className="h-32 w-32 rounded-3xl border-8 border-background shadow-2xl">
-                                            <AvatarImage src={inv?.imageUrl} className="object-cover" />
-                                            <AvatarFallback className="text-3xl font-black">{inv?.fullName?.charAt(0)}</AvatarFallback>
-                                          </Avatar>
-                                          <div className="flex-1 space-y-1">
-                                            <h2 className="text-3xl font-black text-slate-900">{inv?.fullName || 'Investor'}</h2>
-                                            <p className="text-lg font-bold text-primary">{inv?.investorHeadline || 'Venture Partner'}</p>
-                                          </div>
-                                        </div>
-                                        <div className="space-y-6">
-                                           <div className="space-y-2">
-                                              <h5 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bio</h5>
-                                              <p className="text-slate-600 font-medium leading-relaxed italic">
-                                                "{inv?.investorBio || inv?.bio || 'No bio provided.'}"
-                                              </p>
-                                           </div>
-                                        </div>
-                                        <Button className="w-full h-12 rounded-xl font-bold" onClick={() => router.push(`/investors/${investorUid}`)}>
-                                           Full Public Profile
-                                        </Button>
-                                      </div>
-                                    </ScrollArea>
-                                  </DialogContent>
-                                </Dialog>
-                              </div>
+          {/* Unified Action Panel */}
+          <div className="grid gap-6 md:grid-cols-2">
+             {/* Task Widget */}
+             <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
+               <CardHeader className="pb-4">
+                 <CardTitle className="text-lg font-black flex items-center gap-2">
+                   <Clock className="h-5 w-5 text-primary" /> Task Roadmap
+                 </CardTitle>
+                 <CardDescription className="text-[10px] font-bold uppercase tracking-widest">Immediate focus areas</CardDescription>
+               </CardHeader>
+               <CardContent className="space-y-4">
+                  {dashboardTasks.overdue.length > 0 && (
+                    <div className="p-4 rounded-2xl bg-red-50 border border-red-100 space-y-3">
+                       <div className="flex items-center gap-2 text-red-600">
+                          <AlertCircle className="h-4 w-4" />
+                          <span className="text-[10px] font-black uppercase">Overdue Actions ({dashboardTasks.overdue.length})</span>
+                       </div>
+                       <div className="space-y-2">
+                          {dashboardTasks.overdue.slice(0, 2).map(t => (
+                            <div key={t.id} className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                               <div className="h-1.5 w-1.5 rounded-full bg-red-500" /> {t.title}
                             </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-20 px-8 text-center space-y-6">
-                      <div className="p-6 bg-slate-50 rounded-full">
-                        <HandCoins className="h-12 w-12 text-slate-200" />
-                      </div>
-                      <div className="space-y-2">
-                        <h4 className="text-xl font-black text-slate-900">No interests yet</h4>
-                        <p className="text-slate-500 font-medium max-w-sm mx-auto leading-relaxed">
-                          Complete your startup profile to attract verified investors.
-                        </p>
-                      </div>
-                      <Button size="lg" className="rounded-full px-8 h-12 font-bold shadow-xl" asChild>
-                        <Link href="/dashboard/startup">Build Profile</Link>
-                      </Button>
+                          ))}
+                       </div>
                     </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Upcoming Today</p>
+                    {dashboardTasks.today.length > 0 ? (
+                       dashboardTasks.today.map(t => (
+                         <div key={t.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 ring-1 ring-slate-100">
+                            <span className="text-xs font-bold text-slate-700 truncate pr-4">{t.title}</span>
+                            <Badge variant="outline" className="h-5 px-1.5 text-[8px] font-black bg-white border-slate-200">TODAY</Badge>
+                         </div>
+                       ))
+                    ) : (
+                      <div className="py-8 text-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
+                         <p className="text-[10px] font-bold text-slate-400 uppercase italic">No tasks for today</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <Button variant="outline" className="w-full rounded-xl h-11 border-slate-200 font-bold text-xs" asChild>
+                    <Link href="/dashboard/tasks">Manage Full Roadmap <ArrowRight className="ml-2 h-4 w-4" /></Link>
+                  </Button>
+               </CardContent>
+             </Card>
+
+             {/* Pitch/Connection Widget (Founder Only) */}
+             {isFounder && (
+               <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
+                 <CardHeader className="pb-4">
+                    <CardTitle className="text-lg font-black flex items-center gap-2">
+                      <Zap className="h-5 w-5 text-primary" /> Active Interests
+                    </CardTitle>
+                    <CardDescription className="text-[10px] font-bold uppercase tracking-widest">Inbound requests</CardDescription>
+                 </CardHeader>
+                 <CardContent className="space-y-4">
+                    {incomingPitches.length > 0 ? (
+                       incomingPitches.filter(p => p.status === 'pending').map(p => (
+                         <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 ring-1 ring-slate-100">
+                            <Avatar className="h-8 w-8 rounded-lg border-2 border-white">
+                               <AvatarImage src={investorProfiles[p.initiatorUid]?.imageUrl} />
+                               <AvatarFallback className="font-bold text-[10px]">{investorProfiles[p.initiatorUid]?.fullName?.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                               <p className="text-xs font-black text-slate-800 truncate">{investorProfiles[p.initiatorUid]?.fullName}</p>
+                               <p className="text-[9px] font-bold text-primary uppercase">Investor</p>
+                            </div>
+                         </div>
+                       ))
+                    ) : (
+                      <div className="py-12 text-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
+                         <HandCoins className="h-8 w-8 text-slate-200 mx-auto mb-2" />
+                         <p className="text-[10px] font-bold text-slate-400 uppercase italic">No new interests</p>
+                      </div>
+                    )}
+                    <Button variant="outline" className="w-full rounded-xl h-11 border-slate-200 font-bold text-xs" asChild>
+                      <Link href="/dashboard/connections">Manage Connections</Link>
+                    </Button>
+                 </CardContent>
+               </Card>
+             )}
+          </div>
+
+          {/* Recommendations or Pitch Deck Section */}
           {isInvestor && (
             <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
               <CardHeader className="px-8 py-8">
                 <CardTitle className="text-xl font-black flex items-center gap-3">
-                  <Rocket className="h-5 w-5 text-primary" /> Recommended Ventures
+                  <Rocket className="h-5 w-5 text-primary" /> Curated Ventures
                 </CardTitle>
                 <CardDescription className="text-slate-400 font-medium">New startups matching your investment criteria.</CardDescription>
               </CardHeader>
@@ -555,7 +502,7 @@ export default function DashboardOverviewPage() {
                 <Link href="/community"><Globe className="h-4 w-4 text-primary" /> Community Feed</Link>
               </Button>
               <Button variant="outline" className="w-full justify-start gap-3 h-12 rounded-xl bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold transition-all border-none" asChild>
-                <Link href="/dashboard/profile"><Users className="h-4 w-4 text-primary" /> Multi-Role Settings</Link>
+                <Link href="/dashboard/tasks"><CheckSquare className="h-4 w-4 text-primary" /> Task Board</Link>
               </Button>
               <Button variant="outline" className="w-full justify-start gap-3 h-12 rounded-xl bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold transition-all border-none" asChild>
                 <Link href="/services"><Wrench className="h-4 w-4 text-primary" /> Startup Services</Link>

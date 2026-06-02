@@ -65,11 +65,26 @@ export interface Notification {
   id: string;
   recipientUid: string;
   actorUid: string;
-  type: 'like' | 'comment' | 'pitch' | 'connection' | 'system' | 'message' | 'cofounder_interest' | 'investor_interest' | 'rejection' | 'moderation';
+  type: 'like' | 'comment' | 'pitch' | 'connection' | 'system' | 'message' | 'cofounder_interest' | 'investor_interest' | 'rejection' | 'moderation' | 'task_due';
   title: string;
   message: string;
   targetId?: string;
-  targetType?: 'post' | 'pitch' | 'chat' | 'user';
+  targetType?: 'post' | 'pitch' | 'chat' | 'user' | 'task';
   read: boolean;
   createdAt: any; // Firestore Timestamp
+}
+
+export interface Task {
+  id: string;
+  ownerUid: string;
+  dealId?: string;
+  contactId?: string;
+  title: string;
+  description?: string;
+  status: 'Pending' | 'In Progress' | 'Completed';
+  priority: 'Low' | 'Medium' | 'High';
+  dueDate?: any;
+  completedAt?: any;
+  createdAt: any;
+  updatedAt: any;
 }
