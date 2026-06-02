@@ -133,6 +133,13 @@ export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal
     }
   };
 
+  const handleValueChange = (val: string) => {
+    // Only allow digits and a single decimal point
+    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+      setFormData({ ...formData, value: val });
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
@@ -197,12 +204,12 @@ export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal
                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">$</span>
                    <Input 
                     id="value" 
-                    type="number"
-                    step="any"
+                    type="text"
+                    inputMode="decimal"
                     placeholder="0.00"
                     className="pl-7"
                     value={formData.value}
-                    onChange={e => setFormData({...formData, value: e.target.value})}
+                    onChange={e => handleValueChange(e.target.value)}
                   />
                 </div>
               </div>
