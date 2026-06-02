@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "User": {
@@ -7,236 +6,16 @@
       "type": "object",
       "description": "Represents an individual user profile (Founder, Mentor, or Investor) in TabStartup.",
       "properties": {
-        "uid": {
-          "type": "string",
-          "description": "Unique identifier matching the Firebase Auth UID."
-        },
-        "fullName": {
-          "type": "string"
-        },
-        "email": {
-          "type": "string",
-          "format": "email"
-        },
-        "role": {
-          "type": "string",
-          "enum": ["founder", "mentor", "investor", "user", "admin", "super_admin"],
-          "description": "Legacy field for backward compatibility."
-        },
-        "primaryRole": {
-          "type": "string",
-          "enum": ["founder", "mentor", "investor", "user", "admin", "super_admin"]
-        },
-        "roles": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "List of active roles for this user."
-        },
-        "headline": {
-          "type": "string"
-        },
-        "investorHeadline": {
-          "type": "string"
-        },
-        "bio": {
-          "type": "string"
-        },
-        "investorBio": {
-          "type": "string"
-        },
-        "whyBuilding": {
-          "type": "string",
-          "description": "Long-form text explaining the motivation behind the startup."
-        },
-        "location": {
-          "type": "string"
-        },
-        "stage": {
-          "type": "string",
-          "enum": ["Idea", "Early", "Growth", "Scaling", ""]
-        },
-        "skills": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "lookingFor": {
-          "type": "string"
-        },
-        "experience": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "company": { "type": "string" },
-              "role": { "type": "string" },
-              "duration": { "type": "string" },
-              "description": { "type": "string" }
-            }
-          }
-        },
-        "education": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "school": { "type": "string" },
-              "degree": { "type": "string" },
-              "year": { "type": "string" }
-            }
-          }
-        },
-        "achievements": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "socialLinks": {
-          "type": "object",
-          "properties": {
-            "linkedin": { "type": "string" },
-            "website": { "type": "string" },
-            "twitter": { "type": "string" }
-          }
-        },
-        "linkedinUrl": {
-          "type": "string"
-        },
-        "availability": {
-          "type": "object",
-          "properties": {
-            "openToInvestment": { "type": "boolean" },
-            "hiring": { "type": "boolean" },
-            "coFounder": { "type": "boolean" }
-          }
-        },
-        "lookingForCofounder": {
-          "type": "boolean",
-          "default": false
-        },
-        "cofounderSkills": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "cofounderRole": {
-          "type": "string",
-          "description": "The specific role needed (e.g., CTO, COO, Head of Growth)."
-        },
-        "equityOffer": {
-          "type": "string",
-          "description": "The range of equity offered (e.g., 10-25%)."
-        },
-        "commitmentType": {
-          "type": "string",
-          "enum": ["Full-time", "Part-time", "Equity-only", "Other", ""],
-          "description": "Expected commitment level."
-        },
-        "isVerified": {
-          "type": "boolean",
-          "default": false
-        },
-        "preferredStage": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "investmentFocus": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "ticketSize": {
-          "type": "string"
-        },
-        "investorNote": {
-          "type": "string"
-        },
-        "isOpenToPitches": {
-          "type": "boolean"
-        },
-        "isMentor": {
-          "type": "boolean",
-          "default": false,
-          "description": "Whether the user is an active mentor."
-        },
-        "mentorSkills": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Specific areas where the mentor provides guidance."
-        },
-        "mentorBio": {
-          "type": "string",
-          "description": "A dedicated bio for mentorship purposes."
-        },
-        "yearsOfExperience": {
-          "type": "string",
-          "description": "The number of years of professional experience."
-        },
-        "mentorAvailability": {
-          "type": "string",
-          "description": "Mentorship schedule or availability details (e.g. '2 hours/week')."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": ["uid", "fullName", "email", "role", "createdAt", "updatedAt"]
-    },
-    "Connection": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Connection",
-      "type": "object",
-      "description": "A professional request or active relationship between two ecosystem members.",
-      "properties": {
-        "initiatorUid": { "type": "string" },
-        "recipientUid": { "type": "string" },
-        "type": { "type": "string", "enum": ["investor", "founder", "mentor", "cofounder", "service"] },
-        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
-        "message": { "type": "string" },
+        "uid": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string" },
+        "primaryRole": { "type": "string" },
+        "roles": { "type": "array", "items": { "type": "string" } },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["initiatorUid", "recipientUid", "type", "status", "createdAt"]
-    },
-    "CommunityPost": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "CommunityPost",
-      "type": "object",
-      "description": "A post in the startup community feed.",
-      "properties": {
-        "authorUid": { "type": "string" },
-        "authorName": { "type": "string" },
-        "authorImage": { "type": "string" },
-        "authorType": { "type": "string", "enum": ["founder", "investor", "mentor", "user"] },
-        "content": { "type": "string" },
-        "tags": { "type": "array", "items": { "type": "string" } },
-        "likesCount": { "type": "number", "default": 0 },
-        "commentsCount": { "type": "number", "default": 0 },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "status": { "type": "string", "default": "active" },
-        "startupName": { "type": "string" },
-        "startupId": { "type": "string" }
-      },
-      "required": ["authorUid", "authorName", "authorType", "content", "createdAt", "status"]
-    },
-    "Notification": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Notification",
-      "type": "object",
-      "description": "A notification for a user.",
-      "properties": {
-        "recipientUid": { "type": "string" },
-        "actorUid": { "type": "string" },
-        "type": { "type": "string" },
-        "title": { "type": "string" },
-        "message": { "type": "string" },
-        "targetId": { "type": "string" },
-        "targetType": { "type": "string" },
-        "read": { "type": "boolean", "default": false },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["recipientUid", "actorUid", "type", "title", "message", "createdAt"]
+      "required": ["uid", "fullName", "email", "createdAt", "updatedAt"]
     },
     "Contact": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -249,13 +28,33 @@
         "companyName": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "phone": { "type": "string" },
-        "type": { "type": "string", "enum": ["lead", "partner", "investor", "founder", "mentor", "client", "other"] },
-        "tags": { "type": "array", "items": { "type": "string" } },
+        "type": { "type": "string" },
         "notes": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["ownerUid", "contactName", "createdAt", "updatedAt"]
+    },
+    "Deal": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Deal",
+      "type": "object",
+      "description": "A sales or investment deal in the user's pipeline.",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "contactId": { "type": "string" },
+        "contactName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "value": { "type": "number" },
+        "currency": { "type": "string", "default": "USD" },
+        "stage": { "type": "string", "enum": ["Lead", "Contacted", "Proposal Sent", "Won", "Lost"] },
+        "probability": { "type": "number" },
+        "expectedCloseDate": { "type": "string", "format": "date" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "title", "stage", "createdAt", "updatedAt"]
     }
   },
   "auth": {
@@ -265,43 +64,15 @@
     "structure": [
       {
         "path": "/users/{userId}",
-        "definition": {
-          "entityName": "User",
-          "schema": { "$ref": "#/backend/entities/User" },
-          "description": "Main user profile collection."
-        }
-      },
-      {
-        "path": "/connections/{connectionId}",
-        "definition": {
-          "entityName": "Connection",
-          "schema": { "$ref": "#/backend/entities/Connection" },
-          "description": "Relationship requests and links between users."
-        }
-      },
-      {
-        "path": "/communityPosts/{postId}",
-        "definition": {
-          "entityName": "CommunityPost",
-          "schema": { "$ref": "#/backend/entities/CommunityPost" },
-          "description": "Startup community feed posts."
-        }
-      },
-      {
-        "path": "/notifications/{notificationId}",
-        "definition": {
-          "entityName": "Notification",
-          "schema": { "$ref": "#/backend/entities/Notification" },
-          "description": "Real-time alerts for users."
-        }
+        "definition": { "entityName": "User", "schema": { "$ref": "#/backend/entities/User" }, "description": "User profile data." }
       },
       {
         "path": "/contacts/{contactId}",
-        "definition": {
-          "entityName": "Contact",
-          "schema": { "$ref": "#/backend/entities/Contact" },
-          "description": "Private contact directory for users."
-        }
+        "definition": { "entityName": "Contact", "schema": { "$ref": "#/backend/entities/Contact" }, "description": "Private contact records." }
+      },
+      {
+        "path": "/deals/{dealId}",
+        "definition": { "entityName": "Deal", "schema": { "$ref": "#/backend/entities/Deal" }, "description": "Private pipeline deals." }
       }
     ]
   }

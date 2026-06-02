@@ -18,7 +18,8 @@ import {
   Wrench,
   ShieldAlert,
   Globe,
-  Contact2
+  Contact2,
+  LayoutGrid
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -88,6 +89,7 @@ export function DashboardSidebar({ className }: { className?: string }) {
     
     { type: 'label', label: 'Workspace' },
     { href: '/dashboard/contacts', label: 'Contacts', icon: Contact2 },
+    { href: '/dashboard/pipeline', label: 'Pipeline', icon: LayoutGrid },
     ...(isFounder ? [
       { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
       { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }
