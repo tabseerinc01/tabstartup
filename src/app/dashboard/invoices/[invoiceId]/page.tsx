@@ -273,10 +273,11 @@ export default function InvoiceDetailsPage() {
 
               <div className="pt-16 border-t border-slate-50 space-y-4">
                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Payment Instructions</p>
-                 <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                    Please reference invoice <strong>#{invoice.invoiceNumber}</strong> when making payment. 
-                    Thank you for your business.
-                 </p>
+                 <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p className="text-sm text-slate-600 leading-relaxed font-medium whitespace-pre-wrap">
+                       {invoice.paymentInstructions ? invoice.paymentInstructions : `Please reference invoice #${invoice.invoiceNumber} when making payment. Thank you for your business.`}
+                    </p>
+                 </div>
                  {invoice.status === 'Paid' && (
                     <div className="flex items-center gap-2 text-green-600 font-bold text-sm bg-green-50 w-fit px-4 py-2 rounded-full">
                        <ShieldCheck className="h-4 w-4" /> FULLY SETTLED

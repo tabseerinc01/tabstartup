@@ -36,6 +36,7 @@ export interface Invoice {
   billFromType: 'Personal' | 'Startup';
   billFromName: string;
   description?: string;
+  paymentInstructions?: string;
   productType: 'Digital' | 'Physical';
   items: {
     description: string;

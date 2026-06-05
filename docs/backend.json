@@ -70,6 +70,7 @@
         "billFromType": { "type": "string", "enum": ["Personal", "Startup"] },
         "billFromName": { "type": "string" },
         "description": { "type": "string" },
+        "paymentInstructions": { "type": "string", "description": "Manual payment instructions like bank details or mobile wallet numbers." },
         "productType": { "type": "string", "enum": ["Digital", "Physical"] },
         "items": {
           "type": "array",

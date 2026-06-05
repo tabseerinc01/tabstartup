@@ -65,6 +65,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
     currency: 'USD',
     status: 'Draft',
     description: '',
+    paymentInstructions: '',
     issueDate: new Date().toISOString().split('T')[0],
     dueDate: ''
   });
@@ -91,6 +92,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
           currency: editingInvoice.currency || 'USD',
           status: editingInvoice.status || 'Draft',
           description: editingInvoice.description || '',
+          paymentInstructions: editingInvoice.paymentInstructions || '',
           issueDate: editingInvoice.issueDate || '',
           dueDate: editingInvoice.dueDate || ''
         });
@@ -170,7 +172,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
 
     const invoiceData = {
       ...formData,
-      title: fallbackTitle, // Keeping title in data for compatibility but removing from UI
+      title: fallbackTitle,
       billFromName,
       items: items.map(({ id, ...rest }) => rest),
       amount: totalAmount,
@@ -410,6 +412,17 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="payment-instructions">Payment Instructions (Bank, bKash, etc.)</Label>
+            <Textarea 
+              id="payment-instructions" 
+              placeholder="Provide details on how to pay (e.g. Bank Account Number, bKash/Nagad number, or other instructions)..."
+              rows={4}
+              value={formData.paymentInstructions}
+              onChange={e => setFormData({...formData, paymentInstructions: e.target.value})}
+            />
           </div>
 
           <div className="bg-primary/5 p-6 rounded-[2rem] border border-primary/10 flex justify-between items-center">
