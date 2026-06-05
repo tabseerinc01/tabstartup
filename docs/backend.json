@@ -57,6 +57,26 @@
       },
       "required": ["ownerUid", "title", "stage", "createdAt", "updatedAt"]
     },
+    "DealNote": {
+      "title": "DealNote",
+      "type": "object",
+      "description": "An internal note attached to a deal.",
+      "properties": {
+        "content": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DealActivity": {
+      "title": "DealActivity",
+      "type": "object",
+      "description": "A log of changes to a deal.",
+      "properties": {
+        "type": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
     "Task": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Task",
@@ -94,6 +114,14 @@
       {
         "path": "/deals/{dealId}",
         "definition": { "entityName": "Deal", "schema": { "$ref": "#/backend/entities/Deal" }, "description": "Private pipeline deals." }
+      },
+      {
+        "path": "/deals/{dealId}/notes/{noteId}",
+        "definition": { "entityName": "DealNote", "schema": { "$ref": "#/backend/entities/DealNote" }, "description": "Internal notes for a deal." }
+      },
+      {
+        "path": "/deals/{dealId}/activities/{activityId}",
+        "definition": { "entityName": "DealActivity", "schema": { "$ref": "#/backend/entities/DealActivity" }, "description": "History of changes for a deal." }
       },
       {
         "path": "/tasks/{taskId}",

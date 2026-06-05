@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc, deleteDoc, serverTimestamp, addDoc } from 'firebase/firestore';
 import { 
   LayoutGrid, 
   Loader2, 
@@ -59,9 +59,21 @@ export default function PipelinePage() {
   const handleMoveDeal = async (dealId: string, newStage: string) => {
     if (!firestore) return;
     const dealRef = doc(firestore, 'deals', dealId);
+    
+    // Get old stage for activity log
+    const deal = deals?.find(d => d.id === dealId);
+    const oldStage = deal?.stage;
+
     updateDoc(dealRef, { 
       stage: newStage, 
       updatedAt: serverTimestamp() 
+    }).then(() => {
+      // Log activity
+      addDoc(collection(firestore, 'deals', dealId, 'activities'), {
+        type: 'stage_change',
+        details: `Stage changed from ${oldStage} to ${newStage}`,
+        createdAt: serverTimestamp()
+      });
     }).catch(err => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: dealRef.path,
