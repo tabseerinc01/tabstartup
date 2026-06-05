@@ -11,6 +11,7 @@ import {
   Users, 
   Settings,
   LogOut,
+  ChevronDown,
   ChevronRight,
   HandCoins,
   MessageSquare,
@@ -20,13 +21,29 @@ import {
   Globe,
   Contact2,
   LayoutGrid,
-  CheckSquare
+  CheckSquare,
+  FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
 import { useAuth, initiateSignOut, useUser, useFirestore } from '@/firebase';
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+
+interface SidebarItem {
+  href: string;
+  label: string;
+  icon: any;
+  showBadge?: boolean;
+  disabled?: boolean;
+}
+
+interface SidebarGroup {
+  id: string;
+  label: string;
+  items: SidebarItem[];
+}
 
 export function DashboardSidebar({ className }: { className?: string }) {
   const pathname = usePathname();
@@ -37,6 +54,12 @@ export function DashboardSidebar({ className }: { className?: string }) {
 
   const [profile, setProfile] = useState<any>(null);
   const [hasPendingPitches, setHasPendingPitches] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    workspace: true,
+    discovery: true,
+    network: true,
+    account: true
+  });
 
   useEffect(() => {
     async function loadProfile() {
@@ -77,46 +100,62 @@ export function DashboardSidebar({ className }: { className?: string }) {
     router.push('/login');
   };
 
+  const toggleGroup = (id: string) => {
+    setExpandedGroups(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   const roles = profile?.roles || (profile?.role ? [profile.role] : []) || [];
   const isFounder = roles.includes('founder');
-  const isAdmin = roles.includes('admin') || roles.includes('super_admin');
 
-  const menuItems = [
-    { type: 'label', label: 'Main' },
-    { href: '/dashboard', label: 'Overview', icon: Home },
-    { href: '/dashboard/profile', label: 'My Profile', icon: User },
-    { href: '/community', label: 'Community', icon: Globe },
-    { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
-    
-    { type: 'label', label: 'Workspace' },
-    { href: '/dashboard/contacts', label: 'Contacts', icon: Contact2 },
-    { href: '/dashboard/pipeline', label: 'Pipeline', icon: LayoutGrid },
-    { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare },
-    ...(isFounder ? [
-      { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
-      { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }
-    ] : []),
-    
-    { type: 'label', label: 'Discovery' },
-    { href: '/cofounders', label: 'Co-founders', icon: Users },
-    { href: '/mentors', label: 'Mentors', icon: GraduationCap },
-    { href: '/investors', label: 'Investors', icon: ShieldAlert },
-    { href: '/services', label: 'Services', icon: Wrench },
-    
-    { type: 'label', label: 'Network' },
-    { 
-      href: '/dashboard/connections', 
-      label: 'Connections', 
-      icon: Users,
-      showBadge: hasPendingPitches 
+  const groups: SidebarGroup[] = [
+    {
+      id: 'workspace',
+      label: 'Workspace',
+      items: [
+        { href: '/dashboard', label: 'Overview', icon: Home },
+        { href: '/dashboard/contacts', label: 'Contacts', icon: Contact2 },
+        { href: '/dashboard/pipeline', label: 'Pipeline', icon: LayoutGrid },
+        { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare },
+        { href: '#', label: 'Invoices', icon: FileText, disabled: true },
+        ...(isFounder ? [
+          { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
+          { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }
+        ] : []),
+      ]
     },
-    
-    ...(isAdmin ? [
-      { type: 'label', label: 'Admin' },
-      { href: '/control', label: 'Control Panel', icon: ShieldAlert }
-    ] : []),
-    { type: 'label', label: 'System' },
-    { href: '#', label: 'Settings', icon: Settings, disabled: true },
+    {
+      id: 'discovery',
+      label: 'Discovery',
+      items: [
+        { href: '/founders', label: 'Startups', icon: Rocket },
+        { href: '/cofounders', label: 'Co-founders', icon: Users },
+        { href: '/investors', label: 'Investors', icon: ShieldAlert },
+        { href: '/mentors', label: 'Mentors', icon: GraduationCap },
+        { href: '/services', label: 'Services', icon: Wrench },
+      ]
+    },
+    {
+      id: 'network',
+      label: 'Network',
+      items: [
+        { href: '/community', label: 'Community', icon: Globe },
+        { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
+        { 
+          href: '/dashboard/connections', 
+          label: 'Connections', 
+          icon: Users,
+          showBadge: hasPendingPitches 
+        },
+      ]
+    },
+    {
+      id: 'account',
+      label: 'Account',
+      items: [
+        { href: '/dashboard/profile', label: 'My Profile', icon: User },
+        { href: '#', label: 'Settings', icon: Settings, disabled: true },
+      ]
+    }
   ];
 
   return (
@@ -125,43 +164,53 @@ export function DashboardSidebar({ className }: { className?: string }) {
         <Logo />
       </div>
       
-      <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto">
-        {menuItems.map((item, idx) => {
-          if (item.type === 'label') {
-            return (
-              <p key={`label-${idx}`} className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-3 mt-6 mb-2">
-                {item.label}
-              </p>
-            );
-          }
-
-          return (
-            <Link
-              key={item.label}
-              href={item.disabled ? '#' : item.href!}
-              className={cn(
-                "flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group",
-                pathname === item.href 
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                item.disabled && "opacity-50 cursor-not-allowed"
-              )}
-            >
-              <div className="flex items-center gap-3 relative">
-                <item.icon className="h-4 w-4" />
-                {item.label}
-                {item.showBadge && (
-                  <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
-                  </span>
-                )}
-              </div>
-              {item.disabled && <span className="text-[9px] font-black uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Soon</span>}
-              {!item.disabled && pathname === item.href && <ChevronRight className="h-3 w-3" />}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 px-4 py-2 space-y-6 overflow-y-auto">
+        {groups.map((group) => (
+          <Collapsible
+            key={group.id}
+            open={expandedGroups[group.id]}
+            onOpenChange={() => toggleGroup(group.id)}
+            className="space-y-1"
+          >
+            <CollapsibleTrigger asChild>
+              <Button 
+                variant="ghost" 
+                className="w-full justify-between hover:bg-transparent px-3 h-8 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400"
+              >
+                {group.label}
+                {expandedGroups[group.id] ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              </Button>
+            </CollapsibleTrigger>
+            
+            <CollapsibleContent className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
+              {group.items.map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.disabled ? '#' : item.href}
+                  className={cn(
+                    "flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all group",
+                    pathname === item.href 
+                      ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    item.disabled && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  <div className="flex items-center gap-3 relative">
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                    {item.showBadge && (
+                      <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
+                      </span>
+                    )}
+                  </div>
+                  {item.disabled && <span className="text-[8px] font-black uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Soon</span>}
+                </Link>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
+        ))}
       </nav>
 
       <div className="p-4 border-t mt-auto">
