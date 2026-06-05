@@ -126,7 +126,7 @@ export default function InvoiceDetailsPage() {
             <ChevronRight className="h-3 w-3" />
             <span className="text-slate-600">#{invoice.invoiceNumber}</span>
           </nav>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900">Review Invoice</h1>
+          <h1 className="text-4xl font-black tracking-tight text-slate-900">Invoice Review</h1>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -251,7 +251,7 @@ export default function InvoiceDetailsPage() {
                      ))
                    ) : (
                      <div className="px-4 py-8 rounded-[2rem] bg-slate-50 ring-1 ring-slate-100 flex items-center justify-between">
-                        <p className="text-lg font-black text-slate-900">{invoice.title}</p>
+                        <p className="text-lg font-black text-slate-900">Service Charges</p>
                         <p className="text-2xl font-black text-slate-900">{formattedAmount}</p>
                      </div>
                    )}

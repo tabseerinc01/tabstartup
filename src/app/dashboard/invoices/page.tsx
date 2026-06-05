@@ -58,7 +58,7 @@ export default function InvoicesListPage() {
     return rawInvoices
       .filter(inv => {
         const matchesSearch = 
-          inv.title.toLowerCase().includes(search.toLowerCase()) || 
+          (inv.title || '').toLowerCase().includes(search.toLowerCase()) || 
           inv.contactName.toLowerCase().includes(search.toLowerCase()) ||
           inv.invoiceNumber.toLowerCase().includes(search.toLowerCase());
         
@@ -118,7 +118,7 @@ export default function InvoicesListPage() {
              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Financial Records</span>
           </div>
           <h1 className="text-4xl font-black tracking-tight text-slate-900">Invoices</h1>
-          <p className="text-slate-500 font-medium">Manage your billing, payments, and client revenue.</p>
+          <p className="text-slate-50 font-medium">Manage your billing, payments, and client revenue.</p>
         </div>
         <NewInvoiceDialog />
       </div>
@@ -199,9 +199,12 @@ export default function InvoicesListPage() {
                                {inv.status}
                              </Badge>
                           </div>
-                          <h3 className="text-xl font-black text-slate-900 group-hover:text-primary transition-colors truncate">{inv.title}</h3>
+                          <h3 className="text-xl font-black text-slate-900 group-hover:text-primary transition-colors truncate">
+                             Invoice for {inv.contactName}
+                          </h3>
                           <div className="flex items-center gap-2 mt-1 text-sm font-bold text-slate-500">
-                             <span className="truncate">{inv.contactName}</span>
+                             <span className="truncate">{inv.items?.[0]?.description || 'Professional Services'}</span>
+                             {inv.items?.length > 1 && <Badge variant="outline" className="h-4 text-[8px] border-slate-200">+{inv.items.length - 1} more</Badge>}
                           </div>
                        </div>
                     </div>

@@ -60,7 +60,6 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
   const [formData, setFormData] = useState({
     invoiceNumber: `INV-${Math.floor(1000 + Math.random() * 9000)}`,
     contactId: '',
-    title: '',
     productType: 'Digital' as 'Digital' | 'Physical',
     billFromType: 'Personal' as 'Personal' | 'Startup',
     currency: 'USD',
@@ -87,7 +86,6 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
         setFormData({
           invoiceNumber: editingInvoice.invoiceNumber || '',
           contactId: editingInvoice.contactId || '',
-          title: editingInvoice.title || '',
           productType: editingInvoice.productType || 'Digital',
           billFromType: editingInvoice.billFromType || 'Personal',
           currency: editingInvoice.currency || 'USD',
@@ -103,7 +101,6 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
         setFormData(prev => ({
           ...prev,
           contactId: initialData.contactId || '',
-          title: initialData.title || '',
           currency: initialData.currency || 'USD',
           description: initialData.description || ''
         }));
@@ -168,8 +165,12 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
       ? startupName 
       : (user.displayName || user.email?.split('@')[0] || 'Member');
 
+    // Use first item description as a fallback title for internal usage if needed
+    const fallbackTitle = items[0]?.description || 'New Invoice';
+
     const invoiceData = {
       ...formData,
+      title: fallbackTitle, // Keeping title in data for compatibility but removing from UI
       billFromName,
       items: items.map(({ id, ...rest }) => rest),
       amount: totalAmount,
@@ -321,17 +322,6 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="title">Invoice Title</Label>
-            <Input 
-              id="title" 
-              required 
-              placeholder="e.g. Q1 Service Delivery"
-              value={formData.title}
-              onChange={e => setFormData({...formData, title: e.target.value})}
-            />
-          </div>
-
           {/* Line Items Section */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -348,6 +338,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
                     <Label className="text-[9px] font-bold uppercase text-slate-400">Description</Label>
                     <Input 
                       placeholder="Product or service details..."
+                      required
                       value={item.description}
                       onChange={e => updateItem(item.id, 'description', e.target.value)}
                     />
@@ -357,6 +348,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
                     <Input 
                       type="number" 
                       min="1"
+                      required
                       value={item.quantity}
                       onChange={e => updateItem(item.id, 'quantity', e.target.value)}
                     />
@@ -366,6 +358,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
                     <Input 
                       type="number" 
                       placeholder="0.00"
+                      required
                       value={item.unitPrice}
                       onChange={e => updateItem(item.id, 'unitPrice', e.target.value)}
                     />
