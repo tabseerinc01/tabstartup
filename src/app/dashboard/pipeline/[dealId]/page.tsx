@@ -33,7 +33,9 @@ import {
   History,
   CheckSquare,
   MoreVertical,
-  ChevronRight
+  ChevronRight,
+  FileText,
+  Zap
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,6 +45,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { NewTaskDialog } from '@/components/dashboard/tasks/new-task-dialog';
 import { NewDealDialog } from '@/components/dashboard/pipeline/new-deal-dialog';
+import { NewInvoiceDialog } from '@/components/dashboard/invoices/new-invoice-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -200,6 +203,23 @@ export default function DealDetailsPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {deal.stage === 'Won' && (
+            <NewInvoiceDialog 
+              initialData={{
+                contactId: deal.contactId,
+                contactName: deal.contactName,
+                title: `Invoice for ${deal.title}`,
+                amount: deal.value,
+                currency: deal.currency,
+                description: `Billing for project: ${deal.title}`
+              }}
+              trigger={
+                <Button className="rounded-xl h-11 gap-2 font-bold shadow-lg shadow-primary/20">
+                   <Zap className="h-4 w-4" /> Generate Invoice
+                </Button>
+              }
+            />
+          )}
           <NewDealDialog 
             editingDeal={deal} 
             trigger={

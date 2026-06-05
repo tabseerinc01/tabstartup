@@ -116,7 +116,7 @@ export function DashboardSidebar({ className }: { className?: string }) {
         { href: '/dashboard/contacts', label: 'Contacts', icon: Contact2 },
         { href: '/dashboard/pipeline', label: 'Pipeline', icon: LayoutGrid },
         { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare },
-        { href: '#', label: 'Invoices', icon: FileText, disabled: true },
+        { href: '/dashboard/invoices', label: 'Invoices', icon: FileText },
         ...(isFounder ? [
           { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
           { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }

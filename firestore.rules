@@ -32,13 +32,15 @@ service cloud.firestore {
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
 
-      match /notes/{noteId} {
-        allow read, write: if request.auth != null;
-      }
-      
-      match /activities/{activityId} {
-        allow read, write: if request.auth != null;
-      }
+      match /notes/{noteId} { allow read, write: if request.auth != null; }
+      match /activities/{activityId} { allow read, write: if request.auth != null; }
+    }
+
+    match /invoices/{invoiceId} {
+      allow get: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
     }
 
     match /tasks/{taskId} {
@@ -47,9 +49,7 @@ service cloud.firestore {
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
 
-      match /activities/{activityId} {
-        allow read, write: if request.auth != null;
-      }
+      match /activities/{activityId} { allow read, write: if request.auth != null; }
     }
 
     match /connections/{connectionId} {
@@ -66,15 +66,8 @@ service cloud.firestore {
       allow update, delete: if request.auth != null && (resource.data.authorUid == request.auth.uid || isAdmin());
     }
     
-    match /communityPostLikes/{likeId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    
-    match /communityComments/{commentId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
+    match /communityPostLikes/{likeId} { allow read: if true; allow write: if request.auth != null; }
+    match /communityComments/{commentId} { allow read: if true; allow write: if request.auth != null; }
 
     match /notifications/{notificationId} {
       allow read: if request.auth != null && (resource.data.recipientUid == request.auth.uid || isAdmin());
@@ -85,38 +78,19 @@ service cloud.firestore {
     match /chats/{chatId} {
       allow read, update: if request.auth != null && (resource.data.participants.hasAny([request.auth.uid]) || isAdmin());
       allow create: if request.auth != null && (request.resource.data.participants.hasAny([request.auth.uid]) || isAdmin());
-      
-      match /messages/{messageId} {
-        allow read, create: if request.auth != null;
-      }
+      match /messages/{messageId} { allow read, create: if request.auth != null; }
     }
 
     match /startups/{startupId} {
       allow read: if true;
       allow create, update: if request.auth != null && (request.auth.uid == startupId || isAdmin());
       allow delete: if isAdmin();
-      
-      match /views/{viewId} {
-        allow read: if request.auth != null && (request.auth.uid == startupId || isAdmin());
-        allow create: if true; 
-      }
-      
-      match /interests/{interestId} {
-        allow read: if true;
-        allow create, update: if request.auth != null;
-      }
+      match /views/{viewId} { allow read: if request.auth != null && (request.auth.uid == startupId || isAdmin()); allow create: if true; }
+      match /interests/{interestId} { allow read: if true; allow create, update: if request.auth != null; }
     }
 
-    match /services/{serviceId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-
-    match /seoPages/{pageId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
+    match /services/{serviceId} { allow read: if true; allow write: if request.auth != null; }
+    match /seoPages/{pageId} { allow read: if true; allow write: if isAdmin(); }
     match /pitches/{pitchId} {
       allow create: if request.auth != null;
       allow read, update: if request.auth != null && (request.auth.uid == resource.data.toFounderUid || request.auth.uid == resource.data.fromInvestorUid || isAdmin());

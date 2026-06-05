@@ -57,24 +57,24 @@
       },
       "required": ["ownerUid", "title", "stage", "createdAt", "updatedAt"]
     },
-    "DealNote": {
-      "title": "DealNote",
+    "Invoice": {
+      "title": "Invoice",
       "type": "object",
-      "description": "An internal note attached to a deal.",
+      "description": "A billing document for a contact or deal.",
       "properties": {
-        "content": { "type": "string" },
-        "authorName": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "DealActivity": {
-      "title": "DealActivity",
-      "type": "object",
-      "description": "A log of changes to a deal.",
-      "properties": {
-        "type": { "type": "string" },
-        "details": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "ownerUid": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "contactId": { "type": "string" },
+        "contactName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "issueDate": { "type": "string", "format": "date" },
+        "dueDate": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["Draft", "Sent", "Paid", "Overdue", "Cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       }
     },
     "Task": {
@@ -96,15 +96,6 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["ownerUid", "title", "status", "priority", "createdAt", "updatedAt"]
-    },
-    "TaskActivity": {
-      "title": "TaskActivity",
-      "type": "object",
-      "description": "A log of changes to a task.",
-      "properties": {
-        "details": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
     }
   },
   "auth": {
@@ -125,20 +116,12 @@
         "definition": { "entityName": "Deal", "schema": { "$ref": "#/backend/entities/Deal" }, "description": "Private pipeline deals." }
       },
       {
-        "path": "/deals/{dealId}/notes/{noteId}",
-        "definition": { "entityName": "DealNote", "schema": { "$ref": "#/backend/entities/DealNote" }, "description": "Internal notes for a deal." }
-      },
-      {
-        "path": "/deals/{dealId}/activities/{activityId}",
-        "definition": { "entityName": "DealActivity", "schema": { "$ref": "#/backend/entities/DealActivity" }, "description": "History of changes for a deal." }
+        "path": "/invoices/{invoiceId}",
+        "definition": { "entityName": "Invoice", "schema": { "$ref": "#/backend/entities/Invoice" }, "description": "Private billing invoices." }
       },
       {
         "path": "/tasks/{taskId}",
         "definition": { "entityName": "Task", "schema": { "$ref": "#/backend/entities/Task" }, "description": "Private workspace tasks." }
-      },
-      {
-        "path": "/tasks/{taskId}/activities/{activityId}",
-        "definition": { "entityName": "TaskActivity", "schema": { "$ref": "#/backend/entities/TaskActivity" }, "description": "History of changes for a task." }
       }
     ]
   }
