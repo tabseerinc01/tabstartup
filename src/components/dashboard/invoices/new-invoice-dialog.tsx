@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, FileText, Hash, Banknote, Trash2, Package, Smartphone, Building2, User } from 'lucide-react';
+import { Loader2, Plus, FileText, Hash, Banknote, Trash2, Package, Smartphone, Building2, User, Gavel } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
 const STATUSES = ["Draft", "Sent", "Paid", "Overdue", "Cancelled"];
@@ -39,7 +39,6 @@ interface NewInvoiceDialogProps {
   initialData?: {
     contactId?: string;
     contactName?: string;
-    title?: string;
     amount?: number;
     currency?: string;
     description?: string;
@@ -66,6 +65,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
     status: 'Draft',
     description: '',
     paymentInstructions: '',
+    termsAndConditions: '',
     issueDate: new Date().toISOString().split('T')[0],
     dueDate: ''
   });
@@ -93,6 +93,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
           status: editingInvoice.status || 'Draft',
           description: editingInvoice.description || '',
           paymentInstructions: editingInvoice.paymentInstructions || '',
+          termsAndConditions: editingInvoice.termsAndConditions || '',
           issueDate: editingInvoice.issueDate || '',
           dueDate: editingInvoice.dueDate || ''
         });
@@ -118,13 +119,15 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
       try {
         const [contactsSnap, startupSnap] = await Promise.all([
           getDocs(query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid))),
-          getDoc(doc(firestore, 'startups', user.uid))
+          getDoc(doc(firestore, 'users', user.uid))
         ]);
         
         setContacts(contactsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         
-        if (startupSnap.exists()) {
-          setStartupName(startupSnap.data().name);
+        // Check for startup in a separate collection or field
+        const startupDataSnap = await getDoc(doc(firestore, 'startups', user.uid));
+        if (startupDataSnap.exists()) {
+          setStartupName(startupDataSnap.data().name);
         }
       } catch (e) {
         console.error("Error loading workspace data for invoice:", e);
@@ -162,17 +165,12 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
     setIsSaving(true);
     const selectedContact = contacts.find(c => c.id === formData.contactId);
     
-    // Determine bill from name
     const billFromName = formData.billFromType === 'Startup' && startupName 
       ? startupName 
       : (user.displayName || user.email?.split('@')[0] || 'Member');
 
-    // Use first item description as a fallback title for internal usage if needed
-    const fallbackTitle = items[0]?.description || 'New Invoice';
-
     const invoiceData = {
       ...formData,
-      title: fallbackTitle,
       billFromName,
       items: items.map(({ id, ...rest }) => rest),
       amount: totalAmount,
@@ -222,7 +220,6 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
         <form onSubmit={handleSubmit} className="space-y-6 py-4">
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Left Column: Product Info */}
             <div className="space-y-4">
               <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Delivery Logic</Label>
               <RadioGroup 
@@ -253,7 +250,6 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
               </RadioGroup>
             </div>
 
-            {/* Right Column: Bill From Selection */}
             <div className="space-y-4">
               <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Bill From (Sender)</Label>
               <RadioGroup 
@@ -287,9 +283,6 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
                   </Label>
                 </div>
               </RadioGroup>
-              {startupName && formData.billFromType === 'Startup' && (
-                <p className="text-[10px] font-bold text-slate-400 italic">Issuing as: {startupName}</p>
-              )}
             </div>
           </div>
 
@@ -324,7 +317,6 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
             </div>
           </div>
 
-          {/* Line Items Section */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Billable Items</Label>
@@ -334,7 +326,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
             </div>
             
             <div className="space-y-3">
-              {items.map((item, idx) => (
+              {items.map((item) => (
                 <div key={item.id} className="grid grid-cols-12 gap-3 items-end bg-slate-50/50 p-4 rounded-2xl border border-slate-100 ring-1 ring-slate-100">
                   <div className="col-span-12 md:col-span-6 space-y-1.5">
                     <Label className="text-[9px] font-bold uppercase text-slate-400">Description</Label>
@@ -414,15 +406,31 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="payment-instructions">Payment Instructions (Bank, bKash, etc.)</Label>
-            <Textarea 
-              id="payment-instructions" 
-              placeholder="Provide details on how to pay (e.g. Bank Account Number, bKash/Nagad number, or other instructions)..."
-              rows={4}
-              value={formData.paymentInstructions}
-              onChange={e => setFormData({...formData, paymentInstructions: e.target.value})}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label htmlFor="payment-instructions" className="flex items-center gap-2">
+                <Banknote className="h-3.5 w-3.5" /> Payment Instructions
+              </Label>
+              <Textarea 
+                id="payment-instructions" 
+                placeholder="Bank details, bKash, etc..."
+                rows={3}
+                value={formData.paymentInstructions}
+                onChange={e => setFormData({...formData, paymentInstructions: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="terms" className="flex items-center gap-2">
+                <Gavel className="h-3.5 w-3.5" /> Terms & Conditions
+              </Label>
+              <Textarea 
+                id="terms" 
+                placeholder="Refund policy, payment terms..."
+                rows={3}
+                value={formData.termsAndConditions}
+                onChange={e => setFormData({...formData, termsAndConditions: e.target.value})}
+              />
+            </div>
           </div>
 
           <div className="bg-primary/5 p-6 rounded-[2rem] border border-primary/10 flex justify-between items-center">

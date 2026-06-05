@@ -66,11 +66,11 @@
         "invoiceNumber": { "type": "string" },
         "contactId": { "type": "string" },
         "contactName": { "type": "string" },
-        "title": { "type": "string" },
         "billFromType": { "type": "string", "enum": ["Personal", "Startup"] },
         "billFromName": { "type": "string" },
         "description": { "type": "string" },
         "paymentInstructions": { "type": "string", "description": "Manual payment instructions like bank details or mobile wallet numbers." },
+        "termsAndConditions": { "type": "string", "description": "Business terms and conditions for this invoice." },
         "productType": { "type": "string", "enum": ["Digital", "Physical"] },
         "items": {
           "type": "array",

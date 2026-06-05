@@ -32,11 +32,11 @@ export interface Invoice {
   invoiceNumber: string;
   contactId: string;
   contactName: string;
-  title: string;
   billFromType: 'Personal' | 'Startup';
   billFromName: string;
   description?: string;
   paymentInstructions?: string;
+  termsAndConditions?: string;
   productType: 'Digital' | 'Physical';
   items: {
     description: string;

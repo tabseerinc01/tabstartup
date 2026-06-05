@@ -20,7 +20,9 @@ import {
   Package,
   ShieldCheck,
   Building2,
-  User
+  User,
+  Gavel,
+  Banknote
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -111,7 +113,6 @@ export default function InvoiceDetailsPage() {
     style: 'currency', currency: invoice.currency || 'USD', maximumFractionDigits: 0
   }).format(invoice.amount || 0);
 
-  // Determine sender display info
   const senderName = invoice.billFromName || user?.displayName || 'TabStartup Member';
   const senderType = invoice.billFromType || 'Personal';
 
@@ -223,7 +224,6 @@ export default function InvoiceDetailsPage() {
                  </div>
               </div>
 
-              {/* Items Table */}
               <div className="space-y-6">
                  <div className="flex items-center justify-between px-4 pb-4 border-b-2 border-slate-900/5">
                     <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-400 flex-[3]">Description</h3>
@@ -271,19 +271,34 @@ export default function InvoiceDetailsPage() {
                  </div>
               </div>
 
-              <div className="pt-16 border-t border-slate-50 space-y-4">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Payment Instructions</p>
-                 <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                    <p className="text-sm text-slate-600 leading-relaxed font-medium whitespace-pre-wrap">
-                       {invoice.paymentInstructions ? invoice.paymentInstructions : `Please reference invoice #${invoice.invoiceNumber} when making payment. Thank you for your business.`}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-16 border-t border-slate-50">
+                 <div className="space-y-4">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                       <Banknote className="h-3 w-3" /> Payment Instructions
                     </p>
-                 </div>
-                 {invoice.status === 'Paid' && (
-                    <div className="flex items-center gap-2 text-green-600 font-bold text-sm bg-green-50 w-fit px-4 py-2 rounded-full">
-                       <ShieldCheck className="h-4 w-4" /> FULLY SETTLED
+                    <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 min-h-[100px]">
+                       <p className="text-sm text-slate-600 leading-relaxed font-medium whitespace-pre-wrap">
+                          {invoice.paymentInstructions ? invoice.paymentInstructions : `Please reference invoice #${invoice.invoiceNumber} when making payment. Thank you for your business.`}
+                       </p>
                     </div>
-                 )}
+                 </div>
+                 <div className="space-y-4">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                       <Gavel className="h-3 w-3" /> Terms & Conditions
+                    </p>
+                    <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 min-h-[100px]">
+                       <p className="text-sm text-slate-600 leading-relaxed font-medium whitespace-pre-wrap">
+                          {invoice.termsAndConditions ? invoice.termsAndConditions : "Standard 30-day payment terms apply unless otherwise agreed in writing."}
+                       </p>
+                    </div>
+                 </div>
               </div>
+
+              {invoice.status === 'Paid' && (
+                 <div className="flex items-center gap-2 text-green-600 font-bold text-sm bg-green-50 w-fit px-4 py-2 rounded-full mx-auto">
+                    <ShieldCheck className="h-4 w-4" /> FULLY SETTLED
+                 </div>
+              )}
            </div>
         </CardContent>
       </Card>
