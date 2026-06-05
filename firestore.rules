@@ -20,13 +20,15 @@ service cloud.firestore {
     }
 
     match /contacts/{contactId} {
-      allow read: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow get: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
     }
     
     match /deals/{dealId} {
-      allow read: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow get: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
 
@@ -40,7 +42,8 @@ service cloud.firestore {
     }
 
     match /tasks/{taskId} {
-      allow read: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow get: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
 

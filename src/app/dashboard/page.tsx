@@ -32,7 +32,8 @@ import {
    BarChart3,
    TrendingUp,
    Contact2,
-   LayoutGrid
+   LayoutGrid,
+   ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -87,44 +88,62 @@ export default function DashboardOverviewPage() {
   }, [firestore, user?.uid]);
   const { data: allTasks } = useCollection(tasksQ);
 
-  // Deals Query
+  // Deals Query - Removing orderBy to avoid index requirement for permissions
   const dealsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid), orderBy('createdAt', 'desc'));
+    return query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: allDeals } = useCollection(dealsQ);
+  const { data: rawDeals } = useCollection(dealsQ);
 
-  // Contacts Query
+  // Contacts Query - Removing limit/orderBy to avoid index requirement for permissions
   const contactsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid), orderBy('createdAt', 'desc'), limit(5));
+    return query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: recentContacts } = useCollection(contactsQ);
+  const { data: rawContacts } = useCollection(contactsQ);
 
-  // --- Processed Stats ---
+  // --- Processed Data & Stats ---
+
+  const deals = useMemo(() => {
+    if (!rawDeals) return [];
+    return [...rawDeals].sort((a, b) => {
+      const tA = a.createdAt?.toMillis?.() || 0;
+      const tB = b.createdAt?.toMillis?.() || 0;
+      return tB - tA;
+    });
+  }, [rawDeals]);
+
+  const contacts = useMemo(() => {
+    if (!rawContacts) return [];
+    return [...rawContacts].sort((a, b) => {
+      const tA = a.createdAt?.toMillis?.() || 0;
+      const tB = b.createdAt?.toMillis?.() || 0;
+      return tB - tA;
+    });
+  }, [rawContacts]);
 
   const stats = useMemo(() => {
-    const deals = allDeals || [];
-    const tasks = allTasks || [];
+    const dealsList = deals || [];
+    const tasksList = allTasks || [];
     
-    const activeDeals = deals.filter(d => !['Won', 'Lost'].includes(d.stage));
-    const wonDeals = deals.filter(d => d.stage === 'Won');
+    const activeDeals = dealsList.filter(d => !['Won', 'Lost'].includes(d.stage));
+    const wonDeals = dealsList.filter(d => d.stage === 'Won');
     
-    const pipelineValue = deals.reduce((acc, d) => acc + (d.value || 0), 0);
+    const pipelineValue = dealsList.reduce((acc, d) => acc + (d.value || 0), 0);
     const wonRevenue = wonDeals.reduce((acc, d) => acc + (d.value || 0), 0);
     
-    const pendingTasks = tasks.filter(t => t.status !== 'Completed');
+    const pendingTasks = tasksList.filter(t => t.status !== 'Completed');
     const overdueTasks = pendingTasks.filter(t => t.dueDate && isPast(t.dueDate.toDate()) && !isToday(t.dueDate.toDate()));
     
     return {
-      totalContacts: recentContacts?.length || 0, // This is limited, better to use a count but ok for MVP
+      totalContacts: contacts.length,
       activeDeals: activeDeals.length,
       pipelineValue,
       wonRevenue,
       pendingTasks: pendingTasks.length,
       overdueTasks: overdueTasks.length
     };
-  }, [allDeals, allTasks, recentContacts]);
+  }, [deals, allTasks, contacts]);
 
   const dashboardTasks = useMemo(() => {
     if (!allTasks) return { today: [], upcoming: [] };
@@ -311,8 +330,8 @@ export default function DashboardOverviewPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {allDeals && allDeals.length > 0 ? (
-                    allDeals.slice(0, 3).map(deal => (
+                  {deals && deals.length > 0 ? (
+                    deals.slice(0, 3).map(deal => (
                       <Link key={deal.id} href={`/dashboard/pipeline/${deal.id}`}>
                         <div className="p-3 rounded-xl bg-slate-50 ring-1 ring-slate-100 hover:ring-primary/20 transition-all flex items-center justify-between group mb-2">
                           <div className="min-w-0">
@@ -379,8 +398,8 @@ export default function DashboardOverviewPage() {
               </CardHeader>
               <CardContent className="px-8 pb-10">
                 <div className="grid gap-4 md:grid-cols-2">
-                  {recentContacts && recentContacts.length > 0 ? (
-                    recentContacts.map(c => (
+                  {contacts && contacts.length > 0 ? (
+                    contacts.slice(0, 4).map(c => (
                       <Link key={c.id} href={`/dashboard/contacts/${c.id}`}>
                         <div className="group p-4 rounded-2xl bg-slate-50 ring-1 ring-slate-100 hover:ring-primary/20 transition-all flex items-center gap-4">
                            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-black">
