@@ -29,25 +29,25 @@ export interface Client {
 export interface Invoice {
   id: string;
   ownerUid: string;
-  userAccountId: string;
-  clientId: string;
-  clientName: string;
-  clientEmail: string;
   invoiceNumber: string;
-  issueDate: string;
-  dueDate: string;
-  subtotalCents: number;
-  totalCents: number;
-  currency: string;
-  status: 'draft' | 'sent' | 'paid' | 'unpaid';
-  lineItems: {
+  contactId: string;
+  contactName: string;
+  title: string;
+  description?: string;
+  productType: 'Digital' | 'Physical';
+  items: {
     description: string;
     quantity: number;
-    unitPrice: number; // in cents
+    unitPrice: number;
+    total: number;
   }[];
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
+  amount: number;
+  currency: string;
+  issueDate: string;
+  dueDate: string;
+  status: 'Draft' | 'Sent' | 'Paid' | 'Overdue' | 'Cancelled';
+  createdAt: any;
+  updatedAt: any;
 }
 
 export interface Connection {

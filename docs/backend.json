@@ -68,6 +68,19 @@
         "contactName": { "type": "string" },
         "title": { "type": "string" },
         "description": { "type": "string" },
+        "productType": { "type": "string", "enum": ["Digital", "Physical"] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "description": { "type": "string" },
+              "unitPrice": { "type": "number" },
+              "quantity": { "type": "number" },
+              "total": { "type": "number" }
+            }
+          }
+        },
         "amount": { "type": "number" },
         "currency": { "type": "string" },
         "issueDate": { "type": "string", "format": "date" },
