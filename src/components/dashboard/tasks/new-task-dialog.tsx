@@ -110,6 +110,14 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
     loadWorkspaceData();
   }, [firestore, user?.uid, isOpen]);
 
+  const logActivity = (taskId: string, details: string) => {
+    if (!firestore) return;
+    addDoc(collection(firestore, 'tasks', taskId, 'activities'), {
+      details,
+      createdAt: serverTimestamp()
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firestore || !user?.uid || isSaving) return;
@@ -133,9 +141,11 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
     try {
       if (editingTask) {
         await updateDoc(doc(firestore, 'tasks', editingTask.id), taskData);
+        logActivity(editingTask.id, "Task details updated");
         toast({ title: "Task Updated" });
       } else {
-        await addDoc(collection(firestore, 'tasks'), taskData);
+        const newDoc = await addDoc(collection(firestore, 'tasks'), taskData);
+        logActivity(newDoc.id, "Task created and added to workspace");
         toast({ title: "Task Created" });
         
         createNotification(firestore, {

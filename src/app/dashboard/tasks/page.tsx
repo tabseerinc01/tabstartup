@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc, deleteDoc, serverTimestamp, addDoc } from 'firebase/firestore';
 import { 
   CheckSquare, 
   Loader2, 
@@ -19,7 +19,8 @@ import {
   AlertCircle,
   Flag,
   User,
-  Briefcase
+  Briefcase,
+  ArrowUpRight
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -36,6 +37,7 @@ import { NewTaskDialog } from '@/components/dashboard/tasks/new-task-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, isToday, isFuture, isPast } from 'date-fns';
+import Link from 'next/link';
 
 export default function TasksPage() {
   const { user, isUserLoading } = useUser();
@@ -71,6 +73,14 @@ export default function TasksPage() {
     });
   }, [rawTasks, search]);
 
+  const logTaskActivity = (taskId: string, details: string) => {
+    if (!firestore) return;
+    addDoc(collection(firestore, 'tasks', taskId, 'activities'), {
+      details,
+      createdAt: serverTimestamp()
+    });
+  };
+
   const handleToggleComplete = async (task: any) => {
     if (!firestore) return;
     const newStatus = task.status === 'Completed' ? 'Pending' : 'Completed';
@@ -80,6 +90,8 @@ export default function TasksPage() {
       status: newStatus, 
       completedAt: newStatus === 'Completed' ? serverTimestamp() : null,
       updatedAt: serverTimestamp() 
+    }).then(() => {
+      logTaskActivity(task.id, `Status marked as ${newStatus}`);
     }).catch(err => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: taskRef.path,
@@ -262,7 +274,11 @@ function TaskItem({ task, onToggle, onDelete }: { task: any, onToggle: (task: an
     )}>
       <CardContent className="p-4 sm:p-5 flex items-start gap-4">
         <button 
-          onClick={() => onToggle(task)}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggle(task);
+          }}
           className={cn(
             "mt-1 rounded-full p-0.5 transition-colors",
             isCompleted ? "text-green-500 hover:text-green-600" : "text-slate-300 hover:text-primary"
@@ -274,12 +290,15 @@ function TaskItem({ task, onToggle, onDelete }: { task: any, onToggle: (task: an
         <div className="flex-1 min-w-0">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="space-y-1">
-               <h4 className={cn(
-                 "text-lg font-black text-slate-900 transition-all",
-                 isCompleted && "line-through text-slate-400"
-               )}>
-                 {task.title}
-               </h4>
+               <Link href={`/dashboard/tasks/${task.id}`}>
+                 <h4 className={cn(
+                   "text-lg font-black text-slate-900 transition-all group-hover:text-primary flex items-center gap-1.5",
+                   isCompleted && "line-through text-slate-400"
+                 )}>
+                   {task.title}
+                   <ArrowUpRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-all text-primary" />
+                 </h4>
+               </Link>
                <div className="flex flex-wrap items-center gap-3">
                   {task.contactName && (
                     <div className="flex items-center gap-1.5 text-xs font-bold text-primary">
