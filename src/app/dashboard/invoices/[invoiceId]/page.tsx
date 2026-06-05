@@ -91,19 +91,23 @@ export default function InvoiceDetailsPage() {
     if (!invoice) return;
     
     setIsPrinting(true);
-    toast({ title: "Preparing Document", description: "Opening print dialog. Select 'Save as PDF' to download." });
-
+    
     // Set dynamic document title for a professional filename when saving as PDF
     const originalTitle = document.title;
-    const sanitizedContact = invoice.contactName.replace(/[^a-z0-9]/gi, '_');
-    document.title = `Invoice_${invoice.invoiceNumber}_${sanitizedContact}`;
+    const sanitizedContact = (invoice.contactName || 'Client').replace(/[^a-z0-9]/gi, '_');
+    const newTitle = `Invoice_${invoice.invoiceNumber || invoice.id.slice(0,8)}_${sanitizedContact}`;
     
-    // Small delay to ensure the title update and toast are visible
+    document.title = newTitle;
+    
+    // We use a very small timeout to let the browser process the title change
     setTimeout(() => {
       window.print();
-      document.title = originalTitle;
-      setIsPrinting(false);
-    }, 500);
+      // Restore title after a short delay to ensure print dialog caught the new one
+      setTimeout(() => {
+        document.title = originalTitle;
+        setIsPrinting(false);
+      }, 1000);
+    }, 50);
   };
 
   if (isLoading || !invoice) {
