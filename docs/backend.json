@@ -67,6 +67,8 @@
         "contactId": { "type": "string" },
         "contactName": { "type": "string" },
         "title": { "type": "string" },
+        "billFromType": { "type": "string", "enum": ["Personal", "Startup"] },
+        "billFromName": { "type": "string" },
         "description": { "type": "string" },
         "productType": { "type": "string", "enum": ["Digital", "Physical"] },
         "items": {

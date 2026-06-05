@@ -33,6 +33,8 @@ export interface Invoice {
   contactId: string;
   contactName: string;
   title: string;
+  billFromType: 'Personal' | 'Startup';
+  billFromName: string;
   description?: string;
   productType: 'Digital' | 'Physical';
   items: {

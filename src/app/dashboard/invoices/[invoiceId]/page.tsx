@@ -18,7 +18,9 @@ import {
   Printer,
   Smartphone,
   Package,
-  ShieldCheck
+  ShieldCheck,
+  Building2,
+  User
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -109,6 +111,10 @@ export default function InvoiceDetailsPage() {
     style: 'currency', currency: invoice.currency || 'USD', maximumFractionDigits: 0
   }).format(invoice.amount || 0);
 
+  // Determine sender display info
+  const senderName = invoice.billFromName || user?.displayName || 'TabStartup Member';
+  const senderType = invoice.billFromType || 'Personal';
+
   return (
     <div className="max-w-6xl mx-auto w-full space-y-8 animate-in fade-in duration-700 pb-20 print:bg-white print:p-0 print:m-0">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 print:hidden">
@@ -183,8 +189,14 @@ export default function InvoiceDetailsPage() {
                  <div className="space-y-4">
                     <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Bill From</Label>
                     <div className="space-y-1">
-                       <p className="text-lg font-black text-slate-900">{user?.displayName || 'TabStartup Member'}</p>
+                       <p className="text-lg font-black text-slate-900 flex items-center gap-2">
+                         {senderType === 'Startup' ? <Building2 className="h-4 w-4 text-primary" /> : <User className="h-4 w-4 text-primary" />}
+                         {senderName}
+                       </p>
                        <p className="text-sm font-medium text-slate-500">{user?.email}</p>
+                       <Badge variant="secondary" className="text-[8px] h-4 px-1.5 font-bold bg-slate-100 text-slate-500 border-none uppercase mt-1">
+                         {senderType} Entity
+                       </Badge>
                     </div>
                  </div>
                  <div className="space-y-4">

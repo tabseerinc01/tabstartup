@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useFirestore, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { 
   Dialog, 
   DialogContent, 
@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, FileText, Hash, Banknote, Trash2, Package, Smartphone } from 'lucide-react';
+import { Loader2, Plus, FileText, Hash, Banknote, Trash2, Package, Smartphone, Building2, User } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
 const STATUSES = ["Draft", "Sent", "Paid", "Overdue", "Cancelled"];
@@ -54,13 +54,15 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [startupName, setStartupName] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   
   const [formData, setFormData] = useState({
     invoiceNumber: `INV-${Math.floor(1000 + Math.random() * 9000)}`,
     contactId: '',
     title: '',
-    productType: 'Digital',
+    productType: 'Digital' as 'Digital' | 'Physical',
+    billFromType: 'Personal' as 'Personal' | 'Startup',
     currency: 'USD',
     status: 'Draft',
     description: '',
@@ -87,6 +89,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
           contactId: editingInvoice.contactId || '',
           title: editingInvoice.title || '',
           productType: editingInvoice.productType || 'Digital',
+          billFromType: editingInvoice.billFromType || 'Personal',
           currency: editingInvoice.currency || 'USD',
           status: editingInvoice.status || 'Draft',
           description: editingInvoice.description || '',
@@ -111,17 +114,24 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
   }, [isOpen, editingInvoice, isInitialized, initialData]);
 
   useEffect(() => {
-    async function loadContacts() {
+    async function loadWorkspaceData() {
       if (!firestore || !user?.uid || !isOpen) return;
       try {
-        const q = query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid));
-        const snap = await getDocs(q);
-        setContacts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const [contactsSnap, startupSnap] = await Promise.all([
+          getDocs(query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid))),
+          getDoc(doc(firestore, 'startups', user.uid))
+        ]);
+        
+        setContacts(contactsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        
+        if (startupSnap.exists()) {
+          setStartupName(startupSnap.data().name);
+        }
       } catch (e) {
-        console.error("Error loading contacts for invoice:", e);
+        console.error("Error loading workspace data for invoice:", e);
       }
     }
-    loadContacts();
+    loadWorkspaceData();
   }, [firestore, user?.uid, isOpen]);
 
   const addItem = () => {
@@ -153,9 +163,15 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
     setIsSaving(true);
     const selectedContact = contacts.find(c => c.id === formData.contactId);
     
+    // Determine bill from name
+    const billFromName = formData.billFromType === 'Startup' && startupName 
+      ? startupName 
+      : (user.displayName || user.email?.split('@')[0] || 'Member');
+
     const invoiceData = {
       ...formData,
-      items: items.map(({ id, ...rest }) => rest), // Remove internal UI IDs
+      billFromName,
+      items: items.map(({ id, ...rest }) => rest),
       amount: totalAmount,
       contactName: selectedContact?.contactName || 'Private Client',
       ownerUid: user.uid,
@@ -198,38 +214,83 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
           <DialogTitle className="text-2xl font-black">
             {editingInvoice ? 'Update Invoice' : 'Create Invoice'}
           </DialogTitle>
-          <DialogDescription>Generate a billing document with detailed items.</DialogDescription>
+          <DialogDescription>Generate a billing document with detailed items and sender info.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-6 py-4">
-          <div className="space-y-4">
-            <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Product Categorization</Label>
-            <RadioGroup 
-              value={formData.productType} 
-              onValueChange={v => setFormData({...formData, productType: v})}
-              className="grid grid-cols-2 gap-4"
-            >
-              <div>
-                <RadioGroupItem value="Digital" id="digital" className="peer sr-only" />
-                <Label
-                  htmlFor="digital"
-                  className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all"
-                >
-                  <Smartphone className="mb-2 h-6 w-6" />
-                  <span className="text-xs font-bold uppercase tracking-tight">Digital Product</span>
-                </Label>
-              </div>
-              <div>
-                <RadioGroupItem value="Physical" id="physical" className="peer sr-only" />
-                <Label
-                  htmlFor="physical"
-                  className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all"
-                >
-                  <Package className="mb-2 h-6 w-6" />
-                  <span className="text-xs font-bold uppercase tracking-tight">Physical Product</span>
-                </Label>
-              </div>
-            </RadioGroup>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Left Column: Product Info */}
+            <div className="space-y-4">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Delivery Logic</Label>
+              <RadioGroup 
+                value={formData.productType} 
+                onValueChange={v => setFormData({...formData, productType: v as 'Digital' | 'Physical'})}
+                className="grid grid-cols-2 gap-4"
+              >
+                <div>
+                  <RadioGroupItem value="Digital" id="digital" className="peer sr-only" />
+                  <Label
+                    htmlFor="digital"
+                    className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20"
+                  >
+                    <Smartphone className="mb-1 h-5 w-5" />
+                    <span className="text-[10px] font-bold uppercase tracking-tight">Digital</span>
+                  </Label>
+                </div>
+                <div>
+                  <RadioGroupItem value="Physical" id="physical" className="peer sr-only" />
+                  <Label
+                    htmlFor="physical"
+                    className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20"
+                  >
+                    <Package className="mb-1 h-5 w-5" />
+                    <span className="text-[10px] font-bold uppercase tracking-tight">Physical</span>
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {/* Right Column: Bill From Selection */}
+            <div className="space-y-4">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Bill From (Sender)</Label>
+              <RadioGroup 
+                value={formData.billFromType} 
+                onValueChange={v => setFormData({...formData, billFromType: v as 'Personal' | 'Startup'})}
+                className="grid grid-cols-2 gap-4"
+              >
+                <div>
+                  <RadioGroupItem value="Personal" id="bill-personal" className="peer sr-only" />
+                  <Label
+                    htmlFor="bill-personal"
+                    className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20"
+                  >
+                    <User className="mb-1 h-5 w-5" />
+                    <span className="text-[10px] font-bold uppercase tracking-tight">Personal</span>
+                  </Label>
+                </div>
+                <div>
+                  <RadioGroupItem 
+                    value="Startup" 
+                    id="bill-startup" 
+                    className="peer sr-only" 
+                    disabled={!startupName}
+                  />
+                  <Label
+                    htmlFor="bill-startup"
+                    className={`flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20 ${!startupName ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}
+                  >
+                    <Building2 className="mb-1 h-5 w-5" />
+                    <span className="text-[10px] font-bold uppercase tracking-tight">Startup</span>
+                  </Label>
+                </div>
+              </RadioGroup>
+              {startupName && formData.billFromType === 'Startup' && (
+                <p className="text-[10px] font-bold text-slate-400 italic">Issuing as: {startupName}</p>
+              )}
+            </div>
           </div>
+
+          <Separator className="bg-slate-100" />
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
