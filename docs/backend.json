@@ -96,6 +96,15 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["ownerUid", "title", "status", "priority", "createdAt", "updatedAt"]
+    },
+    "TaskActivity": {
+      "title": "TaskActivity",
+      "type": "object",
+      "description": "A log of changes to a task.",
+      "properties": {
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "auth": {
@@ -126,6 +135,10 @@
       {
         "path": "/tasks/{taskId}",
         "definition": { "entityName": "Task", "schema": { "$ref": "#/backend/entities/Task" }, "description": "Private workspace tasks." }
+      },
+      {
+        "path": "/tasks/{taskId}/activities/{activityId}",
+        "definition": { "entityName": "TaskActivity", "schema": { "$ref": "#/backend/entities/TaskActivity" }, "description": "History of changes for a task." }
       }
     ]
   }
