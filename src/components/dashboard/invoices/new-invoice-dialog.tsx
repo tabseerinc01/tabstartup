@@ -28,6 +28,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, FileText, Hash, Banknote, Trash2, Package, Smartphone, Building2, User, Gavel } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useRouter } from 'next/navigation';
 
 const STATUSES = ["Draft", "Sent", "Paid", "Overdue", "Cancelled"];
 const CURRENCIES = ["USD", "BDT", "EUR", "GBP"];
@@ -49,6 +50,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const router = useRouter();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -124,7 +126,6 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
         
         setContacts(contactsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         
-        // Check for startup in a separate collection or field
         const startupDataSnap = await getDoc(doc(firestore, 'startups', user.uid));
         if (startupDataSnap.exists()) {
           setStartupName(startupDataSnap.data().name);
@@ -184,12 +185,16 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
       if (editingInvoice) {
         await updateDoc(doc(firestore, 'invoices', editingInvoice.id), invoiceData);
         toast({ title: "Invoice Updated" });
+        setIsOpen(false);
+        onSuccess?.();
       } else {
-        await addDoc(collection(firestore, 'invoices'), invoiceData);
+        const docRef = await addDoc(collection(firestore, 'invoices'), invoiceData);
         toast({ title: "Invoice Created" });
+        setIsOpen(false);
+        onSuccess?.();
+        // Redirect to details so user can download PDF
+        router.push(`/dashboard/invoices/${docRef.id}`);
       }
-      setIsOpen(false);
-      onSuccess?.();
     } catch (error: any) {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: editingInvoice ? `invoices/${editingInvoice.id}` : 'invoices',

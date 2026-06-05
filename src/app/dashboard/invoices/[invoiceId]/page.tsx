@@ -22,7 +22,8 @@ import {
   Building2,
   User,
   Gavel,
-  Banknote
+  Banknote,
+  Download
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -78,7 +79,7 @@ export default function InvoiceDetailsPage() {
       })
       .catch(err => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: `invoices/${invoiceId}`,
+          path: `invoice/${invoiceId}`,
           operation: 'delete'
         }));
         setIsDeleting(false);
@@ -86,7 +87,16 @@ export default function InvoiceDetailsPage() {
   };
 
   const handlePrint = () => {
+    if (!invoice) return;
+    // Set dynamic document title for a professional filename when saving as PDF
+    const originalTitle = document.title;
+    const sanitizedContact = invoice.contactName.replace(/[^a-z0-9]/gi, '_');
+    document.title = `Invoice_${invoice.invoiceNumber}_${sanitizedContact}`;
+    
     window.print();
+    
+    // Restore title
+    document.title = originalTitle;
   };
 
   if (isLoading || !invoice) {
@@ -131,8 +141,8 @@ export default function InvoiceDetailsPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" className="rounded-xl h-11 gap-2 font-bold border-slate-200" onClick={handlePrint}>
-            <Printer className="h-4 w-4" /> Print / PDF
+          <Button variant="default" className="rounded-xl h-11 gap-2 font-bold shadow-lg shadow-primary/20" onClick={handlePrint}>
+            <Download className="h-4 w-4" /> Download PDF
           </Button>
           <NewInvoiceDialog 
             editingInvoice={invoice} 
