@@ -43,6 +43,7 @@ export default function InvoiceDetailsPage() {
   const { toast } = useToast();
 
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const invoiceRef = useMemoFirebase(() => {
     if (!firestore || !invoiceId) return null;
@@ -88,15 +89,21 @@ export default function InvoiceDetailsPage() {
 
   const handlePrint = () => {
     if (!invoice) return;
+    
+    setIsPrinting(true);
+    toast({ title: "Preparing Document", description: "Opening print dialog. Select 'Save as PDF' to download." });
+
     // Set dynamic document title for a professional filename when saving as PDF
     const originalTitle = document.title;
     const sanitizedContact = invoice.contactName.replace(/[^a-z0-9]/gi, '_');
     document.title = `Invoice_${invoice.invoiceNumber}_${sanitizedContact}`;
     
-    window.print();
-    
-    // Restore title
-    document.title = originalTitle;
+    // Small delay to ensure the title update and toast are visible
+    setTimeout(() => {
+      window.print();
+      document.title = originalTitle;
+      setIsPrinting(false);
+    }, 500);
   };
 
   if (isLoading || !invoice) {
@@ -141,8 +148,14 @@ export default function InvoiceDetailsPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="default" className="rounded-xl h-11 gap-2 font-bold shadow-lg shadow-primary/20" onClick={handlePrint}>
-            <Download className="h-4 w-4" /> Download PDF
+          <Button 
+            variant="default" 
+            className="rounded-xl h-11 gap-2 font-bold shadow-lg shadow-primary/20" 
+            onClick={handlePrint}
+            disabled={isPrinting}
+          >
+            {isPrinting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Download PDF
           </Button>
           <NewInvoiceDialog 
             editingInvoice={invoice} 
