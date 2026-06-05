@@ -31,7 +31,15 @@ import { createNotification } from '@/lib/notifications';
 const STATUSES = ["Pending", "In Progress", "Completed"];
 const PRIORITIES = ["Low", "Medium", "High"];
 
-export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }: { editingTask?: any, onSuccess?: () => void, trigger?: React.ReactNode, initialDealId?: string }) {
+interface NewTaskDialogProps {
+  editingTask?: any;
+  onSuccess?: () => void;
+  trigger?: React.ReactNode;
+  initialDealId?: string;
+  initialContactId?: string;
+}
+
+export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, initialContactId }: NewTaskDialogProps) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -46,7 +54,7 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
     title: '',
     description: '',
     dealId: initialDealId || '',
-    contactId: '',
+    contactId: initialContactId || '',
     status: 'Pending',
     priority: 'Medium',
     dueDate: ''
@@ -74,7 +82,7 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
           title: '',
           description: '',
           dealId: initialDealId || '',
-          contactId: '',
+          contactId: initialContactId || '',
           status: 'Pending',
           priority: 'Medium',
           dueDate: ''
@@ -82,7 +90,7 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId }
       }
       setIsInitialized(true);
     }
-  }, [isOpen, editingTask, isInitialized, initialDealId]);
+  }, [isOpen, editingTask, isInitialized, initialDealId, initialContactId]);
 
   useEffect(() => {
     async function loadWorkspaceData() {

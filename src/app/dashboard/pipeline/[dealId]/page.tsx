@@ -399,11 +399,15 @@ export default function DealDetailsPage() {
                  <h3 className="text-lg font-black flex items-center gap-2">
                     <CheckSquare className="h-5 w-5 text-primary" /> Tasks
                  </h3>
-                 <NewTaskDialog initialDealId={deal.id as string} trigger={
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-primary hover:bg-primary/5">
-                       <Plus className="h-4 w-4" />
-                    </Button>
-                 } />
+                 <NewTaskDialog 
+                    initialDealId={deal.id as string} 
+                    initialContactId={deal.contactId as string}
+                    trigger={
+                       <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-primary hover:bg-primary/5">
+                          <Plus className="h-4 w-4" />
+                       </Button>
+                    } 
+                 />
               </div>
               
               <div className="space-y-3">
