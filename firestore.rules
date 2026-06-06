@@ -37,7 +37,8 @@ service cloud.firestore {
     }
 
     match /invoices/{invoiceId} {
-      allow get: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      // Allow public GET for sharing, but list/create/update remains private
+      allow get: if true;
       allow list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());

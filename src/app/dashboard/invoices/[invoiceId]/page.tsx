@@ -23,13 +23,15 @@ import {
   User,
   Gavel,
   Banknote,
-  Download
+  Download,
+  Share2
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { NewInvoiceDialog } from '@/components/dashboard/invoices/new-invoice-dialog';
+import { ShareInvoiceDialog } from '@/components/dashboard/invoices/share-invoice-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -99,14 +101,11 @@ export default function InvoiceDetailsPage() {
     
     document.title = newTitle;
     
-    // We use a very small timeout to let the browser process the title change
+    // Direct trigger for modern browsers
     setTimeout(() => {
       window.print();
-      // Restore title after a short delay to ensure print dialog caught the new one
-      setTimeout(() => {
-        document.title = originalTitle;
-        setIsPrinting(false);
-      }, 1000);
+      document.title = originalTitle;
+      setIsPrinting(false);
     }, 50);
   };
 
@@ -152,6 +151,7 @@ export default function InvoiceDetailsPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <ShareInvoiceDialog invoice={invoice} />
           <Button 
             variant="default" 
             className="rounded-xl h-11 gap-2 font-bold shadow-lg shadow-primary/20" 
