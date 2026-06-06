@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, ArrowLeft, ArrowRight, MapPin, Globe, Briefcase, TrendingUp, Linkedin, CheckCircle2, Mail, Target, Zap, Users, Rocket, Send, Clock, Check } from 'lucide-react';
 import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
 
 export default function InvestorPublicProfilePage() {
