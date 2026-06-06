@@ -14,43 +14,48 @@ service cloud.firestore {
       );
     }
 
+    // Helper: Check ownership of parent records for sub-collections
+    function isOwnerOfDeal(dealId) {
+      return request.auth != null && (get(/databases/$(database)/documents/deals/$(dealId)).data.ownerUid == request.auth.uid);
+    }
+    
+    function isOwnerOfTask(taskId) {
+      return request.auth != null && (get(/databases/$(database)/documents/tasks/$(taskId)).data.ownerUid == request.auth.uid);
+    }
+
     match /users/{userId} {
       allow read: if true;
       allow write: if request.auth != null && (request.auth.uid == userId || isAdmin());
     }
 
     match /contacts/{contactId} {
-      allow get: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
-      allow list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow get, list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
     }
     
     match /deals/{dealId} {
-      allow get: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
-      allow list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow get, list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
 
-      match /notes/{noteId} { allow read, write: if request.auth != null; }
-      match /activities/{activityId} { allow read, write: if request.auth != null; }
+      match /notes/{noteId} { allow read, write: if request.auth != null && (isOwnerOfDeal(dealId) || isAdmin()); }
+      match /activities/{activityId} { allow read, write: if request.auth != null && (isOwnerOfDeal(dealId) || isAdmin()); }
     }
 
     match /invoices/{invoiceId} {
-      // Allow public GET for sharing, but list/create/update remains private
-      allow get: if true;
+      allow get: if true; // Public view for shared links
       allow list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
     }
 
     match /tasks/{taskId} {
-      allow get: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
-      allow list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow get, list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
 
-      match /activities/{activityId} { allow read, write: if request.auth != null; }
+      match /activities/{activityId} { allow read, write: if request.auth != null && (isOwnerOfTask(taskId) || isAdmin()); }
     }
 
     match /connections/{connectionId} {

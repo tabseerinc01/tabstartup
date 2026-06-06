@@ -59,7 +59,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
   const [isInitialized, setIsInitialized] = useState(false);
   
   const [formData, setFormData] = useState({
-    invoiceNumber: `INV-${Math.floor(1000 + Math.random() * 9000)}`,
+    invoiceNumber: '',
     contactId: '',
     productType: 'Digital' as 'Digital' | 'Physical',
     billFromType: 'Personal' as 'Personal' | 'Startup',
@@ -68,7 +68,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
     description: '',
     paymentInstructions: '',
     termsAndConditions: '',
-    issueDate: new Date().toISOString().split('T')[0],
+    issueDate: '',
     dueDate: ''
   });
 
@@ -76,7 +76,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
     { id: '1', description: '', quantity: 1, unitPrice: 0, total: 0 }
   ]);
 
-  const totalAmount = items.reduce((acc, item) => acc + (item.total || 0), 0);
+  const totalAmount = items.reduce((acc, item) => acc + (parseFloat(item.total) || 0), 0);
 
   useEffect(() => {
     if (!isOpen) {
@@ -100,16 +100,35 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
           dueDate: editingInvoice.dueDate || ''
         });
         if (editingInvoice.items) {
-          setItems(editingInvoice.items.map((it: any, idx: number) => ({ ...it, id: idx.toString() })));
+          setItems(editingInvoice.items.map((it: any, idx: number) => ({ 
+            ...it, 
+            id: idx.toString(),
+            total: (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0)
+          })));
         }
-      } else if (initialData) {
-        setFormData(prev => ({
-          ...prev,
-          contactId: initialData.contactId || '',
-          currency: initialData.currency || 'USD',
-          description: initialData.description || ''
-        }));
-        setItems([{ id: '1', description: initialData.description || '', quantity: 1, unitPrice: initialData.amount || 0, total: initialData.amount || 0 }]);
+      } else {
+        setFormData({
+          invoiceNumber: `INV-${Math.floor(1000 + Math.random() * 9000)}`,
+          contactId: initialData?.contactId || '',
+          productType: 'Digital',
+          billFromType: 'Personal',
+          currency: initialData?.currency || 'USD',
+          status: 'Draft',
+          description: initialData?.description || '',
+          paymentInstructions: '',
+          termsAndConditions: '',
+          issueDate: new Date().toISOString().split('T')[0],
+          dueDate: ''
+        });
+        setItems([
+          { 
+            id: '1', 
+            description: initialData?.description || '', 
+            quantity: 1, 
+            unitPrice: initialData?.amount || 0, 
+            total: initialData?.amount || 0 
+          }
+        ]);
       }
       setIsInitialized(true);
     }
@@ -119,11 +138,8 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
     async function loadWorkspaceData() {
       if (!firestore || !user?.uid || !isOpen) return;
       try {
-        const [contactsSnap, startupSnap] = await Promise.all([
-          getDocs(query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid))),
-          getDoc(doc(firestore, 'users', user.uid))
-        ]);
-        
+        const contactsQ = query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid));
+        const contactsSnap = await getDocs(contactsQ);
         setContacts(contactsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         
         const startupDataSnap = await getDoc(doc(firestore, 'startups', user.uid));
@@ -150,9 +166,9 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
     setItems(items.map(item => {
       if (item.id === id) {
         const updated = { ...item, [field]: value };
-        if (field === 'quantity' || field === 'unitPrice') {
-          updated.total = (parseFloat(updated.quantity) || 0) * (parseFloat(updated.unitPrice) || 0);
-        }
+        const q = parseFloat(updated.quantity) || 0;
+        const p = parseFloat(updated.unitPrice) || 0;
+        updated.total = q * p;
         return updated;
       }
       return item;
@@ -173,9 +189,14 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
     const invoiceData = {
       ...formData,
       billFromName,
-      items: items.map(({ id, ...rest }) => rest),
+      items: items.map(({ id, ...rest }) => ({
+        ...rest,
+        quantity: parseFloat(rest.quantity) || 0,
+        unitPrice: parseFloat(rest.unitPrice) || 0,
+        total: parseFloat(rest.total) || 0
+      })),
       amount: totalAmount,
-      contactName: selectedContact?.contactName || 'Private Client',
+      contactName: selectedContact?.contactName || initialData?.contactName || 'Private Client',
       ownerUid: user.uid,
       updatedAt: serverTimestamp(),
       ...(editingInvoice ? {} : { createdAt: serverTimestamp() })
@@ -192,7 +213,6 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
         toast({ title: "Invoice Created" });
         setIsOpen(false);
         onSuccess?.();
-        // Redirect to details so user can download PDF
         router.push(`/dashboard/invoices/${docRef.id}`);
       }
     } catch (error: any) {

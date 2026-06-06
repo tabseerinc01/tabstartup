@@ -69,49 +69,50 @@ export default function DashboardOverviewPage() {
 
   const [profile, setProfile] = useState<any>(null);
   
-  // Real-time Collections
+  // Real-time Collections with stable queries
   const tasksQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: allTasks } = useCollection(tasksQ);
+  const { data: allTasks, isLoading: isTasksLoading } = useCollection(tasksQ);
 
   const dealsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: rawDeals } = useCollection(dealsQ);
+  const { data: rawDeals, isLoading: isDealsLoading } = useCollection(dealsQ);
 
   const contactsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: rawContacts } = useCollection(contactsQ);
+  const { data: rawContacts, isLoading: isContactsLoading } = useCollection(contactsQ);
 
   const invoicesQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: rawInvoices } = useCollection(invoicesQ);
+  const { data: rawInvoices, isLoading: isInvoicesLoading } = useCollection(invoicesQ);
 
   // Financial Stats Calculation
   const stats = useMemo(() => {
     const dealsList = rawDeals || [];
     const tasksList = allTasks || [];
     const invoicesList = rawInvoices || [];
+    const contactsList = rawContacts || [];
     
     const activeDeals = dealsList.filter(d => !['Won', 'Lost'].includes(d.stage));
     const paidInvoices = invoicesList.filter(i => i.status === 'Paid');
     const outstandingInvoices = invoicesList.filter(i => !['Paid', 'Cancelled', 'Draft'].includes(i.status));
     
-    const pipelineValue = dealsList.reduce((acc, d) => acc + (d.value || 0), 0);
-    const totalRevenue = paidInvoices.reduce((acc, i) => acc + (i.amount || 0), 0);
-    const outstandingValue = outstandingInvoices.reduce((acc, i) => acc + (i.amount || 0), 0);
+    const pipelineValue = dealsList.reduce((acc, d) => acc + (parseFloat(d.value) || 0), 0);
+    const totalRevenue = paidInvoices.reduce((acc, i) => acc + (parseFloat(i.amount) || 0), 0);
+    const outstandingValue = outstandingInvoices.reduce((acc, i) => acc + (parseFloat(i.amount) || 0), 0);
     
     const pendingTasks = tasksList.filter(t => t.status !== 'Completed');
     
     return {
-      totalContacts: (rawContacts || []).length,
+      totalContacts: contactsList.length,
       activeDeals: activeDeals.length,
       pipelineValue,
       totalRevenue,
@@ -140,10 +141,15 @@ export default function DashboardOverviewPage() {
     checkAdmin();
   }, [firestore, user?.uid]);
 
-  if (isUserLoading) {
+  const isLoading = isUserLoading || isTasksLoading || isDealsLoading || isContactsLoading || isInvoicesLoading;
+
+  if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
+      <div className="flex h-full min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
+          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Synchronizing Workspace...</p>
+        </div>
       </div>
     );
   }
@@ -162,9 +168,14 @@ export default function DashboardOverviewPage() {
           <h1 className="text-4xl font-black tracking-tight text-slate-900">Dashboard</h1>
           <p className="text-slate-500 font-medium mt-1">Real-time summary of your startup engine.</p>
         </div>
-        <Button size="sm" asChild className="rounded-xl font-bold h-10 px-5 shadow-lg shadow-primary/20">
-          <Link href="/dashboard/invoices">Manage Invoices</Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild className="rounded-xl font-bold h-10 px-5 border-slate-200">
+            <Link href="/dashboard/tasks">View Tasks</Link>
+          </Button>
+          <Button asChild className="rounded-xl font-bold h-10 px-5 shadow-lg shadow-primary/20">
+            <Link href="/dashboard/invoices">Manage Invoices</Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -193,56 +204,56 @@ export default function DashboardOverviewPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
            <div className="grid gap-6 md:grid-cols-2">
-              <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
+              <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100 h-full flex flex-col">
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg font-black flex items-center gap-2">
                       <LayoutGrid className="h-5 w-5 text-primary" /> Active Deals
                     </CardTitle>
-                    <Button variant="ghost" size="sm" asChild className="h-8 text-[10px] font-bold uppercase tracking-widest text-primary">
+                    <Button variant="ghost" size="sm" asChild className="h-8 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/5">
                       <Link href="/dashboard/pipeline">Pipeline</Link>
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-3 flex-1">
                   {rawDeals && rawDeals.length > 0 ? (
                     rawDeals.slice(0, 3).map(deal => (
                       <Link key={deal.id} href={`/dashboard/pipeline/${deal.id}`}>
                         <div className="p-3 rounded-xl bg-slate-50 ring-1 ring-slate-100 hover:ring-primary/20 transition-all flex items-center justify-between group mb-2">
                           <div className="min-w-0">
                             <p className="text-xs font-black text-slate-800 truncate group-hover:text-primary transition-colors">{deal.title}</p>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">{deal.contactName}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">{deal.contactName || 'Unassigned'}</p>
                           </div>
                           <Badge variant="outline" className="h-5 px-1.5 text-[8px] font-black bg-white border-slate-200">{deal.stage}</Badge>
                         </div>
                       </Link>
                     ))
                   ) : (
-                    <div className="py-8 text-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
-                       <p className="text-[10px] font-bold text-slate-400 uppercase italic">No active deals</p>
+                    <div className="h-32 flex items-center justify-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
+                       <p className="text-[10px] font-bold text-slate-300 uppercase italic">No active deals found</p>
                     </div>
                   )}
                 </CardContent>
               </Card>
 
-              <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
+              <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100 h-full flex flex-col">
                 <CardHeader className="pb-4">
                    <div className="flex items-center justify-between">
                       <CardTitle className="text-lg font-black flex items-center gap-2">
                         <FileText className="h-5 w-5 text-primary" /> Recent Invoices
                       </CardTitle>
-                      <Button variant="ghost" size="sm" asChild className="h-8 text-[10px] font-bold uppercase tracking-widest text-primary">
+                      <Button variant="ghost" size="sm" asChild className="h-8 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/5">
                         <Link href="/dashboard/invoices">All Invoices</Link>
                       </Button>
                    </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-3 flex-1">
                   {rawInvoices && rawInvoices.length > 0 ? (
                     rawInvoices.slice(0, 3).map(inv => (
                       <Link key={inv.id} href={`/dashboard/invoices/${inv.id}`}>
                         <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 ring-1 ring-slate-100 hover:ring-primary/20 transition-all mb-2">
                           <div className="min-w-0">
-                             <span className="text-xs font-bold text-slate-700 truncate">{inv.title}</span>
+                             <span className="text-xs font-bold text-slate-700 truncate">Invoice for {inv.contactName}</span>
                              <p className="text-[8px] font-black text-primary uppercase">#{inv.invoiceNumber}</p>
                           </div>
                           <Badge variant="outline" className={cn(
@@ -253,8 +264,8 @@ export default function DashboardOverviewPage() {
                       </Link>
                     ))
                   ) : (
-                    <div className="py-8 text-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
-                       <p className="text-[10px] font-bold text-slate-400 uppercase italic">No invoices issued</p>
+                    <div className="h-32 flex items-center justify-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
+                       <p className="text-[10px] font-bold text-slate-300 uppercase italic">No invoices issued yet</p>
                     </div>
                   )}
                 </CardContent>
@@ -266,37 +277,37 @@ export default function DashboardOverviewPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="text-xl font-black flex items-center gap-3">
-                      <Contact2 className="h-5 w-5 text-primary" /> Network
+                      <Contact2 className="h-5 w-5 text-primary" /> Workspace Network
                     </CardTitle>
-                    <CardDescription className="text-slate-400 font-medium">Lately added professional network members.</CardDescription>
+                    <CardDescription className="text-slate-400 font-medium">Recently added professional network records.</CardDescription>
                   </div>
-                  <Button variant="outline" asChild className="rounded-xl h-10 border-slate-200 font-bold text-xs">
-                    <Link href="/dashboard/contacts">Contacts</Link>
+                  <Button variant="outline" asChild className="rounded-xl h-10 border-slate-200 font-bold text-xs hover:bg-slate-50">
+                    <Link href="/dashboard/contacts">Directory</Link>
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="px-8 pb-10">
-                <div className="grid gap-4 md:grid-cols-2">
-                  {rawContacts && rawContacts.length > 0 ? (
-                    rawContacts.slice(0, 4).map(c => (
+                {rawContacts && rawContacts.length > 0 ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {rawContacts.slice(0, 4).map(c => (
                       <Link key={c.id} href={`/dashboard/contacts/${c.id}`}>
                         <div className="group p-4 rounded-2xl bg-slate-50 ring-1 ring-slate-100 hover:ring-primary/20 transition-all flex items-center gap-4">
                            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-black">
-                              {c.contactName.charAt(0)}
+                              {c.contactName?.charAt(0)}
                            </div>
                            <div className="min-w-0">
                               <p className="font-bold text-slate-900 group-hover:text-primary transition-colors truncate">{c.contactName}</p>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase">{c.companyName || 'Private'}</p>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase truncate">{c.companyName || 'Private Contact'}</p>
                            </div>
                         </div>
                       </Link>
-                    ))
-                  ) : (
-                    <div className="col-span-2 py-12 text-center bg-slate-50/50 rounded-[2rem] border-2 border-dashed border-slate-100">
-                       <p className="text-sm font-bold text-slate-400 uppercase">Empty Workspace</p>
-                    </div>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-12 text-center bg-slate-50/50 rounded-[2rem] border-2 border-dashed border-slate-100">
+                     <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No contact records established</p>
+                  </div>
+                )}
               </CardContent>
            </Card>
         </div>
@@ -306,9 +317,9 @@ export default function DashboardOverviewPage() {
             <CardHeader className="pb-4">
               <div className="flex items-center gap-2 mb-2">
                  <div className="h-1 w-6 bg-primary rounded-full" />
-                 <span className="text-[9px] font-black uppercase tracking-[0.2em] text-primary">Quick Actions</span>
+                 <span className="text-[9px] font-black uppercase tracking-[0.2em] text-primary">Quick Control</span>
               </div>
-              <CardTitle className="text-lg font-black">Workspace Hub</CardTitle>
+              <CardTitle className="text-lg font-black">Workspace Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 pb-8">
               <Button variant="outline" className="w-full justify-start gap-3 h-12 rounded-xl bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold transition-all border-none" asChild>
@@ -326,20 +337,25 @@ export default function DashboardOverviewPage() {
 
           <Card className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 overflow-hidden">
              <CardHeader className="pb-2">
-               <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-400">Roadmap Stats</CardTitle>
+               <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-400">Workflow Stats</CardTitle>
              </CardHeader>
              <CardContent className="space-y-6 pb-6">
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-500">Tasks Pending</span>
+                      <span className="text-xs font-bold text-slate-500">Tasks Outstanding</span>
                       <span className="text-lg font-black text-slate-900">{stats.pendingTasks}</span>
                    </div>
                    <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                      <div className="h-full bg-primary" style={{ width: '45%' }} />
+                      {allTasks && allTasks.length > 0 && (
+                        <div 
+                          className="h-full bg-primary transition-all duration-1000" 
+                          style={{ width: `${Math.round(((allTasks.length - stats.pendingTasks) / allTasks.length) * 100)}%` }} 
+                        />
+                      )}
                    </div>
                 </div>
-                <p className="text-[10px] text-slate-500 leading-relaxed font-medium italic">
-                  Keep your workspace active to maintain growth velocity.
+                <p className="text-[10px] text-slate-400 leading-relaxed font-medium italic text-center px-2">
+                  "The momentum of your startup is measured by the frequency of your small wins."
                 </p>
              </CardContent>
           </Card>
