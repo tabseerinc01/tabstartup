@@ -53,7 +53,7 @@ export default function ConnectionsManagerPage() {
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
-  // 1. Unified Connections Queries (Simplified for max reliability)
+  // 1. Unified Connections Queries
   const incomingQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid));
@@ -84,7 +84,6 @@ export default function ConnectionsManagerPage() {
   const allConns = useMemo(() => {
     const rawConnections = [...(incoming || []), ...(outgoing || [])];
     
-    // Normalize legacy pitches
     const normalizedLegacy = [...(legacyIncoming || []), ...(legacyOutgoing || [])].map(p => ({
       id: p.id,
       initiatorUid: p.fromInvestorUid,
@@ -97,11 +96,8 @@ export default function ConnectionsManagerPage() {
     }));
 
     const combined = [...rawConnections, ...normalizedLegacy];
-    
-    // Deduplicate by ID
     const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
     
-    // Client-side Sort
     return unique.sort((a, b) => {
       const timeA = a.createdAt?.toMillis?.() || 0;
       const timeB = b.createdAt?.toMillis?.() || 0;
@@ -140,7 +136,7 @@ export default function ConnectionsManagerPage() {
       if (changed) setProfiles(newProfiles);
     }
     loadProfiles();
-  }, [firestore, allConns, user?.uid]);
+  }, [firestore, allConns, user?.uid, profiles]);
 
   const handleStatus = async (conn: any, status: 'accepted' | 'rejected') => {
     if (!firestore || !user || isActionLoading) return;
@@ -172,7 +168,7 @@ export default function ConnectionsManagerPage() {
           actorUid: user.uid,
           type: 'rejection',
           title: 'Request Declined',
-          message: `Your connection request to ${profiles[user.uid]?.fullName || 'a member'} was not accepted at this time.`,
+          message: `Your connection request was not accepted at this time.`,
           targetId: conn.id,
           targetType: 'user'
         });
@@ -399,6 +395,7 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
                           <MapPin className="h-4 w-4" /> {profile?.location || 'Remote Member'}
                         </div>
                       </div>
+                      
                       <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 space-y-4">
                          <div className="space-y-2">
                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Request Message</p>
@@ -407,6 +404,7 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
                            </p>
                          </div>
                       </div>
+
                       <div className="pt-2">
                         <Button className="w-full h-14 rounded-2xl font-black text-base shadow-xl" asChild>
                           <Link href={profile?.role === 'investor' || profile?.primaryRole === 'investor' ? `/investors/${otherUid}` : `/founders/${otherUid}`}>
