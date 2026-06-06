@@ -22,7 +22,8 @@ import {
   Contact2,
   LayoutGrid,
   CheckSquare,
-  FileText
+  FileText,
+  Bell
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -30,12 +31,14 @@ import { Button } from '@/components/ui/button';
 import { useAuth, initiateSignOut, useUser, useFirestore } from '@/firebase';
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Badge } from '@/components/ui/badge';
 
 interface SidebarItem {
   href: string;
   label: string;
   icon: any;
-  showBadge?: boolean;
+  badgeCount?: number;
+  showDot?: boolean;
   disabled?: boolean;
 }
 
@@ -53,7 +56,11 @@ export function DashboardSidebar({ className }: { className?: string }) {
   const firestore = useFirestore();
 
   const [profile, setProfile] = useState<any>(null);
-  const [hasPendingPitches, setHasPendingPitches] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState({
+    connections: 0,
+    messages: 0,
+    notifications: 0
+  });
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     workspace: true,
     discovery: true,
@@ -61,6 +68,7 @@ export function DashboardSidebar({ className }: { className?: string }) {
     account: true
   });
 
+  // Load profile data
   useEffect(() => {
     async function loadProfile() {
       if (!firestore || !user?.uid) return;
@@ -76,24 +84,38 @@ export function DashboardSidebar({ className }: { className?: string }) {
     loadProfile();
   }, [firestore, user?.uid]);
 
+  // Unified listener for unread notifications to drive sidebar badges
   useEffect(() => {
-    if (!firestore || !user?.uid || !profile) return;
-    
-    const roles = profile.roles || [profile.role] || [];
-    if (!roles.includes('founder')) return;
+    if (!firestore || !user?.uid) return;
 
     const q = query(
-      collection(firestore, 'connections'),
+      collection(firestore, 'notifications'),
       where('recipientUid', '==', user.uid),
-      where('status', '==', 'pending')
+      where('read', '==', false)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setHasPendingPitches(!snapshot.empty);
+      const counts = {
+        connections: 0,
+        messages: 0,
+        notifications: 0
+      };
+
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.type === 'message') {
+          counts.messages++;
+        } else if (['connection', 'investor_interest', 'cofounder_interest', 'pitch'].includes(data.type)) {
+          counts.connections++;
+        }
+        counts.notifications++;
+      });
+
+      setUnreadCounts(counts);
     });
 
     return () => unsubscribe();
-  }, [firestore, user?.uid, profile]);
+  }, [firestore, user?.uid]);
 
   const handleLogout = () => {
     initiateSignOut(auth);
@@ -112,7 +134,7 @@ export function DashboardSidebar({ className }: { className?: string }) {
       id: 'workspace',
       label: 'Workspace',
       items: [
-        { href: '/dashboard', label: 'Overview', icon: Home },
+        { href: '/dashboard', label: 'Overview', icon: Home, showDot: unreadCounts.notifications > 0 },
         { href: '/dashboard/contacts', label: 'Contacts', icon: Contact2 },
         { href: '/dashboard/pipeline', label: 'Pipeline', icon: LayoutGrid },
         { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare },
@@ -139,12 +161,17 @@ export function DashboardSidebar({ className }: { className?: string }) {
       label: 'Network',
       items: [
         { href: '/community', label: 'Community', icon: Globe },
-        { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
+        { 
+          href: '/dashboard/messages', 
+          label: 'Messages', 
+          icon: MessageSquare,
+          badgeCount: unreadCounts.messages
+        },
         { 
           href: '/dashboard/connections', 
           label: 'Connections', 
           icon: Users,
-          showBadge: hasPendingPitches 
+          badgeCount: unreadCounts.connections
         },
       ]
     },
@@ -195,17 +222,27 @@ export function DashboardSidebar({ className }: { className?: string }) {
                     item.disabled && "opacity-50 cursor-not-allowed"
                   )}
                 >
-                  <div className="flex items-center gap-3 relative">
-                    <item.icon className="h-4 w-4" />
-                    {item.label}
-                    {item.showBadge && (
-                      <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                  <div className="flex items-center gap-3 relative flex-1 min-w-0">
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                    {item.showDot && (
+                      <span className="absolute -top-0.5 -left-0.5 flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
                       </span>
                     )}
                   </div>
-                  {item.disabled && <span className="text-[8px] font-black uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Soon</span>}
+                  
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {item.badgeCount !== undefined && item.badgeCount > 0 && (
+                      <Badge variant="destructive" className="h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] font-black rounded-full border-none shadow-sm shadow-destructive/20">
+                        {item.badgeCount}
+                      </Badge>
+                    )}
+                    {item.disabled && (
+                      <span className="text-[8px] font-black uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Soon</span>
+                    )}
+                  </div>
                 </Link>
               ))}
             </CollapsibleContent>
