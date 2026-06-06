@@ -295,6 +295,10 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
   const avatarUrl = profile?.imageUrl || `https://picsum.photos/seed/${profile?.uid || conn.id}/200/200`;
   const otherUid = conn.initiatorUid === currentUserId ? conn.recipientUid : conn.initiatorUid;
   
+  // Determine profile link base
+  const roles = profile?.roles || (profile?.role ? [profile.role] : []) || [];
+  const profileLink = roles.includes('investor') ? `/investors/${otherUid}` : `/founders/${otherUid}`;
+
   const typeIcons = {
     investor: ShieldCheck,
     mentor: GraduationCap,
@@ -308,21 +312,25 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
     <Card className="border-none shadow-sm hover:shadow-xl transition-all duration-300 rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100 group">
       <CardContent className="p-8">
         <div className="flex items-start gap-6">
-          <Avatar className="h-20 w-20 rounded-3xl border-4 border-slate-50 shadow-lg">
-            <AvatarImage src={avatarUrl} className="object-cover" />
-            <AvatarFallback className="font-black text-xl bg-slate-100 text-slate-400">{name.charAt(0)}</AvatarFallback>
-          </Avatar>
+          <Link href={profileLink} className="shrink-0 hover:opacity-80 transition-opacity">
+            <Avatar className="h-20 w-20 rounded-3xl border-4 border-slate-50 shadow-lg">
+              <AvatarImage src={avatarUrl} className="object-cover" />
+              <AvatarFallback className="font-black text-xl bg-slate-100 text-slate-400">{name.charAt(0)}</AvatarFallback>
+            </Avatar>
+          </Link>
           
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <h4 className="text-xl font-black text-slate-900 truncate">{name}</h4>
+              <div className="min-w-0">
+                <Link href={profileLink}>
+                  <h4 className="text-xl font-black text-slate-900 truncate hover:text-primary transition-colors">{name}</h4>
+                </Link>
                 <div className="flex items-center gap-1.5 text-[10px] font-black text-primary uppercase tracking-[0.15em] mt-1">
                   <Icon className="h-3.5 w-3.5" /> {conn.type} {conn.isLegacy ? 'interest' : 'request'}
                 </div>
               </div>
               <Badge className={cn(
-                "rounded-lg px-3 py-0.5 text-[9px] font-black uppercase tracking-widest border-none",
+                "rounded-lg px-3 py-0.5 text-[9px] font-black uppercase tracking-widest border-none shrink-0",
                 conn.status === 'pending' ? "bg-amber-100 text-amber-700" :
                 conn.status === 'accepted' ? "bg-green-100 text-green-700" :
                 "bg-slate-100 text-slate-400"
@@ -407,7 +415,7 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
 
                       <div className="pt-2">
                         <Button className="w-full h-14 rounded-2xl font-black text-base shadow-xl" asChild>
-                          <Link href={profile?.role === 'investor' || profile?.primaryRole === 'investor' ? `/investors/${otherUid}` : `/founders/${otherUid}`}>
+                          <Link href={profileLink}>
                             View Full Public Profile <ArrowRight className="ml-2 h-5 w-5" />
                           </Link>
                         </Button>
