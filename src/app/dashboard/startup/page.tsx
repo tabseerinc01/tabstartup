@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { slugify } from '@/lib/utils';
 
 export default function StartupPage() {
   const { toast } = useToast();
@@ -99,10 +100,13 @@ export default function StartupPage() {
     setIsSaving(true);
     try {
       const tagsArray = startup.tags.split(',').map(t => t.trim()).filter(t => t !== '');
+      const slug = slugify(startup.name);
       
       const updateData = {
         ...startup,
         tags: tagsArray,
+        slug,
+        status: 'active', // Default to active when saved
         ownerUid: user.uid,
         updatedAt: serverTimestamp(),
         ...(startupData ? {} : { createdAt: serverTimestamp() })
@@ -128,7 +132,8 @@ export default function StartupPage() {
   };
 
   const copyListingLink = () => {
-    const url = `${window.location.origin}/startups/${user?.uid}`;
+    if (!startupData?.slug) return;
+    const url = `${window.location.origin}/startups/${startupData.slug}`;
     navigator.clipboard.writeText(url);
     toast({
       title: "Link Copied",

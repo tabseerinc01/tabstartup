@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "User": {
@@ -17,6 +16,24 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "fullName", "email", "createdAt", "updatedAt"]
+    },
+    "Startup": {
+      "title": "Startup",
+      "type": "object",
+      "description": "A venture profile listed on the platform.",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string", "description": "SEO friendly URL identifier." },
+        "shortDescription": { "type": "string" },
+        "industry": { "type": "string" },
+        "stage": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "hidden"] },
+        "featured": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "name", "slug", "status"]
     },
     "Contact": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -122,6 +139,10 @@
       {
         "path": "/users/{userId}",
         "definition": { "entityName": "User", "schema": { "$ref": "#/backend/entities/User" }, "description": "User profile data." }
+      },
+      {
+        "path": "/startups/{startupId}",
+        "definition": { "entityName": "Startup", "schema": { "$ref": "#/backend/entities/Startup" }, "description": "Venture listings." }
       },
       {
         "path": "/contacts/{contactId}",
