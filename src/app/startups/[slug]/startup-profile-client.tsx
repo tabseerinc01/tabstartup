@@ -7,7 +7,6 @@ import {
   doc, 
   collection, 
   addDoc, 
-  setDoc, 
   getDoc, 
   getDocs,
   query,
@@ -97,7 +96,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           return;
         }
 
-        // Check user session and profile for visibility rules
+        // Check user profile for visibility rules
         if (user?.uid) {
           const userSnap = await getDoc(doc(firestore, 'users', user.uid));
           if (userSnap.exists()) {
@@ -107,7 +106,8 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         }
 
         // Determine roles for visibility check
-        const isAdmin = currentUserProfile?.role === 'admin' || currentUserProfile?.role === 'super_admin' || currentUserProfile?.primaryRole === 'super_admin';
+        const role = currentUserProfile?.role || currentUserProfile?.primaryRole;
+        const isAdmin = role === 'admin' || role === 'super_admin';
         const isOwner = user?.uid === ownerUid;
         
         if (startupDoc.status === 'hidden' && !isOwner && !isAdmin) {
@@ -149,7 +149,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       }
     }
     loadData();
-  }, [firestore, slugOrId, user?.uid, router, currentUserProfile?.role]);
+  }, [firestore, slugOrId, user?.uid, router, currentUserProfile]);
 
   const handleExpressInterest = async () => {
     if (!user || !firestore || !startup || !currentUserProfile) {
