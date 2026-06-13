@@ -23,7 +23,8 @@ import {
   HandCoins,
   CheckCircle2,
   ChevronRight,
-  ArrowRight
+  ArrowRight,
+  FileText
 } from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
@@ -104,7 +105,6 @@ export default function StartupPage() {
     setIsSaving(true);
     try {
       const tagsArray = startup.tags.split(',').map(t => t.trim()).filter(t => t !== '');
-      // Ensure slug is always generated/updated from current name
       const slug = slugify(startup.name);
       
       const updateData = {
@@ -130,7 +130,6 @@ export default function StartupPage() {
   };
 
   const copyListingLink = () => {
-    // If slug is available in saved data, use it; otherwise fallback to UID
     const identifier = startupData?.slug || user?.uid;
     if (!identifier) return;
 
