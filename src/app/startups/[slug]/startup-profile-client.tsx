@@ -66,7 +66,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         let startupDoc: any = null;
         let ownerUid: string | null = null;
 
-        // 1. Try finding by SLUG
+        // 1. First, try finding by SLUG field
         const slugQuery = query(
           collection(firestore, 'startups'),
           where('slug', '==', slugOrId),
@@ -78,13 +78,13 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           startupDoc = { id: slugSnap.docs[0].id, ...slugSnap.docs[0].data() };
           ownerUid = startupDoc.ownerUid;
         } else {
-          // 2. Try finding by ID (Backward compatibility)
+          // 2. If not found by slug, try finding by Document ID (which is the UID)
           const idSnap = await getDoc(doc(firestore, 'startups', slugOrId));
           if (idSnap.exists()) {
             startupDoc = { id: idSnap.id, ...idSnap.data() };
             ownerUid = startupDoc.ownerUid;
             
-            // REDIRECT if ID was used but SLUG exists for better SEO
+            // If the document has a slug, redirect to the SEO-friendly URL
             if (startupDoc.slug && startupDoc.slug !== slugOrId) {
               router.replace(`/startups/${startupDoc.slug}`);
               return;
@@ -97,20 +97,18 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           return;
         }
 
-        // Load Current User Profile
-        let currentUserRole = 'user';
+        // Check user session and profile for visibility rules
         if (user?.uid) {
           const userSnap = await getDoc(doc(firestore, 'users', user.uid));
           if (userSnap.exists()) {
             const data = userSnap.data();
             setCurrentUserProfile(data);
-            currentUserRole = data.role || data.primaryRole || 'user';
           }
         }
 
-        // Visibility Check: If hidden, only owner or admin can see
+        // Determine roles for visibility check
+        const isAdmin = currentUserProfile?.role === 'admin' || currentUserProfile?.role === 'super_admin' || currentUserProfile?.primaryRole === 'super_admin';
         const isOwner = user?.uid === ownerUid;
-        const isAdmin = currentUserRole === 'admin' || currentUserRole === 'super_admin';
         
         if (startupDoc.status === 'hidden' && !isOwner && !isAdmin) {
           setIsHidden(true);
@@ -120,13 +118,14 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
 
         setStartup(startupDoc);
 
-        // Load Founder Data
+        // Load Founder Profile
         if (ownerUid) {
           const founderSnap = await getDoc(doc(firestore, 'users', ownerUid));
           if (founderSnap.exists()) {
             setFounder(founderSnap.data());
           }
 
+          // Check if current user (investor) has already expressed interest
           if (user?.uid) {
             const interestSnap = await getDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid));
             if (interestSnap.exists()) {
@@ -134,7 +133,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             }
           }
 
-          // Record view anonymously
+          // Record view (async)
           if (ownerUid !== user?.uid) {
             addDoc(collection(firestore, 'startups', ownerUid, 'views'), {
               startupId: ownerUid,
@@ -144,54 +143,44 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           }
         }
       } catch (error) {
-        console.error("Error loading startup data:", error);
+        console.error("Error loading startup profile data:", error);
       } finally {
         setIsLoading(false);
       }
     }
     loadData();
-  }, [firestore, slugOrId, user?.uid, router]);
+  }, [firestore, slugOrId, user?.uid, router, currentUserProfile?.role]);
 
   const handleExpressInterest = async () => {
     if (!user || !firestore || !startup || !currentUserProfile) {
-      toast({
-        title: "Login Required",
-        description: "Please sign in to express interest.",
-        variant: "destructive"
-      });
+      toast({ title: "Login Required", description: "Sign in to express interest.", variant: "destructive" });
       router.push('/login');
       return;
     }
 
     const rolesArr = (currentUserProfile.roles || (currentUserProfile.role ? [currentUserProfile.role] : ['user'])).filter(Boolean);
     if (!rolesArr.includes('investor')) {
-      toast({
-        title: "Investors Only",
-        description: "Only verified investors can express interest in startups.",
-        variant: "destructive"
-      });
+      toast({ title: "Investors Only", description: "Only verified investors can pitch to startups.", variant: "destructive" });
       return;
     }
 
     if (existingInterest || isSubmittingInterest) return;
 
     setIsSubmittingInterest(true);
-    try {
-      const ownerUid = startup.ownerUid;
-      const interestData = {
-        startupId: ownerUid,
-        investorId: user.uid,
-        investorName: currentUserProfile.fullName || user.displayName || "Anonymous Investor",
-        investorHeadline: currentUserProfile.headline || "Active Investor",
-        timestamp: serverTimestamp(),
-      };
+    const ownerUid = startup.ownerUid;
+    const interestData = {
+      startupId: ownerUid,
+      investorId: user.uid,
+      investorName: currentUserProfile.fullName || "Anonymous Investor",
+      timestamp: serverTimestamp(),
+    };
 
+    try {
       await setDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid), interestData);
       
       await addDoc(collection(firestore, 'pitches'), {
         fromInvestorUid: user.uid,
         toFounderUid: ownerUid,
-        message: `Expressed interest in ${startup.name}.`,
         status: 'pending',
         createdAt: serverTimestamp(),
       });
@@ -201,15 +190,15 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         actorUid: user.uid,
         type: 'investor_interest',
         title: 'Investor Interest',
-        message: `An investor showed interest in ${startup.name}.`,
+        message: `${currentUserProfile.fullName} showed interest in ${startup.name}.`,
         targetId: ownerUid,
         targetType: 'user'
       });
 
       setExistingInterest(interestData);
-      toast({ title: "Success", description: "Interest sent." });
+      toast({ title: "Interest Shared", description: "The founder has been notified." });
     } catch (error) {
-      console.error("Error saving interest:", error);
+      console.error("Error sharing interest:", error);
     } finally {
       setIsSubmittingInterest(false);
     }
@@ -218,10 +207,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   const copyListingLink = () => {
     const url = window.location.href;
     navigator.clipboard.writeText(url);
-    toast({
-      title: "Link Copied",
-      description: "Startup listing link copied to clipboard.",
-    });
+    toast({ title: "Link Copied", description: "You can now share this profile." });
   };
 
   if (isLoading) {
@@ -229,7 +215,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       <div className="flex min-h-screen flex-col">
         <PublicHeader />
         <main className="flex-1 items-center justify-center flex">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary opacity-20" />
         </main>
         <PublicFooter />
       </div>
@@ -241,14 +227,12 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       <div className="flex min-h-screen flex-col">
         <PublicHeader />
         <main className="flex-1 container mx-auto px-4 flex items-center justify-center text-center">
-          <div className="max-w-md space-y-6">
-            <div className="p-6 bg-amber-50 rounded-full w-24 h-24 mx-auto flex items-center justify-center border border-amber-100">
-               <AlertCircle className="h-12 w-12 text-amber-600" />
-            </div>
-            <h1 className="text-2xl font-bold">Listing Unavailable</h1>
-            <p className="text-slate-500">This listing is currently hidden for review.</p>
-            <Button variant="outline" asChild><Link href="/founders">Explore Others</Link></Button>
-          </div>
+          <Card className="max-w-md border-none shadow-2xl rounded-[3rem] p-12">
+            <AlertCircle className="h-16 w-16 text-amber-500 mx-auto mb-6" />
+            <h1 className="text-2xl font-black mb-2">Private Listing</h1>
+            <p className="text-slate-500 mb-8">This venture profile is currently hidden or under review.</p>
+            <Button asChild className="rounded-full px-8"><Link href="/founders">Explore Directory</Link></Button>
+          </Card>
         </main>
         <PublicFooter />
       </div>
@@ -259,71 +243,72 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     return (
       <div className="flex min-h-screen flex-col">
         <PublicHeader />
-        <main className="flex-1 flex flex-col items-center justify-center p-4">
-          <h1 className="text-2xl font-bold mb-4">Startup not found</h1>
-          <Button asChild><Link href="/founders">Browse Directory</Link></Button>
+        <main className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+           <div className="p-6 bg-slate-50 rounded-full mb-6">
+              <Rocket className="h-12 w-12 text-slate-200" />
+           </div>
+           <h1 className="text-3xl font-black text-slate-900 mb-2">Venture Not Found</h1>
+           <p className="text-slate-500 mb-8 max-w-sm">The startup you're looking for might have changed its name or the link is expired.</p>
+           <Button asChild className="rounded-full px-8"><Link href="/founders">Browse Founders</Link></Button>
         </main>
         <PublicFooter />
       </div>
     );
   }
 
-  const rolesArr = (currentUserProfile?.roles || (currentUserProfile?.role ? [currentUserProfile.role] : ['user'])).filter(Boolean);
-  const isInvestor = rolesArr.includes('investor');
   const isOwnStartup = user?.uid === startup.ownerUid;
-  const founderName = founder?.fullName || "Founder";
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
-      <main className="flex-1 container mx-auto px-4 py-12">
+      <main className="flex-1 container mx-auto px-4 py-12 md:py-20">
         <div className="max-w-6xl mx-auto space-y-8">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-             <Link href="/founders" className="hover:text-primary transition-colors">Directory</Link>
-             <span>/</span>
-             <span className="font-medium text-foreground">{startup.name}</span>
+             <Link href="/founders" className="hover:text-primary transition-colors font-bold uppercase tracking-widest text-[10px]">Ecosystem</Link>
+             <span className="opacity-30">/</span>
+             <span className="font-bold text-slate-900 uppercase tracking-widest text-[10px]">{startup.name}</span>
           </div>
 
-          <Card className="overflow-hidden border-none shadow-2xl rounded-[3rem] bg-background">
-            <div className="relative min-h-[16rem] bg-gradient-to-br from-primary/90 via-accent/90 to-primary/80">
-              <div className="relative p-8 md:p-12 text-white">
-                <div className="flex flex-col md:flex-row justify-between items-end gap-6">
-                  <div className="space-y-4 max-w-2xl">
+          <Card className="overflow-hidden border-none shadow-3xl rounded-[3rem] bg-background">
+            <div className="relative min-h-[18rem] bg-gradient-to-br from-primary via-accent to-primary/90">
+              <div className="relative p-8 md:p-16 text-white h-full flex flex-col justify-end">
+                <div className="flex flex-col md:flex-row justify-between items-end gap-8">
+                  <div className="space-y-6 max-w-2xl">
                     <div className="flex items-center gap-3 flex-wrap">
-                      <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight drop-shadow-sm">{startup.name}</h1>
-                      <Badge className="bg-white/20 hover:bg-white/30 text-white border-white/30 backdrop-blur-md px-4 py-1.5 rounded-xl text-sm">
+                      <h1 className="text-4xl md:text-6xl font-black tracking-tighter drop-shadow-xl">{startup.name}</h1>
+                      <Badge className="bg-white/20 hover:bg-white/30 text-white border-white/20 backdrop-blur-xl px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest">
                         {startup.stage} Stage
                       </Badge>
                       {startup.status === 'hidden' && (
-                        <Badge variant="destructive" className="rounded-xl px-4 py-1.5 flex items-center gap-1.5">
+                        <Badge variant="destructive" className="rounded-xl px-4 py-1.5 flex items-center gap-1.5 font-black text-[10px]">
                           <EyeOff className="h-3 w-3" /> PRIVATE VIEW
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xl md:text-2xl font-medium opacity-95 leading-relaxed italic">
-                      "{startup.shortDescription}"
+                    <p className="text-xl md:text-2xl font-medium opacity-90 leading-relaxed italic border-l-4 border-white/30 pl-6">
+                      "{startup.shortDescription || 'A revolutionary venture building the future.'}"
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-3 w-full md:w-auto">
-                    {isInvestor && !isOwnStartup && (
+                    {!isOwnStartup && (
                       <>
                         {existingInterest ? (
                           <Button disabled className="h-14 px-8 rounded-2xl bg-white/20 text-white border-white/10 backdrop-blur-md opacity-80">
-                            <Heart className="h-5 w-5 fill-white" /> Interest Sent
+                            <Heart className="h-5 w-5 fill-white mr-2" /> Interest Shared
                           </Button>
                         ) : (
                           <Button 
                             onClick={handleExpressInterest} 
-                            className="h-14 px-10 rounded-2xl bg-white text-primary hover:bg-white/90 shadow-xl transition-transform hover:scale-105" 
+                            className="h-14 px-10 rounded-2xl bg-white text-primary hover:bg-slate-50 shadow-2xl transition-all hover:scale-105 font-black" 
                             disabled={isSubmittingInterest}
                           >
-                            {isSubmittingInterest ? <Loader2 className="h-5 w-5 animate-spin" /> : <Rocket className="h-5 w-5" />}
+                            {isSubmittingInterest ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Rocket className="h-5 w-5 mr-2" />}
                             Express Interest
                           </Button>
                         )}
                         <Button 
                           variant="outline" 
-                          className="h-14 px-8 rounded-2xl text-base gap-2 border-white/30 text-slate-900 hover:bg-white/10 backdrop-blur-md" 
+                          className="h-14 px-8 rounded-2xl text-base font-bold gap-2 border-white/30 text-white hover:bg-white/10 backdrop-blur-md" 
                           asChild
                         >
                           <Link href={`/dashboard/messages?startWith=${startup.ownerUid}`}>
@@ -336,113 +321,105 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                     <Button variant="outline" size="icon" onClick={copyListingLink} className="rounded-2xl h-14 w-14 bg-white/10 hover:bg-white/20 border-white/20 text-white backdrop-blur-md transition-all">
                       <Share2 className="h-6 w-6" />
                     </Button>
-                    <Button variant="secondary" className="rounded-2xl h-14 px-8 font-bold text-base shadow-lg hover:scale-105 transition-transform" asChild>
-                      <Link href={`/founders/${startup.ownerUid}`}>
-                        About Founder
-                      </Link>
-                    </Button>
                   </div>
                 </div>
               </div>
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-32 -mt-32" />
             </div>
 
-            <div className="px-8 md:px-12 py-10">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                    <Users className="h-3 w-3" /> Founder
+            <div className="px-8 md:px-16 py-12">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-12 pb-12 border-b border-slate-100">
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <Users className="h-3 w-3 text-primary" /> Building Lead
                   </p>
-                  <Link href={`/founders/${startup.ownerUid}`} className="text-lg font-bold hover:text-primary transition-colors flex items-center gap-1">
-                    {founderName} <ArrowRight className="h-4 w-4" />
+                  <Link href={`/founders/${startup.ownerUid}`} className="text-xl font-black text-slate-900 hover:text-primary transition-colors flex items-center gap-2">
+                    {founder?.fullName || "Founder"} <ArrowRight className="h-4 w-4 opacity-30" />
                   </Link>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                    <MapPin className="h-3 w-3" /> Headquarters
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <MapPin className="h-3 w-3 text-primary" /> Headquarters
                   </p>
-                  <p className="text-lg font-bold">{startup.location || 'Remote'}</p>
+                  <p className="text-xl font-black text-slate-900">{startup.location || 'Remote'}</p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                    <Tag className="h-3 w-3" /> Industry
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <Tag className="h-3 w-3 text-primary" /> Industry
                   </p>
-                  <p className="text-lg font-bold text-primary">{startup.industry}</p>
+                  <p className="text-xl font-black text-primary uppercase tracking-tight">{startup.industry || 'Technology'}</p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                    <HandCoins className="h-3 w-3" /> Seeking
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <HandCoins className="h-3 w-3 text-primary" /> Target
                   </p>
-                  <p className="text-lg font-extrabold text-green-600">{startup.fundingNeed || 'TBD'}</p>
+                  <p className="text-2xl font-black text-green-600">{startup.fundingNeed || 'TBD'}</p>
                 </div>
               </div>
 
-              <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-16">
-                <div className="lg:col-span-2 space-y-16">
+              <div className="mt-16 grid grid-cols-1 lg:grid-cols-12 gap-16">
+                <div className="lg:col-span-8 space-y-20">
                   {startup.problem && (
-                    <section className="space-y-4">
-                      <div className="flex items-center gap-3 text-primary">
-                        <div className="p-2 bg-primary/10 rounded-xl">
-                          <Lightbulb className="h-5 w-5" />
-                        </div>
-                        <h3 className="text-2xl font-bold tracking-tight text-foreground">The Problem</h3>
+                    <section className="space-y-6">
+                      <div className="flex items-center gap-4">
+                        <div className="h-1 w-12 bg-primary rounded-full" />
+                        <h3 className="text-3xl font-black tracking-tight text-slate-900">The Problem</h3>
                       </div>
-                      <p className="text-muted-foreground text-lg leading-relaxed whitespace-pre-wrap pl-1.5 border-l-2 border-primary/20">
+                      <p className="text-slate-600 text-xl leading-relaxed whitespace-pre-wrap font-medium">
                         {startup.problem}
                       </p>
                     </section>
                   )}
 
                   {startup.solution && (
-                    <section className="space-y-4">
-                      <div className="flex items-center gap-3 text-primary">
-                        <div className="p-2 bg-primary/10 rounded-xl">
-                          <Rocket className="h-5 w-5" />
-                        </div>
-                        <h3 className="text-2xl font-bold tracking-tight text-foreground">The Solution</h3>
+                    <section className="space-y-6">
+                      <div className="flex items-center gap-4">
+                        <div className="h-1 w-12 bg-primary rounded-full" />
+                        <h3 className="text-3xl font-black tracking-tight text-slate-900">The Solution</h3>
                       </div>
-                      <p className="text-muted-foreground text-lg leading-relaxed whitespace-pre-wrap pl-1.5 border-l-2 border-primary/20">
+                      <p className="text-slate-600 text-xl leading-relaxed whitespace-pre-wrap font-medium">
                         {startup.solution}
                       </p>
                     </section>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-8 border-t border-slate-50">
                     {startup.targetMarket && (
-                      <section className="space-y-3">
-                        <h4 className="text-xl font-bold flex items-center gap-2">
-                          <Users className="h-5 w-5 text-primary" /> Target Market
+                      <section className="space-y-4">
+                        <h4 className="text-lg font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                          <Users className="h-5 w-5" /> Target Market
                         </h4>
-                        <p className="text-muted-foreground leading-relaxed text-base">{startup.targetMarket}</p>
+                        <p className="text-slate-600 leading-relaxed font-medium text-lg">{startup.targetMarket}</p>
                       </section>
                     )}
                     {startup.businessModel && (
-                      <section className="space-y-3">
-                        <h4 className="text-xl font-bold flex items-center gap-2">
-                          <TrendingUp className="h-5 w-5 text-primary" /> Business Model
+                      <section className="space-y-4">
+                        <h4 className="text-lg font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                          <TrendingUp className="h-5 w-5" /> Business Model
                         </h4>
-                        <p className="text-muted-foreground leading-relaxed text-base">{startup.businessModel}</p>
+                        <p className="text-slate-600 leading-relaxed font-medium text-lg">{startup.businessModel}</p>
                       </section>
                     )}
                   </div>
 
-                  <div className="space-y-12 pt-8 border-t">
+                  <div className="space-y-16 pt-16 border-t border-slate-50">
                     {startup.traction && (
-                      <section className="space-y-4">
-                        <h3 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                          <TrendingUp className="h-6 w-6 text-primary" /> Traction & Milestones
+                      <section className="space-y-6">
+                        <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+                          <TrendingUp className="h-6 w-6 text-primary" /> Momentum & Traction
                         </h3>
-                        <div className="bg-muted/30 p-8 rounded-[2.5rem] border border-muted-foreground/5 leading-relaxed text-lg">
-                          {startup.traction}
+                        <div className="bg-slate-50 p-10 rounded-[3rem] border border-slate-100 leading-relaxed text-xl font-medium text-slate-700 italic">
+                          "{startup.traction}"
                         </div>
                       </section>
                     )}
 
                     {startup.teamInfo && (
-                      <section className="space-y-4">
-                        <h3 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                          <ShieldCheck className="h-6 w-6 text-primary" /> The Founding Team
+                      <section className="space-y-6">
+                        <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+                          <ShieldCheck className="h-6 w-6 text-primary" /> The Founders
                         </h3>
-                        <p className="text-muted-foreground text-lg leading-relaxed italic border-l-4 border-primary pl-6 py-2">
+                        <p className="text-slate-600 text-lg leading-relaxed font-medium">
                           {startup.teamInfo}
                         </p>
                       </section>
@@ -450,44 +427,48 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                   </div>
                 </div>
 
-                <div className="space-y-10">
-                  <section className="bg-white p-8 rounded-[2.5rem] border shadow-xl shadow-primary/5 space-y-8 sticky top-24">
-                    <h3 className="text-xl font-bold flex items-center gap-2 mb-2">Venture Overview</h3>
-                    <div className="space-y-6">
+                <div className="lg:col-span-4">
+                  <section className="bg-white p-10 rounded-[3rem] shadow-3xl border border-slate-100 space-y-10 sticky top-24">
+                    <h3 className="text-xl font-black text-slate-900 border-b pb-6">Venture Dossier</h3>
+                    
+                    <div className="space-y-8">
                       <div className="space-y-2">
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Fundraising Status</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fundraising Status</p>
                         <div className="flex items-center justify-between">
-                          <p className="text-lg font-bold">{startup.fundraisingStatus || 'Open'}</p>
-                          <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-none px-3">Active</Badge>
+                          <p className="text-lg font-black text-slate-900">{startup.fundraisingStatus || 'Open'}</p>
+                          <Badge className="bg-green-50 text-green-700 border-green-100 px-3 font-bold text-[10px]">ACTIVE</Badge>
                         </div>
                       </div>
+                      
                       <div className="space-y-2">
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Equity Available</p>
-                        <p className="text-lg font-bold text-primary">{startup.equityOffered || 'TBD'}</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Equity Allocation</p>
+                        <p className="text-2xl font-black text-primary">{startup.equityOffered || 'TBD'}</p>
                       </div>
+
                       <div className="pt-6 border-t space-y-4">
                          {startup.website && (
-                            <Button className="w-full h-14 rounded-2xl gap-2 text-base font-bold" asChild>
+                            <Button className="w-full h-14 rounded-2xl gap-3 text-base font-black shadow-xl" asChild>
                               <a href={startup.website.startsWith('http') ? startup.website : `https://${startup.website}`} target="_blank" rel="noopener noreferrer">
-                                <Globe className="h-5 w-5" /> Visit Website
+                                <Globe className="h-5 w-5" /> Official Website
                               </a>
                             </Button>
                          )}
                          {startup.pitchDeckUrl && (
-                            <Button variant="outline" className="w-full h-14 rounded-2xl gap-2 text-base font-bold border-primary/20 hover:bg-primary/5" asChild>
+                            <Button variant="outline" className="w-full h-14 rounded-2xl gap-3 text-base font-bold border-slate-200 hover:bg-slate-50 transition-all" asChild>
                               <a href={startup.pitchDeckUrl} target="_blank" rel="noopener noreferrer">
-                                <FileText className="h-5 w-5" /> View Pitch Deck <ExternalLink className="h-4 w-4 opacity-50" />
+                                <FileText className="h-5 w-5 text-primary" /> View Pitch Deck <ExternalLink className="h-3 w-3 opacity-30" />
                               </a>
                             </Button>
                          )}
                       </div>
                     </div>
+
                     {startup.tags && startup.tags.length > 0 && (
-                      <div className="pt-6 border-t">
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">Verticals & Tags</p>
+                      <div className="pt-8 border-t border-slate-50">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Verticals</p>
                         <div className="flex flex-wrap gap-2">
                           {startup.tags.map((tag: string) => (
-                            <Badge key={tag} variant="secondary" className="text-xs px-3 py-1 rounded-xl bg-muted border-none text-muted-foreground">
+                            <Badge key={tag} variant="secondary" className="text-[10px] px-3 py-1 rounded-xl bg-slate-100 border-none text-slate-500 font-bold uppercase tracking-tight">
                               #{tag}
                             </Badge>
                           ))}

@@ -20,11 +20,14 @@ import {
   TrendingUp, 
   Users, 
   ExternalLink,
-  HandCoins
+  HandCoins,
+  CheckCircle2,
+  ChevronRight
 } from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { slugify } from '@/lib/utils';
+import Link from 'next/link';
 
 export default function StartupPage() {
   const { toast } = useToast();
@@ -100,6 +103,7 @@ export default function StartupPage() {
     setIsSaving(true);
     try {
       const tagsArray = startup.tags.split(',').map(t => t.trim()).filter(t => t !== '');
+      // Ensure slug is always generated/updated from current name
       const slug = slugify(startup.name);
       
       const updateData = {
@@ -114,56 +118,54 @@ export default function StartupPage() {
 
       await setDoc(doc(firestore, 'startups', user.uid), updateData, { merge: true });
 
-      toast({
-        title: "Startup Saved",
-        description: "Your startup profile has been updated.",
-      });
+      toast({ title: "Startup Saved", description: "Your venture profile is now updated and public." });
       setIsEditing(false);
       setStartupData(updateData);
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to save startup data.",
-      });
+      toast({ variant: "destructive", title: "Error", description: "Failed to save startup data." });
     } finally {
       setIsSaving(false);
     }
   };
 
   const copyListingLink = () => {
-    // Priority: Saved Slug > User UID
+    // If slug is available in saved data, use it; otherwise fallback to UID
     const identifier = startupData?.slug || user?.uid;
     if (!identifier) return;
 
     const url = `${window.location.origin}/startups/${identifier}`;
-    navigator.clipboard.writeText(url);
-    toast({
-      title: "Link Copied",
-      description: `Shareable link copied: ${url}`,
+    navigator.clipboard.writeText(url).then(() => {
+      toast({ title: "Link Copied", description: "Public listing URL is ready to share." });
     });
   };
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex h-full min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto w-full space-y-8 pb-12">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Startup Listing</h1>
+    <div className="max-w-5xl mx-auto w-full space-y-8 pb-12 animate-in fade-in duration-700">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+        <div>
+           <nav className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+            <span>Workspace</span>
+            <ChevronRight className="h-3 w-3" />
+            <span className="text-primary">Startup Profile</span>
+          </nav>
+          <h1 className="text-4xl font-black tracking-tight text-slate-900">My Startup</h1>
+        </div>
         <div className="flex gap-2">
           {!isEditing && startupData && (
             <>
-              <Button variant="outline" className="gap-2" onClick={copyListingLink}>
+              <Button variant="outline" className="rounded-xl h-10 gap-2 font-bold border-slate-200" onClick={copyListingLink}>
                 <Share2 className="h-4 w-4" /> Share Listing
               </Button>
-              <Button variant="outline" onClick={() => setIsEditing(true)}>
-                Edit Listing
+              <Button className="rounded-xl h-10 font-bold shadow-lg shadow-primary/20" onClick={() => setIsEditing(true)}>
+                Edit Profile
               </Button>
             </>
           )}
@@ -171,296 +173,162 @@ export default function StartupPage() {
       </div>
       
       {isEditing ? (
-        <Card>
+        <Card className="border-none shadow-xl rounded-[2.5rem] bg-background ring-1 ring-slate-100 overflow-hidden">
           <form onSubmit={handleSave}>
-            <CardHeader>
-              <CardTitle>{startupData ? 'Update Startup' : 'Register Your Startup'}</CardTitle>
-              <CardDescription>Share the details of your venture with potential investors and partners.</CardDescription>
+            <CardHeader className="bg-slate-50/50 p-8 border-b border-slate-100">
+              <CardTitle className="text-2xl font-black">Startup Setup</CardTitle>
+              <CardDescription>Tell the ecosystem about your venture and what you're building.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-8">
-              <div className="space-y-4">
-                <h3 className="text-lg font-bold flex items-center gap-2">
-                  <Rocket className="h-5 w-5 text-primary" /> Core Details
+            <CardContent className="p-8 space-y-12">
+              <div className="space-y-6">
+                <h3 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                  <Rocket className="h-4 w-4" /> Core Identity
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Startup Name</Label>
-                    <Input 
-                      id="name" 
-                      required 
-                      value={startup.name}
-                      onChange={e => setStartup({...startup, name: e.target.value})}
-                    />
+                    <Label htmlFor="name">Venture Name</Label>
+                    <Input id="name" required value={startup.name} onChange={e => setStartup({...startup, name: e.target.value})} className="h-12 rounded-xl" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="industry">Industry</Label>
-                    <Input 
-                      id="industry" 
-                      placeholder="e.g. Fintech, AI, AgriTech"
-                      value={startup.industry}
-                      onChange={e => setStartup({...startup, industry: e.target.value})}
-                    />
+                    <Label htmlFor="industry">Industry / Sector</Label>
+                    <Input id="industry" placeholder="e.g. Fintech, EdTech" value={startup.industry} onChange={e => setStartup({...startup, industry: e.target.value})} className="h-12 rounded-xl" />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="description">Short Description</Label>
-                  <Textarea 
-                    id="description" 
-                    placeholder="Elevator pitch for your startup (max 200 characters)"
-                    rows={2} 
-                    value={startup.shortDescription}
-                    onChange={e => setStartup({...startup, shortDescription: e.target.value})}
-                  />
+                  <Label htmlFor="description">Elevator Pitch (Short Bio)</Label>
+                  <Textarea id="description" placeholder="A one-sentence impact statement..." rows={2} value={startup.shortDescription} onChange={e => setStartup({...startup, shortDescription: e.target.value})} className="rounded-xl p-4" />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="stage">Current Stage</Label>
                     <Select value={startup.stage} onValueChange={v => setStartup({...startup, stage: v})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-12 rounded-xl"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Idea">Idea</SelectItem>
-                        <SelectItem value="Early">Early</SelectItem>
-                        <SelectItem value="Growth">Growth</SelectItem>
-                        <SelectItem value="Scaling">Scaling</SelectItem>
+                        {["Idea", "Early", "Growth", "Scaling"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="funding">Funding Need ($)</Label>
-                    <Input 
-                      id="funding" 
-                      placeholder="e.g. $50,000"
-                      value={startup.fundingNeed}
-                      onChange={e => setStartup({...startup, fundingNeed: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="location">Location</Label>
-                    <Input 
-                      id="location" 
-                      placeholder="e.g. Dhaka, Bangladesh"
-                      value={startup.location}
-                      onChange={e => setStartup({...startup, location: e.target.value})}
-                    />
+                    <Label htmlFor="funding">Funding Required</Label>
+                    <Input id="funding" placeholder="e.g. $50,000" value={startup.fundingNeed} onChange={e => setStartup({...startup, fundingNeed: e.target.value})} className="h-12 rounded-xl" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="website">Website</Label>
-                    <Input 
-                      id="website" 
-                      placeholder="https://..."
-                      value={startup.website}
-                      onChange={e => setStartup({...startup, website: e.target.value})}
-                    />
+                    <Label htmlFor="location">Base Location</Label>
+                    <Input id="location" placeholder="e.g. Dhaka, BD" value={startup.location} onChange={e => setStartup({...startup, location: e.target.value})} className="h-12 rounded-xl" />
                   </div>
                 </div>
+              </div>
+
+              <div className="space-y-6 pt-6 border-t border-slate-50">
+                <h3 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                  <Lightbulb className="h-4 w-4" /> The Pitch
+                </h3>
+                <div className="grid gap-6">
+                   <div className="space-y-2">
+                    <Label htmlFor="problem">The Problem</Label>
+                    <Textarea id="problem" rows={3} value={startup.problem} onChange={e => setStartup({...startup, problem: e.target.value})} className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="solution">The Solution</Label>
+                    <Textarea id="solution" rows={3} value={startup.solution} onChange={e => setStartup({...startup, solution: e.target.value})} className="rounded-xl" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6 pt-6 border-t border-slate-50">
+                <h3 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" /> Validation
+                </h3>
                 <div className="space-y-2">
-                  <Label htmlFor="tags">Tags (comma separated)</Label>
-                  <Input 
-                    id="tags" 
-                    placeholder="SaaS, AI, B2B"
-                    value={startup.tags}
-                    onChange={e => setStartup({...startup, tags: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-4 pt-4 border-t">
-                <h3 className="text-lg font-bold flex items-center gap-2">
-                  <Lightbulb className="h-5 w-5 text-primary" /> Startup Pitch
-                </h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="problem">Problem</Label>
-                    <Textarea 
-                      id="problem" 
-                      placeholder="What problem are you solving?"
-                      rows={3} 
-                      value={startup.problem}
-                      onChange={e => setStartup({...startup, problem: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="solution">Solution</Label>
-                    <Textarea 
-                      id="solution" 
-                      placeholder="How are you solving it?"
-                      rows={3} 
-                      value={startup.solution}
-                      onChange={e => setStartup({...startup, solution: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="targetMarket">Target Market</Label>
-                    <Textarea 
-                      id="targetMarket" 
-                      placeholder="Who are your customers?"
-                      rows={2} 
-                      value={startup.targetMarket}
-                      onChange={e => setStartup({...startup, targetMarket: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="businessModel">Business Model</Label>
-                    <Textarea 
-                      id="businessModel" 
-                      placeholder="How do you make money?"
-                      rows={2} 
-                      value={startup.businessModel}
-                      onChange={e => setStartup({...startup, businessModel: e.target.value})}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4 pt-4 border-t">
-                <h3 className="text-lg font-bold flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-primary" /> Proof & Details
-                </h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="traction">Traction</Label>
-                    <Textarea 
-                      id="traction" 
-                      placeholder="Any users, revenue, growth, or validation?"
-                      rows={3} 
-                      value={startup.traction}
-                      onChange={e => setStartup({...startup, traction: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="teamInfo">Team</Label>
-                    <Textarea 
-                      id="teamInfo" 
-                      placeholder="Who is building this? (solo founder or team)"
-                      rows={2} 
-                      value={startup.teamInfo}
-                      onChange={e => setStartup({...startup, teamInfo: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pitchDeck">Pitch Deck URL</Label>
-                    <Input 
-                      id="pitchDeck" 
-                      placeholder="Google Drive / PDF link"
-                      value={startup.pitchDeckUrl}
-                      onChange={e => setStartup({...startup, pitchDeckUrl: e.target.value})}
-                    />
-                  </div>
+                  <Label htmlFor="traction">Traction & Progress</Label>
+                  <Textarea id="traction" placeholder="Revenue, users, or major milestones..." rows={4} value={startup.traction} onChange={e => setStartup({...startup, traction: e.target.value})} className="rounded-xl" />
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex gap-2">
-              <Button type="submit" className="flex-1" disabled={isSaving}>
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Save Listing
+            <CardFooter className="p-8 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <Button type="submit" className="flex-1 rounded-xl h-12 font-black shadow-lg shadow-primary/20" disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <CheckCircle2 className="h-5 w-5 mr-2" />}
+                Save Venture Profile
               </Button>
-              {startupData && <Button variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>}
+              {startupData && (
+                <Button variant="ghost" className="rounded-xl h-12" onClick={() => setIsEditing(false)}>Cancel</Button>
+              )}
             </CardFooter>
           </form>
         </Card>
       ) : (
-        <Card className="border-primary/20 shadow-lg overflow-hidden">
-          <CardHeader className="bg-primary/5 pb-8">
-            <div className="flex justify-between items-start">
-              <div className="space-y-1">
-                <CardTitle className="text-3xl">{startupData?.name}</CardTitle>
-                <CardDescription className="text-lg text-primary font-medium">{startupData?.industry}</CardDescription>
+        <Card className="border-none shadow-3xl rounded-[3rem] overflow-hidden bg-background ring-1 ring-slate-100">
+           <div className="h-48 bg-gradient-to-br from-primary to-accent" />
+           <div className="px-10 pb-12 -mt-10">
+              <div className="flex flex-col md:flex-row justify-between items-end gap-6 mb-12">
+                 <div className="p-6 bg-white rounded-[2rem] shadow-2xl ring-1 ring-slate-100 flex items-center justify-center">
+                    <Rocket className="h-12 w-12 text-primary" />
+                 </div>
+                 <div className="flex-1 space-y-2">
+                    <h2 className="text-4xl font-black text-slate-900 tracking-tight">{startupData?.name}</h2>
+                    <div className="flex items-center gap-4">
+                       <Badge variant="secondary" className="bg-primary/10 text-primary border-none font-bold rounded-lg px-3">{startupData?.industry}</Badge>
+                       <span className="text-sm font-bold text-slate-400 flex items-center gap-1.5 uppercase tracking-tighter">
+                          <MapPin className="h-3.5 w-3.5" /> {startupData?.location}
+                       </span>
+                    </div>
+                 </div>
+                 <Badge className="h-10 px-6 rounded-xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-primary/20">{startupData?.stage} Stage</Badge>
               </div>
-              <Badge className="px-4 py-1 text-sm">{startupData?.stage}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-8 pt-8 px-8">
-            <div className="space-y-4">
-              <p className="text-xl leading-relaxed text-foreground/80 italic">
-                "{startupData?.shortDescription}"
-              </p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <MapPin className="h-4 w-4 text-primary" /> {startupData?.location || 'Remote'}
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Globe className="h-4 w-4 text-primary" /> 
-                  <span className="truncate">{startupData?.website || 'No website'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-primary font-bold">
-                  <HandCoins className="h-4 w-4" /> {startupData?.fundingNeed || 'TBD'}
-                </div>
-              </div>
-            </div>
 
-            {(startupData?.problem || startupData?.solution || startupData?.targetMarket || startupData?.businessModel) && (
-              <div className="space-y-6 pt-6 border-t">
-                <h3 className="text-lg font-bold">Venture Overview</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {startupData?.problem && (
-                    <div className="space-y-2">
-                      <Label className="text-xs uppercase tracking-widest text-muted-foreground">The Problem</Label>
-                      <p className="text-sm leading-relaxed">{startupData.problem}</p>
-                    </div>
-                  )}
-                  {startupData?.solution && (
-                    <div className="space-y-2">
-                      <Label className="text-xs uppercase tracking-widest text-muted-foreground">The Solution</Label>
-                      <p className="text-sm leading-relaxed">{startupData.solution}</p>
-                    </div>
-                  )}
-                  {startupData?.targetMarket && (
-                    <div className="space-y-2">
-                      <Label className="text-xs uppercase tracking-widest text-muted-foreground">Target Market</Label>
-                      <p className="text-sm leading-relaxed">{startupData.targetMarket}</p>
-                    </div>
-                  )}
-                  {startupData?.businessModel && (
-                    <div className="space-y-2">
-                      <Label className="text-xs uppercase tracking-widest text-muted-foreground">Business Model</Label>
-                      <p className="text-sm leading-relaxed">{startupData.businessModel}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+                 <div className="lg:col-span-8 space-y-12">
+                    <section className="space-y-4">
+                       <div className="flex items-center gap-3">
+                          <div className="h-1 w-8 bg-primary rounded-full" />
+                          <h3 className="text-xl font-black text-slate-900">Impact Statement</h3>
+                       </div>
+                       <p className="text-2xl font-medium text-slate-600 leading-relaxed italic border-l-4 border-primary/10 pl-8 py-2">
+                          "{startupData?.shortDescription}"
+                       </p>
+                    </section>
 
-            {(startupData?.traction || startupData?.teamInfo || startupData?.pitchDeckUrl) && (
-              <div className="space-y-6 pt-6 border-t">
-                <h3 className="text-lg font-bold">Proof & Validation</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {startupData?.traction && (
-                    <div className="space-y-2">
-                      <Label className="text-xs uppercase tracking-widest text-muted-foreground">Traction</Label>
-                      <p className="text-sm leading-relaxed">{startupData.traction}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-slate-50">
+                       <div className="space-y-3">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-primary">The Core Problem</h4>
+                          <p className="text-slate-600 leading-relaxed font-medium">{startupData?.problem || 'Not specified'}</p>
+                       </div>
+                       <div className="space-y-3">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-primary">Our Solution</h4>
+                          <p className="text-slate-600 leading-relaxed font-medium">{startupData?.solution || 'Not specified'}</p>
+                       </div>
                     </div>
-                  )}
-                  {startupData?.teamInfo && (
-                    <div className="space-y-2">
-                      <Label className="text-xs uppercase tracking-widest text-muted-foreground">Team</Label>
-                      <p className="text-sm leading-relaxed">{startupData.teamInfo}</p>
-                    </div>
-                  )}
-                </div>
-                {startupData?.pitchDeckUrl && (
-                  <div className="pt-2">
-                    <Button variant="outline" asChild className="gap-2">
-                      <a href={startupData.pitchDeckUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-4 w-4" /> View Pitch Deck
-                      </a>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
+                 </div>
 
-            {startupData?.tags && startupData.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-4">
-                {startupData.tags.map((tag: string) => (
-                  <Badge key={tag} variant="secondary" className="rounded-xl px-3 bg-muted text-muted-foreground hover:bg-muted border-none">
-                    {tag}
-                  </Badge>
-                ))}
+                 <div className="lg:col-span-4 space-y-6">
+                    <Card className="border-none shadow-md rounded-[2.5rem] bg-slate-50 p-8 space-y-8">
+                       <div className="space-y-2">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Target Funding</p>
+                          <p className="text-3xl font-black text-slate-900">{startupData?.fundingNeed || 'TBD'}</p>
+                       </div>
+                       <div className="space-y-3 pt-6 border-t border-slate-100">
+                          {startupData?.website && (
+                             <Button variant="outline" className="w-full justify-between h-12 rounded-xl font-bold border-slate-200" asChild>
+                                <a href={startupData.website} target="_blank"><Globe className="h-4 w-4" /> Website <ExternalLink className="h-3 w-3 opacity-30" /></a>
+                             </Button>
+                          )}
+                          {startupData?.pitchDeckUrl && (
+                             <Button variant="outline" className="w-full justify-between h-12 rounded-xl font-bold border-slate-200" asChild>
+                                <a href={startupData.pitchDeckUrl} target="_blank"><FileText className="h-4 w-4" /> Pitch Deck <ExternalLink className="h-3 w-3 opacity-30" /></a>
+                             </Button>
+                          )}
+                       </div>
+                    </Card>
+                    
+                    <div className="p-8 text-center space-y-4">
+                       <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Public Visibility: ACTIVE</p>
+                       <Button variant="link" className="text-primary font-bold" asChild>
+                          <Link href={`/startups/${startupData?.slug || user?.uid}`} className="gap-2">View Public Profile <ArrowRight className="h-4 w-4" /></Link>
+                       </Button>
+                    </div>
+                 </div>
               </div>
-            )}
-          </CardContent>
+           </div>
         </Card>
       )}
     </div>

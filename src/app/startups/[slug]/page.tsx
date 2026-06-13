@@ -2,12 +2,15 @@ import { Metadata } from 'next';
 import StartupProfileClient from './startup-profile-client';
 import { firebaseConfig } from '@/firebase/config';
 
-async function getStartupBySlug(slug: string) {
+// Robust helper to find startup by slug or ID via REST API (for server-side metadata)
+async function getStartupData(identifier: string) {
   const projectId = firebaseConfig.projectId;
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery`;
+  const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
   
   try {
-    const response = await fetch(url, {
+    // 1. Try finding by SLUG field first
+    const queryUrl = `${baseUrl}:runQuery`;
+    const slugResponse = await fetch(queryUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -17,7 +20,7 @@ async function getStartupBySlug(slug: string) {
             fieldFilter: {
               field: { fieldPath: "slug" },
               op: "EQUAL",
-              value: { stringValue: slug }
+              value: { stringValue: identifier }
             }
           },
           limit: 1
@@ -26,64 +29,49 @@ async function getStartupBySlug(slug: string) {
       next: { revalidate: 60 }
     });
 
-    const data = await response.json();
-    if (!data || !Array.isArray(data) || data.length === 0 || !data[0].document) {
-      return null;
+    const queryData = await slugResponse.json();
+    if (queryData && Array.isArray(queryData) && queryData.length > 0 && queryData[0].document) {
+      const fields = queryData[0].document.fields;
+      return {
+        name: fields.name?.stringValue || 'Startup',
+        shortDescription: fields.shortDescription?.stringValue || 'A revolutionary venture on TabStartup.',
+        ownerUid: fields.ownerUid?.stringValue,
+        status: fields.status?.stringValue
+      };
     }
 
-    const fields = data[0].document.fields;
-    return {
-      name: fields.name?.stringValue || 'Startup',
-      shortDescription: fields.shortDescription?.stringValue || 'A revolutionary venture on TabStartup.',
-      industry: fields.industry?.stringValue || 'Technology',
-      ownerUid: fields.ownerUid?.stringValue,
-      slug: fields.slug?.stringValue,
-      status: fields.status?.stringValue
-    };
-  } catch (error) {
-    console.error("Error fetching startup for metadata:", error);
-    return null;
-  }
-}
+    // 2. If not found by slug, try as a direct Document ID
+    const idUrl = `${baseUrl}/startups/${identifier}`;
+    const idResponse = await fetch(idUrl, { next: { revalidate: 60 } });
+    if (idResponse.ok) {
+      const data = await idResponse.json();
+      const fields = data.fields;
+      return {
+        name: fields.name?.stringValue || 'Startup',
+        shortDescription: fields.shortDescription?.stringValue || 'A revolutionary venture on TabStartup.',
+        ownerUid: fields.ownerUid?.stringValue,
+        status: fields.status?.stringValue
+      };
+    }
 
-async function getStartupById(id: string) {
-  const projectId = firebaseConfig.projectId;
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/startups/${id}`;
-  
-  try {
-    const response = await fetch(url, { next: { revalidate: 60 } });
-    if (!response.ok) return null;
-    const data = await response.json();
-    const fields = data.fields;
-    return {
-      name: fields.name?.stringValue || 'Startup',
-      shortDescription: fields.shortDescription?.stringValue || 'A revolutionary venture on TabStartup.',
-      slug: fields.slug?.stringValue,
-      ownerUid: fields.ownerUid?.stringValue
-    };
+    return null;
   } catch (error) {
+    console.error("Error fetching startup on server:", error);
     return null;
   }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  
-  // Try slug first
-  let startup = await getStartupBySlug(slug);
-  
-  // If not found by slug, try ID (backward compatibility)
-  if (!startup) {
-    startup = await getStartupById(slug);
-  }
+  const startup = await getStartupData(slug);
   
   if (!startup || startup.status === 'hidden') {
     return {
-      title: 'Startup Not Found | TabStartup',
+      title: 'Venture Profile | TabStartup',
     };
   }
 
-  const title = `${startup.name} | ${startup.industry} Startup | TabStartup`;
+  const title = `${startup.name} | TabStartup Venture`;
   const description = startup.shortDescription;
 
   return {
@@ -93,18 +81,19 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       title,
       description,
       type: 'website',
-      images: [`https://picsum.photos/seed/${startup.ownerUid}/1200/630`],
+      images: [`https://picsum.photos/seed/${startup.ownerUid || 'startup'}/1200/630`],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: [`https://picsum.photos/seed/${startup.ownerUid}/1200/630`],
+      images: [`https://picsum.photos/seed/${startup.ownerUid || 'startup'}/1200/630`],
     },
   };
 }
 
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  // We pass the slug/identifier to the client component which handles the actual rendering and final lookups
   return <StartupProfileClient slugOrId={slug} />;
 }
