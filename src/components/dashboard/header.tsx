@@ -107,7 +107,7 @@ export function DashboardHeader() {
     router.push('/login');
   };
 
-  const markAsRead = async (notificationId: string) => {
+  const markAsRead = (notificationId: string) => {
     if (!firestore) return;
     const ref = doc(firestore, 'notifications', notificationId);
     updateDoc(ref, { read: true }).catch(err => {
@@ -119,7 +119,7 @@ export function DashboardHeader() {
     });
   };
 
-  const markAllAsRead = async () => {
+  const markAllAsRead = () => {
     if (!firestore || unreadCount === 0) return;
     const batch = writeBatch(firestore);
     notifications
@@ -194,7 +194,7 @@ export function DashboardHeader() {
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    onClick={markAllAsRead}
+                    onClick={(e) => { e.preventDefault(); markAllAsRead(); }}
                     className="h-7 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/10"
                   >
                     Clear All

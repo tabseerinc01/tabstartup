@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,7 +11,9 @@ import {
   onSnapshot, 
   orderBy, 
   getDoc, 
-  doc 
+  doc,
+  getDocs,
+  writeBatch
 } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -25,6 +28,35 @@ export default function MessagesInboxPage() {
   const [chats, setChats] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
+
+  // Auto-clear message notifications when entering this page
+  useEffect(() => {
+    if (!firestore || !user?.uid) return;
+    
+    const clearNotifications = async () => {
+      const q = query(
+        collection(firestore, 'notifications'),
+        where('recipientUid', '==', user.uid),
+        where('read', '==', false),
+        where('type', '==', 'message')
+      );
+      
+      try {
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const batch = writeBatch(firestore);
+          snap.docs.forEach(d => {
+            batch.update(d.ref, { read: true });
+          });
+          batch.commit();
+        }
+      } catch (e) {
+        console.warn("Could not auto-clear message notifications", e);
+      }
+    };
+    
+    clearNotifications();
+  }, [firestore, user?.uid]);
 
   useEffect(() => {
     if (!firestore || !user?.uid) return;

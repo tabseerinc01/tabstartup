@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useFirestore, useUser, useMemoFirebase, useCollection } from '@/firebase';
+import { useFirestore, useUser, useMemoFirebase, useCollection, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { 
   collection, 
   query, 
@@ -11,6 +11,8 @@ import {
   getDoc, 
   doc,
   updateDoc,
+  getDocs,
+  writeBatch,
   serverTimestamp
 } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
@@ -80,6 +82,35 @@ export default function ConnectionsManagerPage() {
   const { data: legacyIncoming, isLoading: isLegacyIncomingLoading } = useCollection(legacyIncomingPitchesQuery);
   const { data: legacyOutgoing, isLoading: isLegacyOutgoingLoading } = useCollection(legacyOutgoingPitchesQuery);
 
+  // Auto-clear connection notifications when entering this page
+  useEffect(() => {
+    if (!firestore || !user?.uid) return;
+    
+    const clearNotifications = async () => {
+      const q = query(
+        collection(firestore, 'notifications'),
+        where('recipientUid', '==', user.uid),
+        where('read', '==', false),
+        where('type', 'in', ['connection', 'investor_interest', 'cofounder_interest', 'rejection', 'pitch'])
+      );
+      
+      try {
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const batch = writeBatch(firestore);
+          snap.docs.forEach(d => {
+            batch.update(d.ref, { read: true });
+          });
+          batch.commit();
+        }
+      } catch (e) {
+        console.warn("Could not auto-clear notifications", e);
+      }
+    };
+    
+    clearNotifications();
+  }, [firestore, user?.uid]);
+
   // Merge and Normalize Data
   const allConns = useMemo(() => {
     const rawConnections = [...(incoming || []), ...(outgoing || [])];
@@ -138,47 +169,51 @@ export default function ConnectionsManagerPage() {
     loadProfiles();
   }, [firestore, allConns, user?.uid, profiles]);
 
-  const handleStatus = async (conn: any, status: 'accepted' | 'rejected') => {
+  const handleStatus = (conn: any, status: 'accepted' | 'rejected') => {
     if (!firestore || !user || isActionLoading) return;
     setIsActionLoading(conn.id);
     const collectionName = conn.isLegacy ? 'pitches' : 'connections';
-    
-    try {
-      await updateDoc(doc(firestore, collectionName, conn.id), { 
-        status,
-        updatedAt: serverTimestamp() 
-      });
+    const otherUid = conn.initiatorUid === user.uid ? conn.recipientUid : conn.initiatorUid;
 
-      const otherUid = conn.initiatorUid === user.uid ? conn.recipientUid : conn.initiatorUid;
-      
-      if (status === 'accepted') {
-        createNotification(firestore, {
-          recipientUid: otherUid,
-          actorUid: user.uid,
-          type: 'connection',
-          title: 'Connection Accepted',
-          message: `${profiles[user.uid]?.fullName || 'Someone'} accepted your connection request.`,
-          targetId: conn.id,
-          targetType: 'user'
-        });
-        toast({ title: "Connected!" });
-      } else {
-        createNotification(firestore, {
-          recipientUid: otherUid,
-          actorUid: user.uid,
-          type: 'rejection',
-          title: 'Request Declined',
-          message: `Your connection request was not accepted at this time.`,
-          targetId: conn.id,
-          targetType: 'user'
-        });
-        toast({ title: "Declined" });
-      }
-    } catch (e) {
-      toast({ title: "Action failed", variant: "destructive" });
-    } finally {
-      setIsActionLoading(null);
-    }
+    updateDoc(doc(firestore, collectionName, conn.id), { 
+      status,
+      updatedAt: serverTimestamp() 
+    })
+      .then(() => {
+        if (status === 'accepted') {
+          createNotification(firestore, {
+            recipientUid: otherUid,
+            actorUid: user.uid,
+            type: 'connection',
+            title: 'Connection Accepted',
+            message: `${profiles[user.uid]?.fullName || 'Someone'} accepted your connection request.`,
+            targetId: conn.id,
+            targetType: 'user'
+          });
+          toast({ title: "Connected!" });
+        } else {
+          createNotification(firestore, {
+            recipientUid: otherUid,
+            actorUid: user.uid,
+            type: 'rejection',
+            title: 'Request Declined',
+            message: `Your connection request was not accepted at this time.`,
+            targetId: conn.id,
+            targetType: 'user'
+          });
+          toast({ title: "Declined" });
+        }
+      })
+      .catch((e) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: `${collectionName}/${conn.id}`,
+          operation: 'update',
+          requestResourceData: { status }
+        }));
+      })
+      .finally(() => {
+        setIsActionLoading(null);
+      });
   };
 
   const filtered = allConns.filter(c => activeType === 'all' || c.type === activeType);

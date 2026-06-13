@@ -76,7 +76,7 @@ export default function NotificationsPage() {
     return () => unsubscribe();
   }, [firestore, user?.uid]);
 
-  const handleMarkAsRead = async (id: string) => {
+  const handleMarkAsRead = (id: string) => {
     if (!firestore) return;
     const ref = doc(firestore, 'notifications', id);
     updateDoc(ref, { read: true }).catch(err => {
@@ -88,7 +88,7 @@ export default function NotificationsPage() {
     });
   };
 
-  const handleMarkAllAsRead = async () => {
+  const handleMarkAllAsRead = () => {
     if (!firestore || !user?.uid) return;
     const unread = notifications.filter(n => !n.read);
     if (unread.length === 0) return;
@@ -105,7 +105,7 @@ export default function NotificationsPage() {
     });
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!firestore) return;
     deleteDoc(doc(firestore, 'notifications', id)).catch(err => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -200,7 +200,7 @@ export default function NotificationsPage() {
                     </div>
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className={`text-lg font-bold truncate ${!n.read ? 'text-slate-900' : 'text-slate-600'}`}>
+                        <p className={`text-lg font-bold truncate ${!n.read ? 'text-slate-900' : 'text-slate-500'}`}>
                           {n.title}
                         </p>
                         <div className="flex items-center gap-2 shrink-0">
