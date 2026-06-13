@@ -132,8 +132,11 @@ export default function StartupPage() {
   };
 
   const copyListingLink = () => {
-    if (!startupData?.slug) return;
-    const url = `${window.location.origin}/startups/${startupData.slug}`;
+    // If slug is missing (legacy), use the ID (UID) which will redirect
+    const identifier = startupData?.slug || user?.uid;
+    if (!identifier) return;
+
+    const url = `${window.location.origin}/startups/${identifier}`;
     navigator.clipboard.writeText(url);
     toast({
       title: "Link Copied",
