@@ -106,7 +106,7 @@ export default function StartupPage() {
         ...startup,
         tags: tagsArray,
         slug,
-        status: 'active', // Default to active when saved
+        status: 'active',
         ownerUid: user.uid,
         updatedAt: serverTimestamp(),
         ...(startupData ? {} : { createdAt: serverTimestamp() })
@@ -132,7 +132,7 @@ export default function StartupPage() {
   };
 
   const copyListingLink = () => {
-    // If slug is missing (legacy), use the ID (UID) which will redirect
+    // Priority: Saved Slug > User UID
     const identifier = startupData?.slug || user?.uid;
     if (!identifier) return;
 
@@ -140,7 +140,7 @@ export default function StartupPage() {
     navigator.clipboard.writeText(url);
     toast({
       title: "Link Copied",
-      description: "Startup listing link copied to clipboard.",
+      description: `Shareable link copied: ${url}`,
     });
   };
 
