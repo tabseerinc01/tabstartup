@@ -24,7 +24,8 @@ import {
   CheckCircle2,
   ChevronRight,
   ArrowRight,
-  FileText
+  FileText,
+  EyeOff
 } from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';

@@ -2,13 +2,13 @@ import { Metadata } from 'next';
 import StartupProfileClient from './startup-profile-client';
 import { firebaseConfig } from '@/firebase/config';
 
-// Robust helper to find startup by slug or ID via REST API (for server-side metadata)
+// Robust helper to find startup by slug or ID via REST API
 async function getStartupData(identifier: string) {
   const projectId = firebaseConfig.projectId;
   const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
   
   try {
-    // 1. Try finding by SLUG field first
+    // 1. Try finding by SLUG field
     const queryUrl = `${baseUrl}:runQuery`;
     const slugResponse = await fetch(queryUrl, {
       method: 'POST',
@@ -40,7 +40,7 @@ async function getStartupData(identifier: string) {
       };
     }
 
-    // 2. If not found by slug, try as a direct Document ID
+    // 2. Fallback to ID-based lookup if slug failed
     const idUrl = `${baseUrl}/startups/${identifier}`;
     const idResponse = await fetch(idUrl, { next: { revalidate: 60 } });
     if (idResponse.ok) {
@@ -66,9 +66,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const startup = await getStartupData(slug);
   
   if (!startup || startup.status === 'hidden') {
-    return {
-      title: 'Venture Profile | TabStartup',
-    };
+    return { title: 'Venture Profile | TabStartup' };
   }
 
   const title = `${startup.name} | TabStartup Venture`;
