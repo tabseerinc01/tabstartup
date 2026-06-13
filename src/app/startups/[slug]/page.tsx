@@ -36,7 +36,8 @@ async function getStartupData(identifier: string) {
         name: fields.name?.stringValue || 'Startup',
         shortDescription: fields.shortDescription?.stringValue || 'A revolutionary venture on TabStartup.',
         ownerUid: fields.ownerUid?.stringValue,
-        status: fields.status?.stringValue
+        status: fields.status?.stringValue,
+        slug: fields.slug?.stringValue
       };
     }
 
@@ -50,7 +51,8 @@ async function getStartupData(identifier: string) {
         name: fields.name?.stringValue || 'Startup',
         shortDescription: fields.shortDescription?.stringValue || 'A revolutionary venture on TabStartup.',
         ownerUid: fields.ownerUid?.stringValue,
-        status: fields.status?.stringValue
+        status: fields.status?.stringValue,
+        slug: fields.slug?.stringValue
       };
     }
 
