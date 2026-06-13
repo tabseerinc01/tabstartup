@@ -22,7 +22,8 @@ import {
   ExternalLink,
   HandCoins,
   CheckCircle2,
-  ChevronRight
+  ChevronRight,
+  ArrowRight
 } from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
