@@ -1,4 +1,3 @@
-
 import { Metadata } from 'next';
 import StartupProfileClient from './startup-profile-client';
 import { firebaseConfig } from '@/firebase/config';

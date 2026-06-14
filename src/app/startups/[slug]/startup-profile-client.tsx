@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -65,7 +64,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       setIsLoading(true);
       try {
         let startupDoc: any = null;
-        let ownerUid: string | null = null;
 
         // 1. First, try finding by SLUG field
         const slugQuery = query(
@@ -77,13 +75,16 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         
         if (!slugSnap.empty) {
           startupDoc = { id: slugSnap.docs[0].id, ...slugSnap.docs[0].data() };
-          ownerUid = startupDoc.ownerUid;
         } else {
           // 2. If not found by slug, try finding by Document ID (which is the UID)
           const idSnap = await getDoc(doc(firestore, 'startups', slugOrId));
           if (idSnap.exists()) {
             startupDoc = { id: idSnap.id, ...idSnap.data() };
-            ownerUid = startupDoc.ownerUid;
+            // If the document has a slug, redirect to the SEO-friendly URL
+            if (startupDoc.slug && startupDoc.slug !== slugOrId) {
+              router.replace(`/startups/${startupDoc.slug}`);
+              return;
+            }
           }
         }
 
@@ -92,51 +93,45 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           return;
         }
 
-        // Fetch current user details if logged in for context
-        let currentRole = null;
-        let isAdmin = false;
+        const ownerUid = startupDoc.ownerUid;
+        setStartup(startupDoc);
+
+        // Load Founder Profile and context concurrently
+        const founderSnap = await getDoc(doc(firestore, 'users', ownerUid));
+        if (founderSnap.exists()) {
+          setFounder(founderSnap.data());
+        }
+
         if (user?.uid) {
           const userSnap = await getDoc(doc(firestore, 'users', user.uid));
           if (userSnap.exists()) {
-            const data = userSnap.data();
-            setCurrentUserProfile(data);
-            isAdmin = data.role === 'admin' || data.role === 'super_admin' || data.primaryRole === 'super_admin';
-          }
-        }
-
-        const isOwner = user?.uid === ownerUid;
-        
-        if (startupDoc.status === 'hidden' && !isOwner && !isAdmin) {
-          setIsHidden(true);
-          setIsLoading(false);
-          return;
-        }
-
-        setStartup(startupDoc);
-
-        // Load Founder Profile
-        if (ownerUid) {
-          const founderSnap = await getDoc(doc(firestore, 'users', ownerUid));
-          if (founderSnap.exists()) {
-            setFounder(founderSnap.data());
-          }
-
-          // Check for existing interest if user is logged in
-          if (user?.uid) {
-            const interestSnap = await getDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid));
-            if (interestSnap.exists()) {
-              setExistingInterest(interestSnap.data());
+            const profileData = userSnap.data();
+            setCurrentUserProfile(profileData);
+            
+            // Check visibility
+            const role = profileData.role || profileData.primaryRole;
+            const isAdmin = role === 'admin' || role === 'super_admin';
+            const isOwner = user.uid === ownerUid;
+            
+            if (startupDoc.status === 'hidden' && !isOwner && !isAdmin) {
+              setIsHidden(true);
             }
           }
 
-          // Record view asynchronously
-          if (ownerUid !== user?.uid) {
-            addDoc(collection(firestore, 'startups', ownerUid, 'views'), {
-              startupId: ownerUid,
-              viewerId: user?.uid || 'anonymous',
-              timestamp: serverTimestamp(),
-            }).catch(e => console.warn("View not recorded", e));
+          // Check for existing interest
+          const interestSnap = await getDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid));
+          if (interestSnap.exists()) {
+            setExistingInterest(interestSnap.data());
           }
+        }
+
+        // Record view anonymously if not owner
+        if (ownerUid !== user?.uid) {
+          addDoc(collection(firestore, 'startups', ownerUid, 'views'), {
+            startupId: ownerUid,
+            viewerId: user?.uid || 'anonymous',
+            timestamp: serverTimestamp(),
+          }).catch(() => {});
         }
       } catch (error) {
         console.error("Error loading startup profile data:", error);
@@ -145,7 +140,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       }
     }
     loadData();
-  }, [firestore, slugOrId, user?.uid]);
+  }, [firestore, slugOrId, user?.uid, router]);
 
   const handleExpressInterest = async () => {
     if (!user || !firestore || !startup || !currentUserProfile) {

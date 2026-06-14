@@ -40,7 +40,6 @@ export default function CofoundersPage() {
 
           const sMap: Record<string, any> = {};
           for (const chunk of chunks) {
-            // Fetch ONLY active startups for these users
             const sQ = query(
               collection(firestore, 'startups'), 
               where('ownerUid', 'in', chunk),
@@ -49,7 +48,7 @@ export default function CofoundersPage() {
             const sSnap = await getDocs(sQ);
             sSnap.docs.forEach(d => {
               const data = d.data();
-              sMap[data.ownerUid] = data;
+              sMap[data.ownerUid] = { id: d.id, ...data };
             });
           }
           setStartups(sMap);
@@ -120,7 +119,7 @@ export default function CofoundersPage() {
                       {startup && (
                         <div className="flex flex-col gap-1 mt-1">
                           <Link 
-                            href={`/startups/${founder.id}`} 
+                            href={`/startups/${startup.slug || founder.id}`} 
                             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors font-bold group/link"
                           >
                             <Rocket className="h-3 w-3 text-primary/60" />

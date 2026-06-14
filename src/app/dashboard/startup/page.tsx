@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -29,7 +28,7 @@ import {
   EyeOff
 } from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
-import { doc, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { slugify } from '@/lib/utils';
 import Link from 'next/link';
 
