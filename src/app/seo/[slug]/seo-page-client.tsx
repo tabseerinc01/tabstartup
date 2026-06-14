@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -291,7 +292,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
                         "{s.shortDescription || 'A high-potential venture building the future.'}"
                       </p>
                       <Button variant="outline" className="w-full rounded-xl font-bold text-xs h-9 border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-all" asChild>
-                        <Link href={`/startups/${s.ownerUid}`}>View Venture</Link>
+                        <Link href={`/startups/${s.slug || s.ownerUid}`}>View Venture</Link>
                       </Button>
                     </CardContent>
                   </Card>
@@ -357,7 +358,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
 
                           <div className="pt-4 flex items-center gap-4">
                             <Button className="rounded-xl font-bold h-11 px-6 group-hover:scale-105 transition-transform" asChild>
-                              <Link href={`/startups/${s.ownerUid}`}>
+                              <Link href={`/startups/${s.slug || s.ownerUid}`}>
                                 View Profile <ArrowRight className="ml-2 h-4 w-4" />
                               </Link>
                             </Button>

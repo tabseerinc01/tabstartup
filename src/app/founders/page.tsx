@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -30,7 +31,7 @@ export default function FoundersPage() {
       if (!firestore) return;
       setIsLoading(true);
       try {
-        // 1. Fetch using new multi-role structure
+        // 1. Fetch using multi-role support
         const multiRoleQuery = query(
           collection(firestore, 'users'),
           where('roles', 'array-contains', 'founder'),
@@ -335,7 +336,7 @@ function FounderCard({ founder }: { founder: any }) {
                           </div>
                         </div>
                         <Button variant="link" className="p-0 h-auto text-primary font-bold" asChild>
-                          <Link href={`/startups/${founder.uid || founder.id}`}>Full Startup Profile & Pitch Deck</Link>
+                          <Link href={`/startups/${startup.slug || founder.uid || founder.id}`}>Full Startup Profile & Pitch Deck</Link>
                         </Button>
                       </div>
                     )}

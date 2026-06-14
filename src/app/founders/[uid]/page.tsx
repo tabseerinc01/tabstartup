@@ -293,7 +293,7 @@ export default function FounderPublicProfilePage() {
                     </h2>
                     {startup ? (
                       <div className="border border-primary/10 rounded-[2rem] p-8 space-y-4 bg-primary/5">
-                        <Link href={`/startups/${uid}`} className="text-2xl font-bold text-primary hover:underline">{startup.name}</Link>
+                        <Link href={`/startups/${startup.slug || uid}`} className="text-2xl font-bold text-primary hover:underline">{startup.name}</Link>
                         <p className="text-muted-foreground text-lg leading-relaxed">{startup.shortDescription}</p>
                         <div className="flex gap-3 flex-wrap">
                           <Badge variant="secondary" className="px-4 py-1.5 rounded-xl">{startup.stage}</Badge>
