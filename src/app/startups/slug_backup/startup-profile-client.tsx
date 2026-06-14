@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -13,8 +12,7 @@ import {
   query,
   where,
   limit,
-  serverTimestamp,
-  setDoc
+  serverTimestamp 
 } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
@@ -85,7 +83,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             startupDoc = { id: idSnap.id, ...idSnap.data() };
             ownerUid = startupDoc.ownerUid;
             
-            // If the document has a slug, redirect to the SEO-friendly URL to maintain consistency
+            // If the document has a slug, redirect to the SEO-friendly URL
             if (startupDoc.slug && startupDoc.slug !== slugOrId) {
               router.replace(`/startups/${startupDoc.slug}`);
               return;
@@ -98,19 +96,19 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           return;
         }
 
-        // Determine permissions for hidden profile
-        const isOwner = user?.uid === ownerUid;
-        let isAdmin = false;
-
-        // Fetch current user details for context
+        // Check user profile for visibility rules
         if (user?.uid) {
           const userSnap = await getDoc(doc(firestore, 'users', user.uid));
           if (userSnap.exists()) {
             const data = userSnap.data();
             setCurrentUserProfile(data);
-            isAdmin = data.role === 'admin' || data.role === 'super_admin' || data.primaryRole === 'super_admin';
           }
         }
+
+        // Determine roles for visibility check
+        const role = currentUserProfile?.role || currentUserProfile?.primaryRole;
+        const isAdmin = role === 'admin' || role === 'super_admin';
+        const isOwner = user?.uid === ownerUid;
         
         if (startupDoc.status === 'hidden' && !isOwner && !isAdmin) {
           setIsHidden(true);
@@ -127,7 +125,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             setFounder(founderSnap.data());
           }
 
-          // Check for existing interest if user is logged in
+          // Check if current user (investor) has already expressed interest
           if (user?.uid) {
             const interestSnap = await getDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid));
             if (interestSnap.exists()) {
@@ -135,13 +133,13 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             }
           }
 
-          // Record view asynchronously
+          // Record view (async)
           if (ownerUid !== user?.uid) {
             addDoc(collection(firestore, 'startups', ownerUid, 'views'), {
               startupId: ownerUid,
               viewerId: user?.uid || 'anonymous',
               timestamp: serverTimestamp(),
-            }).catch(e => console.warn("View not recorded", e));
+            });
           }
         }
       } catch (error) {
@@ -151,7 +149,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       }
     }
     loadData();
-  }, [firestore, slugOrId, user?.uid, router]);
+  }, [firestore, slugOrId, user?.uid, router, currentUserProfile]);
 
   const handleExpressInterest = async () => {
     if (!user || !firestore || !startup || !currentUserProfile) {
