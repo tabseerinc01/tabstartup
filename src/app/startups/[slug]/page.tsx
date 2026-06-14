@@ -3,7 +3,7 @@ import { Metadata } from 'next';
 import StartupProfileClient from './startup-profile-client';
 import { firebaseConfig } from '@/firebase/config';
 
-// Helper to find startup by slug or ID via REST API
+// Robust helper to find startup by slug or ID via REST API
 async function getStartupData(identifier: string) {
   const projectId = firebaseConfig.projectId;
   const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
@@ -42,19 +42,21 @@ async function getStartupData(identifier: string) {
       };
     }
 
-    // 2. Fallback to ID-based lookup (Identifier might be the UID)
+    // 2. Fallback to ID-based lookup if slug failed (Identifier might be the document ID/UID)
     const idUrl = `${baseUrl}/startups/${identifier}`;
     const idResponse = await fetch(idUrl, { next: { revalidate: 60 } });
     if (idResponse.ok) {
       const data = await idResponse.json();
       const fields = data.fields;
-      return {
-        name: fields.name?.stringValue || 'Startup',
-        shortDescription: fields.shortDescription?.stringValue || 'A revolutionary venture on TabStartup.',
-        ownerUid: fields.ownerUid?.stringValue,
-        status: fields.status?.stringValue,
-        slug: fields.slug?.stringValue
-      };
+      if (fields) {
+          return {
+            name: fields.name?.stringValue || 'Startup',
+            shortDescription: fields.shortDescription?.stringValue || 'A revolutionary venture on TabStartup.',
+            ownerUid: fields.ownerUid?.stringValue,
+            status: fields.status?.stringValue,
+            slug: fields.slug?.stringValue
+          };
+      }
     }
 
     return null;

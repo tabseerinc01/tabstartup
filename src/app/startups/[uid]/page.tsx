@@ -19,23 +19,22 @@ async function getStartupSlug(uid: string) {
 }
 
 /**
- * Handle legacy UID URLs by redirecting to the consolidated slug/id route.
- * To avoid the "different slug names" error, we use the parameter name 'slug' in the signature.
+ * Handle legacy UID URLs by redirecting to the consolidated slug handler.
+ * To avoid param naming conflicts in Next.js, we name the param 'slug' in the signature
+ * if this folder ever hits the same level logic.
  */
-export default async function LegacyRedirect({ params }: { params: Promise<{ slug: string }> }) {
-  // Extract identifier (which folder name calls 'uid', but we rename to satisfy Next.js conflict rules)
-  const { slug: identifier } = await params;
+export default async function LegacyRedirect({ params }: { params: Promise<{ uid: string }> }) {
+  const { uid: identifier } = await params;
   
-  // Try to find if this UID has a slug
+  // Always redirect to the [slug] route which is now the master handler for both slugs and IDs
+  // This prevents the sibling route conflict from breaking the build and handles existing links.
   const startupSlug = await getStartupSlug(identifier);
   
-  // Only redirect if the slug is different from the identifier to prevent a circular loop
-  if (startupSlug && startupSlug !== identifier) {
+  if (startupSlug) {
     redirect(`/startups/${startupSlug}`);
   }
   
-  // If we're already at the correct identifier or it has no slug, 
-  // redirect to the consolidated route if this folder is hit.
-  // Note: If both folders exist, we must send them to a safe base or the master handler.
-  redirect(`/founders`); 
+  // If no slug found, redirect to the identifier itself in the [slug] route
+  // because [slug]/page.tsx now handles UIDs as a fallback.
+  redirect(`/startups/${identifier}`);
 }
