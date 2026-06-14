@@ -84,12 +84,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           if (idSnap.exists()) {
             startupDoc = { id: idSnap.id, ...idSnap.data() };
             ownerUid = startupDoc.ownerUid;
-            
-            // If the document has a slug, redirect to the SEO-friendly URL to maintain consistency
-            if (startupDoc.slug && startupDoc.slug !== slugOrId) {
-              router.replace(`/startups/${startupDoc.slug}`);
-              return;
-            }
           }
         }
 
@@ -98,11 +92,9 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           return;
         }
 
-        // Determine permissions for hidden profile
-        const isOwner = user?.uid === ownerUid;
+        // Fetch current user details if logged in for context
+        let currentRole = null;
         let isAdmin = false;
-
-        // Fetch current user details for context
         if (user?.uid) {
           const userSnap = await getDoc(doc(firestore, 'users', user.uid));
           if (userSnap.exists()) {
@@ -111,6 +103,8 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             isAdmin = data.role === 'admin' || data.role === 'super_admin' || data.primaryRole === 'super_admin';
           }
         }
+
+        const isOwner = user?.uid === ownerUid;
         
         if (startupDoc.status === 'hidden' && !isOwner && !isAdmin) {
           setIsHidden(true);
@@ -151,7 +145,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       }
     }
     loadData();
-  }, [firestore, slugOrId, user?.uid, router]);
+  }, [firestore, slugOrId, user?.uid]);
 
   const handleExpressInterest = async () => {
     if (!user || !firestore || !startup || !currentUserProfile) {
