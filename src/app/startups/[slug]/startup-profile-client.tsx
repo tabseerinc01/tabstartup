@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFirestore, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { 
@@ -30,7 +30,6 @@ import {
   HandCoins, 
   ExternalLink, 
   Heart, 
-  Lightbulb, 
   TrendingUp, 
   Users,
   MessageSquare,
@@ -45,7 +44,7 @@ import Link from 'next/link';
 import { createNotification } from '@/lib/notifications';
 
 export default function StartupProfileClient({ slugOrId }: { slugOrId: string }) {
-  const { user } = useUser();
+  const { user, isUserLoading: isAuthLoading } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
@@ -57,15 +56,18 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingInterest, setIsSubmittingInterest] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
+  
+  // To avoid multiple triggers of auto-submission
+  const hasAttemptedAutoSubmit = useRef(false);
 
   useEffect(() => {
     async function loadData() {
       if (!firestore || !slugOrId) return;
-      setIsLoading(true);
+      
       try {
         let startupDoc: any = null;
 
-        // 1. Try lookup by SLUG field first
+        // 1. Try lookup by SLUG field
         const slugQuery = query(
           collection(firestore, 'startups'),
           where('slug', '==', slugOrId),
@@ -80,11 +82,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           const idSnap = await getDoc(doc(firestore, 'startups', slugOrId));
           if (idSnap.exists()) {
             startupDoc = { id: idSnap.id, ...idSnap.data() };
-            // If it has a slug, redirect to the pretty URL
-            if (startupDoc.slug && startupDoc.slug !== slugOrId) {
-              router.replace(`/startups/${startupDoc.slug}`);
-              return;
-            }
           }
         }
 
@@ -109,7 +106,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             const profileData = userSnap.data();
             setCurrentUserProfile(profileData);
             
-            // Check visibility based on roles/ownership
+            // Check visibility
             const role = profileData.role || profileData.primaryRole;
             const isAdmin = role === 'admin' || role === 'super_admin';
             const isOwner = user.uid === ownerUid;
@@ -118,15 +115,18 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
               setIsHidden(true);
             }
 
-            // Check for existing investor interest
+            // Check existing interest
             const interestSnap = await getDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid));
             if (interestSnap.exists()) {
               setExistingInterest(interestSnap.data());
             }
           }
+        } else if (!isAuthLoading) {
+          // Clear profile if logged out
+          setCurrentUserProfile(null);
         }
 
-        // Record anonymous view if not owner
+        // Record view
         if (ownerUid !== user?.uid) {
           addDoc(collection(firestore, 'startups', ownerUid, 'views'), {
             startupId: ownerUid,
@@ -135,59 +135,60 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           }).catch(() => {});
         }
       } catch (error) {
-        console.error("Error loading startup profile data:", error);
+        console.error("Error loading profile:", error);
       } finally {
         setIsLoading(false);
       }
     }
+
     loadData();
-  }, [firestore, slugOrId, user?.uid, router]);
+  }, [firestore, slugOrId, user?.uid, isAuthLoading]);
 
   const handleExpressInterest = useCallback(async () => {
     if (!firestore || !startup) return;
 
-    // 1. If Guest: Save action and redirect to login
+    // Handle Guests
     if (!user) {
       localStorage.setItem('pending_interest_startup_id', startup.id);
       toast({ 
         title: "Login Required", 
-        description: "Please sign in to share your interest with the founder." 
+        description: "Redirecting to login..." 
       });
-      router.push(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`);
+      const returnUrl = encodeURIComponent(window.location.pathname);
+      router.push(`/login?returnTo=${returnUrl}`);
       return;
     }
 
-    // 2. If Logged in but profile still loading
+    // Wait for Firestore Profile
     if (!currentUserProfile) {
-      toast({ title: "Initializing Profile", description: "Just a moment while we verify your account..." });
+      toast({ title: "Verification", description: "Finalizing your session..." });
       return;
     }
 
-    // 3. Prevent owners from pitching to themselves
+    // Ownership Check
     if (user.uid === startup.ownerUid) {
-      toast({ title: "Action Not Allowed", description: "You cannot express interest in your own startup.", variant: "destructive" });
+      toast({ title: "Self-Pitch Restricted", description: "You cannot express interest in your own startup.", variant: "destructive" });
       return;
     }
 
-    // 4. Role Authorization
+    // Role Check
     const roles = currentUserProfile.roles || (currentUserProfile.role ? [currentUserProfile.role] : []);
     const isInvestor = roles.includes('investor') || currentUserProfile.primaryRole === 'investor';
     
     if (!isInvestor) {
       toast({ 
-        title: "Investors Only", 
-        description: "Please update your profile role to 'Investor' to pitch ventures.", 
+        title: "Investor Access Required", 
+        description: "Please update your role to 'Investor' in settings to continue.", 
         variant: "destructive" 
       });
       return;
     }
 
-    // 5. Prevent Duplicates
     if (existingInterest || isSubmittingInterest) return;
 
     setIsSubmittingInterest(true);
     const ownerUid = startup.ownerUid;
-    const investorName = currentUserProfile.fullName || user.displayName || "Ecosystem Investor";
+    const investorName = currentUserProfile.fullName || "Verified Investor";
     
     const interestData = {
       startupId: ownerUid,
@@ -197,76 +198,59 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     };
 
     try {
-      // Create Records across system
       await Promise.all([
-        // Subcollection record for founder's CRM
         setDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid), interestData),
-        
-        // Pitch record
         addDoc(collection(firestore, 'pitches'), {
           fromInvestorUid: user.uid,
           toFounderUid: ownerUid,
           status: 'pending',
           createdAt: serverTimestamp(),
         }),
-
-        // Connection request
         addDoc(collection(firestore, 'connections'), {
           initiatorUid: user.uid,
           recipientUid: ownerUid,
           type: 'investor',
           status: 'pending',
-          message: `Interested in your venture: ${startup.name}`,
+          message: `Investor interest in: ${startup.name}`,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         })
       ]);
 
-      // Notify Founder
       createNotification(firestore, {
         recipientUid: ownerUid,
         actorUid: user.uid,
         type: 'investor_interest',
-        title: 'New Investor Interest',
+        title: 'New Venture Interest',
         message: `${investorName} expressed interest in ${startup.name}.`,
         targetId: ownerUid,
         targetType: 'user'
       });
 
       setExistingInterest(interestData);
-      toast({ 
-        title: "Interest Sent!", 
-        description: `Your profile has been shared with ${founder?.fullName || 'the founder'}.` 
-      });
+      toast({ title: "Interest Registered", description: "The founder has been notified of your interest." });
     } catch (error) {
-      console.error("Interest submission error:", error);
-      toast({ 
-        variant: "destructive", 
-        title: "Submission Failed", 
-        description: "We couldn't process your request. Please try again later." 
-      });
+      toast({ variant: "destructive", title: "Action Failed", description: "Failed to submit interest. Please check your connection." });
     } finally {
       setIsSubmittingInterest(false);
     }
-  }, [user, firestore, startup, currentUserProfile, existingInterest, isSubmittingInterest, router, toast, founder]);
+  }, [user, firestore, startup, currentUserProfile, existingInterest, isSubmittingInterest, router, toast]);
 
-  // Handle auto-completion of pending interest after login
+  // Auto-submit after login
   useEffect(() => {
-    if (user && !isLoading && startup && currentUserProfile) {
+    if (!isLoading && !isAuthLoading && user && startup && currentUserProfile && !hasAttemptedAutoSubmit.current) {
       const pendingId = localStorage.getItem('pending_interest_startup_id');
       if (pendingId === startup.id) {
+        hasAttemptedAutoSubmit.current = true;
         localStorage.removeItem('pending_interest_startup_id');
-        // Small delay to ensure all states are settled
-        const timer = setTimeout(() => handleExpressInterest(), 500);
-        return () => clearTimeout(timer);
+        setTimeout(() => handleExpressInterest(), 1000);
       }
     }
-  }, [user, isLoading, startup, currentUserProfile, handleExpressInterest]);
+  }, [isLoading, isAuthLoading, user, startup, currentUserProfile, handleExpressInterest]);
 
   const copyListingLink = () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url);
-    toast({ title: "Link Copied", description: "Public profile URL is ready to share." });
+    navigator.clipboard.writeText(window.location.href);
+    toast({ title: "Link Copied" });
   };
 
   if (isLoading) {
@@ -288,8 +272,8 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         <main className="flex-1 container mx-auto px-4 flex items-center justify-center text-center">
           <Card className="max-w-md border-none shadow-2xl rounded-[3rem] p-12">
             <AlertCircle className="h-16 w-16 text-amber-500 mx-auto mb-6" />
-            <h1 className="text-2xl font-black mb-2">Private Listing</h1>
-            <p className="text-slate-500 mb-8">This venture profile is currently hidden or under review by the platform administrators.</p>
+            <h1 className="text-2xl font-black mb-2">Venture Hidden</h1>
+            <p className="text-slate-500 mb-8">This startup profile is currently set to private or under review.</p>
             <Button asChild className="rounded-full px-8"><Link href="/founders">Explore Directory</Link></Button>
           </Card>
         </main>
@@ -307,8 +291,8 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
               <Rocket className="h-12 w-12 text-slate-200" />
            </div>
            <h1 className="text-3xl font-black text-slate-900 mb-2">Venture Not Found</h1>
-           <p className="text-slate-500 mb-8 max-w-sm">The startup you're looking for might have changed its name or the link is expired.</p>
-           <Button asChild className="rounded-full px-8"><Link href="/founders">Browse Founders</Link></Button>
+           <p className="text-slate-500 mb-8 max-w-sm">The startup you're looking for might have been moved or removed.</p>
+           <Button asChild className="rounded-full px-8"><Link href="/founders">Explore Founders</Link></Button>
         </main>
         <PublicFooter />
       </div>
@@ -340,12 +324,12 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                       </Badge>
                       {startup.status === 'hidden' && (
                         <Badge variant="destructive" className="rounded-xl px-4 py-1.5 flex items-center gap-1.5 font-black text-[10px]">
-                          <EyeOff className="h-3 w-3" /> PRIVATE VIEW
+                          <EyeOff className="h-3 w-3" /> PRIVATE
                         </Badge>
                       )}
                     </div>
                     <p className="text-xl md:text-2xl font-medium opacity-90 leading-relaxed italic border-l-4 border-white/30 pl-6">
-                      "{startup.shortDescription || 'A revolutionary venture building the future.'}"
+                      "{startup.shortDescription || 'Building the future of our industry.'}"
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-3 w-full md:w-auto">
@@ -390,15 +374,15 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
               <div className="grid grid-cols-1 md:grid-cols-4 gap-12 pb-12 border-b border-slate-100">
                 <div className="space-y-1.5">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                    <Users className="h-3 w-3 text-primary" /> Building Lead
+                    <Users className="h-3 w-3 text-primary" /> Founder
                   </p>
                   <Link href={`/founders/${startup.ownerUid}`} className="text-xl font-black text-slate-900 hover:text-primary transition-colors flex items-center gap-2">
-                    {founder?.fullName || "Founder"} <ArrowRight className="h-4 w-4 opacity-30" />
+                    {founder?.fullName || "Leader"} <ArrowRight className="h-4 w-4 opacity-30" />
                   </Link>
                 </div>
                 <div className="space-y-1.5">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                    <MapPin className="h-3 w-3 text-primary" /> Headquarters
+                    <MapPin className="h-3 w-3 text-primary" /> Base
                   </p>
                   <p className="text-xl font-black text-slate-900">{startup.location || 'Remote'}</p>
                 </div>
@@ -410,9 +394,9 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                 </div>
                 <div className="space-y-1.5">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                    <HandCoins className="h-3 w-3 text-primary" /> Target
+                    <HandCoins className="h-3 w-3 text-primary" /> Funding
                   </p>
-                  <p className="text-2xl font-black text-green-600">{startup.fundingNeed || 'TBD'}</p>
+                  <p className="text-2xl font-black text-green-600">{startup.fundingNeed || 'Goal TBD'}</p>
                 </div>
               </div>
 
@@ -434,7 +418,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                     <section className="space-y-6">
                       <div className="flex items-center gap-4">
                         <div className="h-1 w-12 bg-primary rounded-full" />
-                        <h3 className="text-3xl font-black tracking-tight text-slate-900">The Solution</h3>
+                        <h3 className="text-3xl font-black tracking-tight text-slate-900">Our Solution</h3>
                       </div>
                       <p className="text-slate-600 text-xl leading-relaxed whitespace-pre-wrap font-medium">
                         {startup.solution}
@@ -460,30 +444,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                       </section>
                     )}
                   </div>
-
-                  <div className="space-y-16 pt-16 border-t border-slate-50">
-                    {startup.traction && (
-                      <section className="space-y-6">
-                        <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3">
-                          <TrendingUp className="h-6 w-6 text-primary" /> Momentum & Traction
-                        </h3>
-                        <div className="bg-slate-50 p-10 rounded-[3rem] border border-slate-100 leading-relaxed text-xl font-medium text-slate-700 italic">
-                          "{startup.traction}"
-                        </div>
-                      </section>
-                    )}
-
-                    {startup.teamInfo && (
-                      <section className="space-y-6">
-                        <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3">
-                          <ShieldCheck className="h-6 w-6 text-primary" /> The Founders
-                        </h3>
-                        <p className="text-slate-600 text-lg leading-relaxed font-medium">
-                          {startup.teamInfo}
-                        </p>
-                      </section>
-                    )}
-                  </div>
                 </div>
 
                 <div className="lg:col-span-4">
@@ -491,14 +451,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                     <h3 className="text-xl font-black text-slate-900 border-b pb-6">Venture Dossier</h3>
                     
                     <div className="space-y-8">
-                      <div className="space-y-2">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fundraising Status</p>
-                        <div className="flex items-center justify-between">
-                          <p className="text-lg font-black text-slate-900">{startup.fundraisingStatus || 'Open'}</p>
-                          <Badge className="bg-green-50 text-green-700 border-green-100 px-3 font-bold text-[10px]">ACTIVE</Badge>
-                        </div>
-                      </div>
-                      
                       <div className="space-y-2">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Equity Allocation</p>
                         <p className="text-2xl font-black text-primary">{startup.equityOffered || 'TBD'}</p>
@@ -508,32 +460,19 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                          {startup.website && (
                             <Button className="w-full h-14 rounded-2xl gap-3 text-base font-black shadow-xl" asChild>
                               <a href={startup.website.startsWith('http') ? startup.website : `https://${startup.website}`} target="_blank" rel="noopener noreferrer">
-                                <Globe className="h-5 w-5" /> Official Website
+                                <Globe className="h-5 w-5" /> Website
                               </a>
                             </Button>
                          )}
                          {startup.pitchDeckUrl && (
                             <Button variant="outline" className="w-full h-14 rounded-2xl gap-3 text-base font-bold border-slate-200 hover:bg-slate-50 transition-all" asChild>
                               <a href={startup.pitchDeckUrl} target="_blank" rel="noopener noreferrer">
-                                <FileText className="h-5 w-5 text-primary" /> View Pitch Deck <ExternalLink className="h-3 w-3 opacity-30" />
+                                <FileText className="h-5 w-5 text-primary" /> Pitch Deck <ExternalLink className="h-3 w-3 opacity-30" />
                               </a>
                             </Button>
                          )}
                       </div>
                     </div>
-
-                    {startup.tags && startup.tags.length > 0 && (
-                      <div className="pt-8 border-t border-slate-50">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Verticals</p>
-                        <div className="flex flex-wrap gap-2">
-                          {startup.tags.map((tag: string) => (
-                            <Badge key={tag} variant="secondary" className="text-[10px] px-3 py-1 rounded-xl bg-slate-100 border-none text-slate-500 font-bold uppercase tracking-tight">
-                              #{tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </section>
                 </div>
               </div>

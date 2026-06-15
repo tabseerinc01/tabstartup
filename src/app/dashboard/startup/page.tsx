@@ -310,12 +310,12 @@ export default function StartupPage() {
                        <div className="space-y-3 pt-6 border-t border-slate-100">
                           {startupData?.website && (
                              <Button variant="outline" className="w-full justify-between h-12 rounded-xl font-bold border-slate-200" asChild>
-                                <a href={startupData.website} target="_blank"><Globe className="h-4 w-4" /> Website <ExternalLink className="h-3 w-3 opacity-30" /></a>
+                                <a href={startupData.website} target="_blank" rel="noopener noreferrer"><Globe className="h-4 w-4" /> Website <ExternalLink className="h-3 w-3 opacity-30" /></a>
                              </Button>
                           )}
                           {startupData?.pitchDeckUrl && (
                              <Button variant="outline" className="w-full justify-between h-12 rounded-xl font-bold border-slate-200" asChild>
-                                <a href={startupData.pitchDeckUrl} target="_blank"><FileText className="h-4 w-4" /> Pitch Deck <ExternalLink className="h-3 w-3 opacity-30" /></a>
+                                <a href={startupData.pitchDeckUrl} target="_blank" rel="noopener noreferrer"><FileText className="h-4 w-4" /> Pitch Deck <ExternalLink className="h-3 w-3 opacity-30" /></a>
                              </Button>
                           )}
                        </div>
