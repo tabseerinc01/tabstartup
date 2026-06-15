@@ -60,7 +60,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   
   const hasAttemptedAutoSubmit = useRef(false);
 
-  // 1. Load Startup and Founder Data
+  // Load Startup and Founder Data
   useEffect(() => {
     async function loadData() {
       if (!firestore || !slugOrId) return;
@@ -68,7 +68,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       try {
         let startupDoc: any = null;
 
-        // Priority 1: Lookup by SLUG field
+        // Try finding by SLUG field
         const slugQuery = query(
           collection(firestore, 'startups'),
           where('slug', '==', slugOrId),
@@ -79,7 +79,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         if (!slugSnap.empty) {
           startupDoc = { id: slugSnap.docs[0].id, ...slugSnap.docs[0].data() };
         } else {
-          // Priority 2: Fallback to direct ID lookup
+          // Fallback to direct ID lookup
           const idSnap = await getDoc(doc(firestore, 'startups', slugOrId));
           if (idSnap.exists()) {
             startupDoc = { id: idSnap.id, ...idSnap.data() };
@@ -133,41 +133,45 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     loadData();
   }, [firestore, slugOrId, user?.uid]);
 
-  // 2. Interest Submission Logic
+  // Unified submission logic with retry capability
   const handleExpressInterest = useCallback(async () => {
     if (!firestore || !startup || isSubmittingInterest) return;
 
-    // Handle Unauthenticated State
     if (!user) {
       localStorage.setItem('pending_interest_startup_id', startup.id);
       localStorage.setItem('pending_interest_owner_uid', startup.ownerUid);
-      toast({ title: "Login Required", description: "Your action will resume after login." });
+      toast({ title: "Login Required", description: "Login as an investor to express interest." });
       const returnUrl = encodeURIComponent(window.location.pathname);
       router.push(`/login?returnTo=${returnUrl}`);
       return;
     }
 
-    // Handle Loading State
-    if (!currentUserProfile) {
-      // Small retry loop if profile is still fetching
-      toast({ title: "Syncing Profile", description: "Verifying your investor status..." });
+    // Refresh profile state if it was just logged in
+    let profileToUse = currentUserProfile;
+    if (!profileToUse) {
+      try {
+        const snap = await getDoc(doc(firestore, 'users', user.uid));
+        if (snap.exists()) profileToUse = snap.data();
+      } catch (e) { console.error("Error refreshing profile:", e); }
+    }
+
+    if (!profileToUse) {
+      toast({ title: "Syncing Account", description: "Verifying investor credentials..." });
       return;
     }
 
-    // Prevent Self-Interest
     if (user.uid === startup.ownerUid) {
       toast({ title: "Action Denied", description: "You cannot pitch your own startup.", variant: "destructive" });
       return;
     }
 
-    // Validate Investor Role
-    const rolesArr = (currentUserProfile.roles || (currentUserProfile.role ? [currentUserProfile.role] : ['user'])).filter(Boolean);
-    const isInvestor = rolesArr.includes('investor') || currentUserProfile.primaryRole === 'investor';
+    const rolesArr = (profileToUse.roles || (profileToUse.role ? [profileToUse.role] : ['user'])).filter(Boolean);
+    const isInvestor = rolesArr.includes('investor') || profileToUse.primaryRole === 'investor';
     
     if (!isInvestor) {
       toast({ 
-        title: "Investor Access Only", 
-        description: "Please update your role to 'Investor' in settings to use this feature.", 
+        title: "Role Upgrade Required", 
+        description: "Only verified Investors can pitch startups. Please activate the Investor role in your profile.", 
         variant: "destructive" 
       });
       return;
@@ -175,7 +179,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
 
     setIsSubmittingInterest(true);
     const ownerUid = startup.ownerUid;
-    const investorName = currentUserProfile.fullName || "A Capital Partner";
+    const investorName = profileToUse.fullName || "A Capital Partner";
     
     const basePayload = {
       startupId: ownerUid,
@@ -185,33 +189,27 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     };
 
     try {
-      // Create multiple records in parallel
+      // Execute all record creations
       await Promise.all([
-        // 1. Local interest record
         setDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid), basePayload),
-        
-        // 2. Legacy pitch record
         addDoc(collection(firestore, 'pitches'), {
           fromInvestorUid: user.uid,
           toFounderUid: ownerUid,
           status: 'pending',
-          message: `Interest in ${startup.name}`,
+          message: `Interested in pitching for ${startup.name}.`,
           createdAt: serverTimestamp(),
         }),
-
-        // 3. Official connection request
         addDoc(collection(firestore, 'connections'), {
           initiatorUid: user.uid,
           recipientUid: ownerUid,
           type: 'investor',
           status: 'pending',
-          message: `I'm interested in pitching for ${startup.name}.`,
+          message: `I would like to explore an investment opportunity with ${startup.name}.`,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         })
       ]);
 
-      // 4. Send Founder Notification
       createNotification(firestore, {
         recipientUid: ownerUid,
         actorUid: user.uid,
@@ -223,7 +221,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       });
 
       setExistingInterest(basePayload);
-      toast({ title: "Request Sent", description: "The founder has been notified of your interest." });
+      toast({ title: "Success", description: "Your interest has been shared with the founder." });
     } catch (error: any) {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: `startups/${ownerUid}/interests/${user.uid}`,
@@ -235,23 +233,22 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     }
   }, [user, firestore, startup, currentUserProfile, isSubmittingInterest, router, toast]);
 
-  // 3. Auto-resume logic after login
+  // Auto-resume logic
   useEffect(() => {
-    if (!isLoading && user && startup && currentUserProfile && !hasAttemptedAutoSubmit.current) {
+    if (!isLoading && user && startup && !hasAttemptedAutoSubmit.current) {
       const pendingId = localStorage.getItem('pending_interest_startup_id');
       if (pendingId === startup.id) {
         hasAttemptedAutoSubmit.current = true;
         localStorage.removeItem('pending_interest_startup_id');
         localStorage.removeItem('pending_interest_owner_uid');
-        // Delay slightly for UI stability
-        setTimeout(() => handleExpressInterest(), 1000);
+        setTimeout(() => handleExpressInterest(), 1500);
       }
     }
-  }, [isLoading, user, startup, currentUserProfile, handleExpressInterest]);
+  }, [isLoading, user, startup, handleExpressInterest]);
 
   const copyListingLink = () => {
     navigator.clipboard.writeText(window.location.href);
-    toast({ title: "Link Copied", description: "Startup profile URL is ready to share." });
+    toast({ title: "Link Copied", description: "The startup profile URL is ready to share." });
   };
 
   if (isLoading) {
@@ -273,9 +270,9 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         <main className="flex-1 container mx-auto px-4 flex items-center justify-center text-center">
           <Card className="max-w-md border-none shadow-2xl rounded-[3rem] p-12">
             <AlertCircle className="h-16 w-16 text-amber-500 mx-auto mb-6" />
-            <h1 className="text-2xl font-black mb-2">Venture Hidden</h1>
-            <p className="text-slate-500 mb-8">This startup profile is currently set to private by the founder.</p>
-            <Button asChild className="rounded-full px-8"><Link href="/founders">Explore Directory</Link></Button>
+            <h1 className="text-2xl font-black mb-2">Private Listing</h1>
+            <p className="text-slate-500 mb-8">This venture profile is currently hidden by the founder.</p>
+            <Button asChild className="rounded-full px-8"><Link href="/founders">Return to Directory</Link></Button>
           </Card>
         </main>
         <PublicFooter />
@@ -292,8 +289,8 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
               <Rocket className="h-12 w-12 text-slate-200" />
            </div>
            <h1 className="text-3xl font-black text-slate-900 mb-2">Venture Not Found</h1>
-           <p className="text-slate-500 mb-8 max-w-sm">The startup profile you're looking for may have been removed or the link is broken.</p>
-           <Button asChild className="rounded-full px-8"><Link href="/founders">Explore Founders</Link></Button>
+           <p className="text-slate-500 mb-8 max-w-sm">The startup profile you are looking for might have changed its name or been removed.</p>
+           <Button asChild className="rounded-full px-8"><Link href="/founders">Explore Directory</Link></Button>
         </main>
         <PublicFooter />
       </div>
