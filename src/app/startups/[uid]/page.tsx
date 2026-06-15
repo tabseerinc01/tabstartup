@@ -1,38 +1,10 @@
-
 import { redirect } from 'next/navigation';
-import { firebaseConfig } from '@/firebase/config';
-
-async function getStartupSlug(uid: string) {
-  const projectId = firebaseConfig.projectId;
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/startups/${uid}`;
-  
-  try {
-    const response = await fetch(url, { next: { revalidate: 60 } });
-    if (response.ok) {
-      const data = await response.json();
-      return data.fields?.slug?.stringValue || null;
-    }
-  } catch (error) {
-    console.error("Error fetching startup slug for redirect:", error);
-  }
-  return null;
-}
 
 /**
- * Handle legacy UID URLs by redirecting to the consolidated slug handler.
- * We rename the internal variable to 'slug' to avoid build conflicts with the [slug] sibling route
- * if the system hasn't fully cleared the old folder yet.
+ * This route is now conflicting with [slug]. 
+ * We are converting it to a static redirect handler to resolve the dynamic path conflict.
+ * NOTE: Please delete the entire 'src/app/startups/[uid]' folder manually to fully resolve the Next.js build error.
  */
-export default async function LegacyRedirect({ params }: { params: Promise<{ uid: string }> }) {
-  const { uid: identifier } = await params;
-  
-  const startupSlug = await getStartupSlug(identifier);
-  
-  // If we find a slug, redirect to the new canonical URL
-  if (startupSlug) {
-    redirect(`/startups/${startupSlug}`);
-  }
-  
-  // Otherwise redirect to the consolidated handler which handles IDs too
-  redirect(`/startups/${identifier}`);
+export default async function ObsoleteRouteHandler() {
+  redirect('/founders');
 }

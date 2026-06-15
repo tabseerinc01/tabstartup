@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import StartupProfileClient from './startup-profile-client';
 import { firebaseConfig } from '@/firebase/config';
 
-// Robust helper to find startup by slug or ID via REST API
+// Universal helper to find startup by slug or ID via REST API
 async function getStartupData(identifier: string) {
   const projectId = firebaseConfig.projectId;
   const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
