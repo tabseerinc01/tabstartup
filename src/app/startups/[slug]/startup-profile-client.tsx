@@ -65,7 +65,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       try {
         let startupDoc: any = null;
 
-        // 1. First, try finding by SLUG field
+        // 1. Try lookup by SLUG field first
         const slugQuery = query(
           collection(firestore, 'startups'),
           where('slug', '==', slugOrId),
@@ -76,11 +76,11 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         if (!slugSnap.empty) {
           startupDoc = { id: slugSnap.docs[0].id, ...slugSnap.docs[0].data() };
         } else {
-          // 2. If not found by slug, try finding by Document ID (which is the UID)
+          // 2. Fallback to lookup by UID (document ID)
           const idSnap = await getDoc(doc(firestore, 'startups', slugOrId));
           if (idSnap.exists()) {
             startupDoc = { id: idSnap.id, ...idSnap.data() };
-            // If the document has a slug, redirect to the SEO-friendly URL
+            // If it has a slug, redirect to the pretty URL
             if (startupDoc.slug && startupDoc.slug !== slugOrId) {
               router.replace(`/startups/${startupDoc.slug}`);
               return;
@@ -96,7 +96,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         const ownerUid = startupDoc.ownerUid;
         setStartup(startupDoc);
 
-        // Load Founder Profile and context concurrently
+        // Load Founder Profile
         const founderSnap = await getDoc(doc(firestore, 'users', ownerUid));
         if (founderSnap.exists()) {
           setFounder(founderSnap.data());
@@ -108,7 +108,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             const profileData = userSnap.data();
             setCurrentUserProfile(profileData);
             
-            // Check visibility
+            // Check visibility based on roles/ownership
             const role = profileData.role || profileData.primaryRole;
             const isAdmin = role === 'admin' || role === 'super_admin';
             const isOwner = user.uid === ownerUid;
@@ -118,14 +118,14 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             }
           }
 
-          // Check for existing interest
+          // Check for existing investor interest
           const interestSnap = await getDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid));
           if (interestSnap.exists()) {
             setExistingInterest(interestSnap.data());
           }
         }
 
-        // Record view anonymously if not owner
+        // Record anonymous view if not owner
         if (ownerUid !== user?.uid) {
           addDoc(collection(firestore, 'startups', ownerUid, 'views'), {
             startupId: ownerUid,

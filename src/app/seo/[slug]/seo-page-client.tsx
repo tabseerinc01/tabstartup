@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -482,7 +481,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
             </div>
           </section>
 
-          {/* Join the Startup Ecosystem CTA */}
+          {/* Join the Ecosystem CTA */}
           <section className="bg-slate-900 rounded-[3rem] p-12 md:p-20 text-center space-y-8 shadow-2xl animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-500">
             <div className="space-y-4">
               <h2 className="text-3xl md:text-5xl font-black text-white tracking-tight">Join the Startup Ecosystem</h2>
@@ -499,7 +498,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
                 <Link href="/founders">Explore Startups</Link>
               </Button>
               <Button size="lg" variant="secondary" className="rounded-full px-10 h-14 text-base font-bold bg-white text-slate-900 hover:bg-slate-100" asChild>
-                <Link href="/invest">Invest in TabStartup</Link>
+                <Link href="/signup">Join TabStartup</Link>
               </Button>
             </div>
           </section>

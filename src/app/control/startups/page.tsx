@@ -11,12 +11,12 @@ import {
   Briefcase, 
   Calendar, 
   Star, 
-  CheckCircle2,
-  AlertCircle,
-  EyeOff,
-  MoreHorizontal,
-  Trash2,
-  StarOff
+  CheckCircle2, 
+  AlertCircle, 
+  EyeOff, 
+  MoreHorizontal, 
+  Trash2, 
+  StarOff 
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -212,6 +212,7 @@ export default function StartupOversightPage() {
                   const createdAtDate = s.createdAt?.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
                   const isFeatured = s.featured || false;
                   const status = s.status || 'active';
+                  const identifier = s.slug || s.ownerUid;
 
                   return (
                     <TableRow key={s.id} className="group border-b border-slate-50 hover:bg-slate-50/30 transition-colors">
@@ -306,7 +307,7 @@ export default function StartupOversightPage() {
                             <DropdownMenuContent align="end" className="rounded-xl">
                               <DropdownMenuLabel>Venture Actions</DropdownMenuLabel>
                               <DropdownMenuItem asChild>
-                                <Link href={`/startups/${s.ownerUid}`} className="cursor-pointer flex items-center gap-2">
+                                <Link href={`/startups/${identifier}`} className="cursor-pointer flex items-center gap-2">
                                   <Eye className="h-4 w-4" /> View Public Listing
                                 </Link>
                               </DropdownMenuItem>

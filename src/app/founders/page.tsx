@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -38,7 +37,7 @@ export default function FoundersPage() {
           limit(100)
         );
         
-        // 2. Fetch using legacy role structure for migration compatibility
+        // 2. Fetch using legacy role structure
         const legacyRoleQuery = query(
           collection(firestore, 'users'),
           where('role', '==', 'founder'),
@@ -206,6 +205,7 @@ function FounderCard({ founder }: { founder: any }) {
   const displayName = founder.fullName || founder.name;
   const imageId = founder.uid || founder.id || 'user';
   const startup = founder.startup;
+  const startupIdentifier = startup?.slug || founder.uid || founder.id;
 
   return (
     <Card className="flex flex-col h-full hover:shadow-xl transition-all overflow-hidden group border-muted/50 bg-background">
@@ -336,7 +336,7 @@ function FounderCard({ founder }: { founder: any }) {
                           </div>
                         </div>
                         <Button variant="link" className="p-0 h-auto text-primary font-bold" asChild>
-                          <Link href={`/startups/${startup.slug || founder.uid || founder.id}`}>Full Startup Profile & Pitch Deck</Link>
+                          <Link href={`/startups/${startupIdentifier}`}>Full Startup Profile & Pitch Deck</Link>
                         </Button>
                       </div>
                     )}
