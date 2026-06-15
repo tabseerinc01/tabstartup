@@ -34,7 +34,9 @@ function SignupForm() {
 
   useEffect(() => {
     if (user && !isUserLoading) {
-      router.push(returnTo || '/dashboard');
+      // Decode returnTo to handle special characters correctly
+      const redirectUrl = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
+      router.push(redirectUrl);
     }
   }, [user, isUserLoading, router, returnTo]);
 
@@ -70,7 +72,7 @@ function SignupForm() {
 
         toast({ 
           title: "Account created!", 
-          description: "Welcome to TabStartup." 
+          description: "Welcome to the TabStartup ecosystem." 
         });
       })
       .catch((error: any) => {
@@ -101,10 +103,10 @@ function SignupForm() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center p-4 w-full max-w-md">
-      <Card>
+    <div className="flex flex-col items-center justify-center p-4 w-full max-w-md animate-in fade-in duration-500">
+      <Card className="border-none shadow-2xl rounded-[2rem]">
         <CardHeader>
-          <CardTitle className="text-2xl">Join TabStartup</CardTitle>
+          <CardTitle className="text-2xl font-black">Join TabStartup</CardTitle>
           <CardDescription>Join our ecosystem of founders and investors.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -115,6 +117,7 @@ function SignupForm() {
                 id="name" 
                 placeholder="John Doe" 
                 required 
+                className="rounded-xl h-11"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -125,6 +128,7 @@ function SignupForm() {
                 id="email" 
                 type="email" 
                 required 
+                className="rounded-xl h-11"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -135,6 +139,7 @@ function SignupForm() {
                 id="password" 
                 type="password" 
                 required 
+                className="rounded-xl h-11"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -142,7 +147,9 @@ function SignupForm() {
             <div className="space-y-2">
               <Label htmlFor="role">Your Role</Label>
               <Select value={role} onValueChange={setRole}>
-                <SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger>
+                <SelectTrigger className="rounded-xl h-11">
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="founder">Founder</SelectItem>
                   <SelectItem value="mentor">Mentor</SelectItem>
@@ -150,7 +157,7 @@ function SignupForm() {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button type="submit" className="w-full h-11 rounded-xl font-bold shadow-lg shadow-primary/20" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Create account
             </Button>
@@ -158,7 +165,7 @@ function SignupForm() {
         </CardContent>
         <CardFooter>
           <p className="text-sm text-muted-foreground w-full text-center">
-            Already have an account? <Link href={`/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`} className="text-primary hover:underline">Log in</Link>
+            Already have an account? <Link href={`/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`} className="text-primary font-bold hover:underline">Log in</Link>
           </p>
         </CardFooter>
       </Card>

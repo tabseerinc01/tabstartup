@@ -28,7 +28,9 @@ function LoginFormContent() {
 
   useEffect(() => {
     if (user && !isUserLoading) {
-      router.push(returnTo || '/dashboard');
+      // Decode returnTo to handle special characters correctly
+      const redirectUrl = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
+      router.push(redirectUrl);
     }
   }, [user, isUserLoading, router, returnTo]);
 
@@ -39,8 +41,8 @@ function LoginFormContent() {
     signInWithEmailAndPassword(auth, email, password)
       .then(() => {
         toast({ 
-          title: "Success", 
-          description: "Welcome back!" 
+          title: "Welcome back!", 
+          description: "Login successful." 
         });
       })
       .catch((error: any) => {
@@ -74,10 +76,10 @@ function LoginFormContent() {
   }
 
   return (
-    <div className="w-full max-w-md">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Log in</CardTitle>
+    <div className="w-full max-w-md animate-in fade-in duration-500">
+      <Card className="border-none shadow-2xl rounded-[2rem]">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-black">Log in</CardTitle>
           <CardDescription>Enter your credentials to access your dashboard</CardDescription>
         </CardHeader>
         <CardContent>
@@ -89,6 +91,7 @@ function LoginFormContent() {
                 type="email" 
                 placeholder="m@example.com" 
                 required 
+                className="rounded-xl h-11"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -99,11 +102,12 @@ function LoginFormContent() {
                 id="password" 
                 type="password" 
                 required 
+                className="rounded-xl h-11"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button type="submit" className="w-full h-11 rounded-xl font-bold shadow-lg shadow-primary/20" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Log in
             </Button>
@@ -111,9 +115,10 @@ function LoginFormContent() {
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground w-full text-center">
-            Don't have an account? <Link href={`/signup${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`} className="text-primary hover:underline">Sign up</Link>
+            Don't have an account? <Link href={`/signup${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`} className="text-primary font-bold hover:underline">Sign up</Link>
           </p>
-          <Button variant="ghost" asChild size="sm" className="w-full">
+          <div className="h-px w-full bg-slate-100 my-2" />
+          <Button variant="ghost" asChild size="sm" className="w-full rounded-xl text-slate-400">
             <Link href="/dashboard">Preview Dashboard (Demo)</Link>
           </Button>
         </CardFooter>
