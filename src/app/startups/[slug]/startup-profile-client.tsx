@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFirestore, useUser } from '@/firebase';
 import { 
@@ -142,16 +142,22 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     loadData();
   }, [firestore, slugOrId, user?.uid, router]);
 
-  const handleExpressInterest = async () => {
-    if (!user || !firestore || !startup || !currentUserProfile) {
-      toast({ title: "Login Required", description: "Sign in to express interest.", variant: "destructive" });
-      router.push('/login');
+  const handleExpressInterest = useCallback(async () => {
+    if (!firestore || !startup) return;
+
+    if (!user) {
+      // Preserve pending action
+      localStorage.setItem('pending_interest_startup_id', startup.id);
+      toast({ title: "Login Required", description: "Sign in to express interest in this startup." });
+      router.push(`/login?returnTo=${window.location.pathname}`);
       return;
     }
 
+    if (!currentUserProfile) return;
+
     const rolesArr = (currentUserProfile.roles || (currentUserProfile.role ? [currentUserProfile.role] : ['user'])).filter(Boolean);
     if (!rolesArr.includes('investor')) {
-      toast({ title: "Investors Only", description: "Only verified investors can pitch to startups.", variant: "destructive" });
+      toast({ title: "Investors Only", description: "Only verified investors can express interest in startups.", variant: "destructive" });
       return;
     }
 
@@ -167,8 +173,10 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     };
 
     try {
+      // 1. Create Interest Record (Subcollection)
       await setDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid), interestData);
       
+      // 2. Create Pitch Record
       await addDoc(collection(firestore, 'pitches'), {
         fromInvestorUid: user.uid,
         toFounderUid: ownerUid,
@@ -176,24 +184,48 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         createdAt: serverTimestamp(),
       });
 
+      // 3. Create Connection Request
+      await addDoc(collection(firestore, 'connections'), {
+        initiatorUid: user.uid,
+        recipientUid: ownerUid,
+        type: 'investor',
+        status: 'pending',
+        message: `Interested in ${startup.name}`,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      // 4. Create Founder Notification
       createNotification(firestore, {
         recipientUid: ownerUid,
         actorUid: user.uid,
         type: 'investor_interest',
-        title: 'Investor Interest',
+        title: 'New Investor Interest',
         message: `${currentUserProfile.fullName} showed interest in ${startup.name}.`,
         targetId: ownerUid,
         targetType: 'user'
       });
 
       setExistingInterest(interestData);
-      toast({ title: "Interest Shared", description: "The founder has been notified." });
+      toast({ title: "Interest Shared", description: "Your profile has been shared with the founder." });
     } catch (error) {
       console.error("Error sharing interest:", error);
+      toast({ title: "Error", description: "Failed to send interest request.", variant: "destructive" });
     } finally {
       setIsSubmittingInterest(false);
     }
-  };
+  }, [user, firestore, startup, currentUserProfile, existingInterest, isSubmittingInterest, router, toast]);
+
+  // Handle auto-completion of pending interest after login
+  useEffect(() => {
+    if (user && !isLoading && startup && currentUserProfile) {
+      const pendingId = localStorage.getItem('pending_interest_startup_id');
+      if (pendingId === startup.id) {
+        localStorage.removeItem('pending_interest_startup_id');
+        handleExpressInterest();
+      }
+    }
+  }, [user, isLoading, startup, currentUserProfile, handleExpressInterest]);
 
   const copyListingLink = () => {
     const url = window.location.href;

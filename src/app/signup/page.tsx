@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
@@ -16,9 +15,6 @@ import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
 
-// Force dynamic rendering to prevent prerender errors with useSearchParams on Vercel
-export const dynamic = 'force-dynamic';
-
 function SignupForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -28,6 +24,8 @@ function SignupForm() {
   const { user, isUserLoading } = useUser();
   
   const roleParam = searchParams.get('role');
+  const returnTo = searchParams.get('returnTo');
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -36,9 +34,9 @@ function SignupForm() {
 
   useEffect(() => {
     if (user && !isUserLoading) {
-      router.push('/dashboard');
+      router.push(returnTo || '/dashboard');
     }
-  }, [user, isUserLoading, router]);
+  }, [user, isUserLoading, router, returnTo]);
 
   const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,8 +72,6 @@ function SignupForm() {
           title: "Account created!", 
           description: "Welcome to TabStartup." 
         });
-        
-        router.push('/dashboard');
       })
       .catch((error: any) => {
         setIsSubmitting(false);
@@ -105,9 +101,8 @@ function SignupForm() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center p-4">
-      <Logo className="mb-8" />
-      <Card className="w-full max-w-md">
+    <div className="flex flex-col items-center justify-center p-4 w-full max-w-md">
+      <Card>
         <CardHeader>
           <CardTitle className="text-2xl">Join TabStartup</CardTitle>
           <CardDescription>Join our ecosystem of founders and investors.</CardDescription>
@@ -163,7 +158,7 @@ function SignupForm() {
         </CardContent>
         <CardFooter>
           <p className="text-sm text-muted-foreground w-full text-center">
-            Already have an account? <Link href="/login" className="text-primary hover:underline">Log in</Link>
+            Already have an account? <Link href={`/login${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`} className="text-primary hover:underline">Log in</Link>
           </p>
         </CardFooter>
       </Card>
@@ -174,6 +169,7 @@ function SignupForm() {
 export default function SignupPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-muted/20">
+      <Logo className="mb-8" />
       <Suspense fallback={
         <div className="flex flex-col items-center justify-center p-4">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />

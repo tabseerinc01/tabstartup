@@ -1,9 +1,8 @@
-
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,8 +13,9 @@ import { useAuth, useUser } from '@/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 
-export default function LoginPage() {
+function LoginFormContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
@@ -24,32 +24,29 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Redirect if already logged in
+  const returnTo = searchParams.get('returnTo');
+
   useEffect(() => {
     if (user && !isUserLoading) {
-      router.push('/dashboard');
+      router.push(returnTo || '/dashboard');
     }
-  }, [user, isUserLoading, router]);
+  }, [user, isUserLoading, router, returnTo]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Using the SDK directly and following non-blocking pattern by not using 'await'
-    // but still catching errors to prevent runtime crashes.
     signInWithEmailAndPassword(auth, email, password)
       .then(() => {
         toast({ 
           title: "Success", 
           description: "Welcome back!" 
         });
-        // Success redirect is handled by the useEffect monitoring auth state
       })
       .catch((error: any) => {
         setIsSubmitting(false);
         let message = "An error occurred during login.";
         
-        // Handle common Firebase Auth error codes
         if (error.code === 'auth/invalid-credential') {
           message = "Invalid email or password.";
         } else if (error.code === 'auth/user-not-found') {
@@ -70,16 +67,15 @@ export default function LoginPage() {
 
   if (isUserLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/20">
-      <Logo className="mb-8" />
-      <Card className="w-full max-w-md">
+    <div className="w-full max-w-md">
+      <Card>
         <CardHeader>
           <CardTitle className="text-2xl">Log in</CardTitle>
           <CardDescription>Enter your credentials to access your dashboard</CardDescription>
@@ -115,13 +111,24 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground w-full text-center">
-            Don't have an account? <Link href="/signup" className="text-primary hover:underline">Sign up</Link>
+            Don't have an account? <Link href={`/signup${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`} className="text-primary hover:underline">Sign up</Link>
           </p>
           <Button variant="ghost" asChild size="sm" className="w-full">
             <Link href="/dashboard">Preview Dashboard (Demo)</Link>
           </Button>
         </CardFooter>
       </Card>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/20">
+      <Logo className="mb-8" />
+      <Suspense fallback={<Loader2 className="h-8 w-8 animate-spin text-primary" />}>
+        <LoginFormContent />
+      </Suspense>
     </div>
   );
 }
