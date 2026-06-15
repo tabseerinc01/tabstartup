@@ -212,7 +212,7 @@ export default function StartupOversightPage() {
                   const createdAtDate = s.createdAt?.toDate ? s.createdAt.toDate() : new Date(s.createdAt);
                   const isFeatured = s.featured || false;
                   const status = s.status || 'active';
-                  const identifier = s.slug || s.ownerUid;
+                  const identifier = s.slug || s.ownerUid || s.id;
 
                   return (
                     <TableRow key={s.id} className="group border-b border-slate-50 hover:bg-slate-50/30 transition-colors">

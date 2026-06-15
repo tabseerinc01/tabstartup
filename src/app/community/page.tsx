@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -33,16 +32,16 @@ import {
   Users, 
   Clock, 
   Heart, 
-  Share2,
-  Rocket,
-  ShieldCheck,
-  Hash,
-  CornerDownRight,
-  MoreVertical,
-  EyeOff,
-  Trash2,
-  ShieldAlert,
-  Eye
+  Share2, 
+  Rocket, 
+  ShieldCheck, 
+  Hash, 
+  CornerDownRight, 
+  MoreVertical, 
+  EyeOff, 
+  Trash2, 
+  ShieldAlert, 
+  Eye 
 } from 'lucide-react';
 import { 
   DropdownMenu,
@@ -142,6 +141,7 @@ export default function CommunityFeedPage() {
       createdAt: serverTimestamp(),
       status: "active",
       startupName: startupProfile?.name || null,
+      startupSlug: startupProfile?.slug || null,
       startupId: startupProfile ? user.uid : null
     };
 
@@ -320,7 +320,7 @@ export default function CommunityFeedPage() {
           </div>
 
           {user ? (
-            <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100 animate-in fade-in duration-500">
               <form onSubmit={handleCreatePost}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-3">
@@ -442,7 +442,7 @@ export default function CommunityFeedPage() {
             <div className="space-y-4 relative z-10">
               <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">Support local founders</h2>
               <p className="text-white/80 max-w-2xl mx-auto text-lg font-medium leading-relaxed">
-                Connect with the builders and capital partners shaping the future of the emerging ecosystem.
+                Connect with the builders and capital partners shaping the future of the future.
               </p>
             </div>
             
@@ -477,6 +477,7 @@ function PostCard({
 }: any) {
   const createdAtDate = post.createdAt?.toDate ? post.createdAt.toDate() : new Date();
   const profileLink = post.authorType === 'investor' ? `/investors/${post.authorUid}` : `/founders/${post.authorUid}`;
+  const startupIdentifier = post.startupSlug || post.startupId;
 
   return (
     <Card className={`group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-50 animate-in fade-in duration-700 ${post.status === 'hidden' ? 'opacity-60 grayscale' : ''}`}>
@@ -507,9 +508,11 @@ function PostCard({
                     {post.authorType}
                   </Badge>
                   {post.startupName && (
-                    <Badge variant="outline" className="border-primary/20 text-primary h-5 text-[9px] font-bold flex items-center gap-1">
-                      <Rocket className="h-2 w-2" /> {post.startupName}
-                    </Badge>
+                    <Link href={`/startups/${startupIdentifier}`}>
+                      <Badge variant="outline" className="border-primary/20 text-primary h-5 text-[9px] font-bold flex items-center gap-1 hover:bg-primary/5 transition-colors">
+                        <Rocket className="h-2 w-2" /> {post.startupName}
+                      </Badge>
+                    </Link>
                   )}
                   <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tight ml-1">
                     <Clock className="h-3 w-3" />

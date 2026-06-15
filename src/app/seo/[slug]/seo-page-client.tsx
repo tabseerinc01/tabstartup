@@ -198,7 +198,7 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 bg-primary rounded-full animate-pulse" />
             <p className="text-sm font-bold text-slate-900">
-              Connect with founders, investors, and startup talent in Bangladesh.
+              Connect with founders, investors, and startup talent.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -277,25 +277,28 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {featuredStartups.map((s) => (
-                  <Card key={s.id} className="group border-none shadow-lg hover:shadow-2xl transition-all duration-300 bg-background rounded-[2rem] overflow-hidden flex flex-col">
-                    <CardHeader className="pb-2">
-                      <div className="flex justify-between items-start mb-2">
-                        <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 text-[9px] font-black uppercase tracking-widest px-2">Featured</Badge>
-                        <Badge variant="secondary" className="text-[9px] font-bold">{s.stage}</Badge>
-                      </div>
-                      <CardTitle className="text-lg font-black group-hover:text-primary transition-colors truncate">{s.name}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex-1 space-y-4">
-                      <p className="text-xs text-slate-500 font-medium line-clamp-3 leading-relaxed italic">
-                        "{s.shortDescription || 'A high-potential venture building the future.'}"
-                      </p>
-                      <Button variant="outline" className="w-full rounded-xl font-bold text-xs h-9 border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-all" asChild>
-                        <Link href={`/startups/${s.slug || s.ownerUid}`}>View Venture</Link>
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
+                {featuredStartups.map((s) => {
+                  const startupIdentifier = s.slug || s.ownerUid || s.id;
+                  return (
+                    <Card key={s.id} className="group border-none shadow-lg hover:shadow-2xl transition-all duration-300 bg-background rounded-[2rem] overflow-hidden flex flex-col">
+                      <CardHeader className="pb-2">
+                        <div className="flex justify-between items-start mb-2">
+                          <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 text-[9px] font-black uppercase tracking-widest px-2">Featured</Badge>
+                          <Badge variant="secondary" className="text-[9px] font-bold">{s.stage}</Badge>
+                        </div>
+                        <CardTitle className="text-lg font-black group-hover:text-primary transition-colors truncate">{s.name}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex-1 space-y-4">
+                        <p className="text-xs text-slate-500 font-medium line-clamp-3 leading-relaxed italic">
+                          "{s.shortDescription || 'A high-potential venture building the future.'}"
+                        </p>
+                        <Button variant="outline" className="w-full rounded-xl font-bold text-xs h-9 border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-all" asChild>
+                          <Link href={`/startups/${startupIdentifier}`}>View Venture</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </section>
           )}
@@ -329,53 +332,56 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
               </Card>
             ) : (
               <div className="grid gap-6">
-                {startups.map((s) => (
-                  <Card key={s.id} className="group overflow-hidden rounded-[2rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background">
-                    <CardContent className="p-0">
-                      <div className="flex flex-col md:flex-row">
-                        <div className="flex-1 p-8 space-y-4">
-                          <div className="flex items-start justify-between">
-                            <div className="space-y-1">
-                              <h3 className="text-2xl font-black text-slate-900 group-hover:text-primary transition-colors">{s.name}</h3>
-                              <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-100 border-none rounded-md px-2 h-5">
-                                  {s.industry}
-                                </Badge>
-                                <span className="flex items-center gap-1">
-                                  <MapPin className="h-3 w-3" /> {s.location || 'Remote'}
-                                </span>
+                {startups.map((s) => {
+                  const startupIdentifier = s.slug || s.ownerUid || s.id;
+                  return (
+                    <Card key={s.id} className="group overflow-hidden rounded-[2rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background">
+                      <CardContent className="p-0">
+                        <div className="flex flex-col md:flex-row">
+                          <div className="flex-1 p-8 space-y-4">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-1">
+                                <h3 className="text-2xl font-black text-slate-900 group-hover:text-primary transition-colors">{s.name}</h3>
+                                <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                  <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-100 border-none rounded-md px-2 h-5">
+                                    {s.industry}
+                                  </Badge>
+                                  <span className="flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" /> {s.location || 'Remote'}
+                                  </span>
+                                </div>
                               </div>
+                              <Badge variant="outline" className="rounded-full border-slate-200 font-bold text-[10px] h-6 px-3">
+                                {s.stage}
+                              </Badge>
                             </div>
-                            <Badge variant="outline" className="rounded-full border-slate-200 font-bold text-[10px] h-6 px-3">
-                              {s.stage}
-                            </Badge>
-                          </div>
-                          
-                          <p className="text-slate-600 leading-relaxed font-medium line-clamp-2">
-                            {s.shortDescription || "A revolutionary startup building the future of their industry."}
-                          </p>
+                            
+                            <p className="text-slate-600 leading-relaxed font-medium line-clamp-2">
+                              {s.shortDescription || "A revolutionary startup building the future of their industry."}
+                            </p>
 
-                          <div className="pt-4 flex items-center gap-4">
-                            <Button className="rounded-xl font-bold h-11 px-6 group-hover:scale-105 transition-transform" asChild>
-                              <Link href={`/startups/${s.slug || s.ownerUid}`}>
-                                View Profile <ArrowRight className="ml-2 h-4 w-4" />
-                              </Link>
-                            </Button>
-                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-tighter hidden sm:block">
-                              Venture Record: {s.id.slice(0, 8)}
-                            </span>
+                            <div className="pt-4 flex items-center gap-4">
+                              <Button className="rounded-xl font-bold h-11 px-6 group-hover:scale-105 transition-transform" asChild>
+                                <Link href={`/startups/${startupIdentifier}`}>
+                                  View Profile <ArrowRight className="ml-2 h-4 w-4" />
+                                </Link>
+                              </Button>
+                              <span className="text-[10px] font-black text-slate-300 uppercase tracking-tighter hidden sm:block">
+                                Venture Record: {s.id.slice(0, 8)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="w-full md:w-48 bg-slate-50 flex items-center justify-center border-t md:border-t-0 md:border-l border-slate-100 group-hover:bg-primary/5 transition-colors">
+                            <div className="text-center p-6">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Funding</p>
+                                <p className="text-xl font-black text-slate-900">{s.fundingNeed || 'TBD'}</p>
+                            </div>
                           </div>
                         </div>
-                        <div className="w-full md:w-48 bg-slate-50 flex items-center justify-center border-t md:border-t-0 md:border-l border-slate-100 group-hover:bg-primary/5 transition-colors">
-                           <div className="text-center p-6">
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Funding</p>
-                              <p className="text-xl font-black text-slate-900">{s.fundingNeed || 'TBD'}</p>
-                           </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </section>
