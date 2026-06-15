@@ -57,7 +57,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   const [isSubmittingInterest, setIsSubmittingInterest] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   
-  // To avoid multiple triggers of auto-submission
   const hasAttemptedAutoSubmit = useRef(false);
 
   useEffect(() => {
@@ -67,7 +66,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       try {
         let startupDoc: any = null;
 
-        // 1. Try lookup by SLUG field
+        // 1. Priority Lookup by SLUG
         const slugQuery = query(
           collection(firestore, 'startups'),
           where('slug', '==', slugOrId),
@@ -78,7 +77,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         if (!slugSnap.empty) {
           startupDoc = { id: slugSnap.docs[0].id, ...slugSnap.docs[0].data() };
         } else {
-          // 2. Fallback to lookup by UID (document ID)
+          // 2. Fallback to lookup by ID
           const idSnap = await getDoc(doc(firestore, 'startups', slugOrId));
           if (idSnap.exists()) {
             startupDoc = { id: idSnap.id, ...idSnap.data() };
@@ -99,40 +98,27 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           setFounder(founderSnap.data());
         }
 
-        // Load Current User Profile if logged in
+        // Load Current User Profile & Check Interest
         if (user?.uid) {
-          const userSnap = await getDoc(doc(firestore, 'users', user.uid));
-          if (userSnap.exists()) {
-            const profileData = userSnap.data();
+          const [profileSnap, interestSnap] = await Promise.all([
+            getDoc(doc(firestore, 'users', user.uid)),
+            getDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid))
+          ]);
+
+          if (profileSnap.exists()) {
+            const profileData = profileSnap.data();
             setCurrentUserProfile(profileData);
             
-            // Check visibility
             const role = profileData.role || profileData.primaryRole;
             const isAdmin = role === 'admin' || role === 'super_admin';
-            const isOwner = user.uid === ownerUid;
-            
-            if (startupDoc.status === 'hidden' && !isOwner && !isAdmin) {
+            if (startupDoc.status === 'hidden' && user.uid !== ownerUid && !isAdmin) {
               setIsHidden(true);
             }
-
-            // Check existing interest
-            const interestSnap = await getDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid));
-            if (interestSnap.exists()) {
-              setExistingInterest(interestSnap.data());
-            }
           }
-        } else if (!isAuthLoading) {
-          // Clear profile if logged out
-          setCurrentUserProfile(null);
-        }
 
-        // Record view
-        if (ownerUid !== user?.uid) {
-          addDoc(collection(firestore, 'startups', ownerUid, 'views'), {
-            startupId: ownerUid,
-            viewerId: user?.uid || 'anonymous',
-            timestamp: serverTimestamp(),
-          }).catch(() => {});
+          if (interestSnap.exists()) {
+            setExistingInterest(interestSnap.data());
+          }
         }
       } catch (error) {
         console.error("Error loading profile:", error);
@@ -142,49 +128,35 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     }
 
     loadData();
-  }, [firestore, slugOrId, user?.uid, isAuthLoading]);
+  }, [firestore, slugOrId, user?.uid]);
 
   const handleExpressInterest = useCallback(async () => {
-    if (!firestore || !startup) return;
+    if (!firestore || !startup || isSubmittingInterest) return;
 
-    // Handle Guests
     if (!user) {
       localStorage.setItem('pending_interest_startup_id', startup.id);
-      toast({ 
-        title: "Login Required", 
-        description: "Redirecting to login..." 
-      });
+      localStorage.setItem('pending_interest_owner_uid', startup.ownerUid);
+      toast({ title: "Login Required", description: "Save your session to connect." });
       const returnUrl = encodeURIComponent(window.location.pathname);
       router.push(`/login?returnTo=${returnUrl}`);
       return;
     }
 
-    // Wait for Firestore Profile
     if (!currentUserProfile) {
-      toast({ title: "Verification", description: "Finalizing your session..." });
+      toast({ title: "Authentication", description: "Verifying your investor profile..." });
       return;
     }
 
-    // Ownership Check
     if (user.uid === startup.ownerUid) {
-      toast({ title: "Self-Pitch Restricted", description: "You cannot express interest in your own startup.", variant: "destructive" });
+      toast({ title: "Access Denied", description: "You cannot pitch to your own startup.", variant: "destructive" });
       return;
     }
 
-    // Role Check
-    const roles = currentUserProfile.roles || (currentUserProfile.role ? [currentUserProfile.role] : []);
-    const isInvestor = roles.includes('investor') || currentUserProfile.primaryRole === 'investor';
-    
-    if (!isInvestor) {
-      toast({ 
-        title: "Investor Access Required", 
-        description: "Please update your role to 'Investor' in settings to continue.", 
-        variant: "destructive" 
-      });
+    const rolesArr = (currentUserProfile.roles || (currentUserProfile.role ? [currentUserProfile.role] : ['user'])).filter(Boolean);
+    if (!rolesArr.includes('investor')) {
+      toast({ title: "Investor Role Required", description: "Update your profile to 'Investor' to pitch ventures.", variant: "destructive" });
       return;
     }
-
-    if (existingInterest || isSubmittingInterest) return;
 
     setIsSubmittingInterest(true);
     const ownerUid = startup.ownerUid;
@@ -198,55 +170,60 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     };
 
     try {
-      await Promise.all([
-        setDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid), interestData),
-        addDoc(collection(firestore, 'pitches'), {
-          fromInvestorUid: user.uid,
-          toFounderUid: ownerUid,
-          status: 'pending',
-          createdAt: serverTimestamp(),
-        }),
-        addDoc(collection(firestore, 'connections'), {
-          initiatorUid: user.uid,
-          recipientUid: ownerUid,
-          type: 'investor',
-          status: 'pending',
-          message: `Investor interest in: ${startup.name}`,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        })
-      ]);
+      // 1. Create interest record in startup's subcollection
+      await setDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid), interestData);
+      
+      // 2. Create pitch record
+      await addDoc(collection(firestore, 'pitches'), {
+        fromInvestorUid: user.uid,
+        toFounderUid: ownerUid,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
 
+      // 3. Create connection request
+      await addDoc(collection(firestore, 'connections'), {
+        initiatorUid: user.uid,
+        recipientUid: ownerUid,
+        type: 'investor',
+        status: 'pending',
+        message: `Interested in pitching for: ${startup.name}`,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      // 4. Notify founder
       createNotification(firestore, {
         recipientUid: ownerUid,
         actorUid: user.uid,
         type: 'investor_interest',
         title: 'New Venture Interest',
-        message: `${investorName} expressed interest in ${startup.name}.`,
+        message: `${investorName} wants to connect with ${startup.name}.`,
         targetId: ownerUid,
         targetType: 'user'
       });
 
       setExistingInterest(interestData);
-      toast({ title: "Interest Registered", description: "The founder has been notified of your interest." });
+      toast({ title: "Interest Registered", description: "Founder has been notified successfully." });
     } catch (error) {
-      toast({ variant: "destructive", title: "Action Failed", description: "Failed to submit interest. Please check your connection." });
+      toast({ variant: "destructive", title: "Action Failed", description: "Could not submit interest." });
     } finally {
       setIsSubmittingInterest(false);
     }
-  }, [user, firestore, startup, currentUserProfile, existingInterest, isSubmittingInterest, router, toast]);
+  }, [user, firestore, startup, currentUserProfile, isSubmittingInterest, router, toast]);
 
-  // Auto-submit after login
+  // Auto-resume logic
   useEffect(() => {
-    if (!isLoading && !isAuthLoading && user && startup && currentUserProfile && !hasAttemptedAutoSubmit.current) {
+    if (!isLoading && user && startup && currentUserProfile && !hasAttemptedAutoSubmit.current) {
       const pendingId = localStorage.getItem('pending_interest_startup_id');
       if (pendingId === startup.id) {
         hasAttemptedAutoSubmit.current = true;
         localStorage.removeItem('pending_interest_startup_id');
-        setTimeout(() => handleExpressInterest(), 1000);
+        localStorage.removeItem('pending_interest_owner_uid');
+        setTimeout(() => handleExpressInterest(), 1200);
       }
     }
-  }, [isLoading, isAuthLoading, user, startup, currentUserProfile, handleExpressInterest]);
+  }, [isLoading, user, startup, currentUserProfile, handleExpressInterest]);
 
   const copyListingLink = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -273,7 +250,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           <Card className="max-w-md border-none shadow-2xl rounded-[3rem] p-12">
             <AlertCircle className="h-16 w-16 text-amber-500 mx-auto mb-6" />
             <h1 className="text-2xl font-black mb-2">Venture Hidden</h1>
-            <p className="text-slate-500 mb-8">This startup profile is currently set to private or under review.</p>
+            <p className="text-slate-500 mb-8">This startup profile is currently set to private.</p>
             <Button asChild className="rounded-full px-8"><Link href="/founders">Explore Directory</Link></Button>
           </Card>
         </main>
@@ -291,7 +268,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
               <Rocket className="h-12 w-12 text-slate-200" />
            </div>
            <h1 className="text-3xl font-black text-slate-900 mb-2">Venture Not Found</h1>
-           <p className="text-slate-500 mb-8 max-w-sm">The startup you're looking for might have been moved or removed.</p>
+           <p className="text-slate-500 mb-8 max-w-sm">The startup profile may have been removed or moved.</p>
            <Button asChild className="rounded-full px-8"><Link href="/founders">Explore Founders</Link></Button>
         </main>
         <PublicFooter />
