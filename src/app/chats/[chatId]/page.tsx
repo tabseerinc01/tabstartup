@@ -127,16 +127,13 @@ export default function ChatPage() {
 
     setNewMessage('');
 
-    // Add message to subcollection
     addDoc(collection(firestore, 'chats', chatId as string, 'messages'), messageData)
       .then(async () => {
-        // Update last message in the parent chat
         await updateDoc(doc(firestore, 'chats', chatId as string), {
           lastMessage: messageText,
           updatedAt: serverTimestamp()
         });
 
-        // Notify other participants
         if (chat?.participants) {
           chat.participants.forEach((participantUid: string) => {
             if (participantUid !== user.uid) {
@@ -145,7 +142,7 @@ export default function ChatPage() {
                 actorUid: user.uid,
                 type: 'message',
                 title: 'New Message',
-                message: 'You received a new message.',
+                message: messageText.length > 50 ? messageText.substring(0, 47) + '...' : messageText,
                 targetId: chatId as string,
                 targetType: 'chat'
               });
@@ -184,72 +181,88 @@ export default function ChatPage() {
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
       <main className="flex-1 container mx-auto px-4 py-8">
-        <div className="max-w-3xl mx-auto flex flex-col h-[70vh]">
-          <div className="flex items-center justify-between mb-4">
-            <Button variant="ghost" onClick={() => router.back()} className="gap-2">
-              <ArrowLeft className="h-4 w-4" /> Back
+        <div className="max-w-3xl mx-auto flex flex-col h-[75vh]">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4 px-2">
+            <Button 
+              variant="ghost" 
+              onClick={() => router.push('/dashboard/messages')} 
+              className="gap-2 font-bold text-slate-600 hover:bg-white/50"
+            >
+              <ArrowLeft className="h-4 w-4" /> Back to Inbox
             </Button>
             <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10">
+              <Avatar className="h-10 w-10 border-2 border-white shadow-sm">
                 <AvatarImage src={otherUser?.imageUrl} />
-                <AvatarFallback>{otherName.charAt(0)}</AvatarFallback>
+                <AvatarFallback className="font-bold bg-primary/10 text-primary">{otherName.charAt(0)}</AvatarFallback>
               </Avatar>
-              <div>
-                <h2 className="font-bold">{otherName}</h2>
-                <p className="text-xs text-muted-foreground">Direct Message</p>
+              <div className="min-w-0">
+                <h2 className="font-black text-slate-900 truncate">{otherName}</h2>
+                <div className="flex items-center gap-1.5">
+                   <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Chat</p>
+                </div>
               </div>
             </div>
-            <div className="w-10" />
+            <div className="w-20 hidden sm:block" />
           </div>
 
-          <Card className="flex-1 flex flex-col overflow-hidden rounded-3xl border-none shadow-xl bg-background">
+          {/* Chat Container */}
+          <Card className="flex-1 flex flex-col overflow-hidden rounded-[2.5rem] border-none shadow-2xl bg-white ring-1 ring-slate-100">
             <ScrollArea className="flex-1 p-6">
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {messages.length > 0 ? (
-                  messages.map((msg) => (
-                    <div 
-                      key={msg.id} 
-                      className={`flex ${msg.senderId === user?.uid ? 'justify-end' : 'justify-start'}`}
-                    >
+                  messages.map((msg) => {
+                    const isMe = msg.senderId === user?.uid;
+                    return (
                       <div 
-                        className={`max-w-[70%] px-4 py-2 rounded-2xl text-sm ${
-                          msg.senderId === user?.uid 
-                            ? 'bg-primary text-primary-foreground rounded-tr-none' 
-                            : 'bg-muted text-foreground rounded-tl-none'
-                        }`}
+                        key={msg.id} 
+                        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
                       >
-                        <p>{msg.text}</p>
-                        <p className="text-[10px] opacity-70 mt-1 text-right">
+                        <div 
+                          className={`max-w-[80%] sm:max-w-[70%] px-5 py-3 rounded-2xl text-sm font-medium shadow-sm transition-all ${
+                            isMe 
+                              ? 'bg-primary text-white rounded-tr-none' 
+                              : 'bg-slate-100 text-slate-800 rounded-tl-none'
+                          }`}
+                        >
+                          <p className="leading-relaxed">{msg.text}</p>
+                        </div>
+                        <p className="text-[9px] font-black text-slate-300 uppercase tracking-tighter mt-1 px-1">
                           {msg.timestamp?.toDate() ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...'}
                         </p>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
-                  <div className="text-center py-20 text-muted-foreground italic">
-                    No messages yet. Start the conversation!
+                  <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 opacity-30">
+                    <div className="p-4 bg-slate-50 rounded-full">
+                       <Send className="h-8 w-8 text-slate-400" />
+                    </div>
+                    <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Start the conversation</p>
                   </div>
                 )}
                 <div ref={scrollRef} />
               </div>
             </ScrollArea>
 
-            <div className="p-4 border-t bg-background">
-              <form onSubmit={handleSendMessage} className="flex gap-2">
+            {/* Input Area */}
+            <div className="p-6 bg-slate-50/50 border-t border-slate-100">
+              <form onSubmit={handleSendMessage} className="flex gap-3 items-center">
                 <Input 
                   placeholder="Type a message..." 
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  className="rounded-full px-6"
+                  className="rounded-2xl px-6 h-12 bg-white border-none shadow-sm focus-visible:ring-primary/20 text-base"
                   disabled={isSending}
                 />
                 <Button 
                   type="submit" 
                   size="icon" 
-                  className="rounded-full shrink-0" 
+                  className="rounded-2xl h-12 w-12 shrink-0 shadow-lg shadow-primary/20 transition-transform active:scale-95" 
                   disabled={isSending || !newMessage.trim()}
                 >
-                  {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 </Button>
               </form>
             </div>
