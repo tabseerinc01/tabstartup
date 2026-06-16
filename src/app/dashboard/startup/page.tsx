@@ -135,9 +135,32 @@ export default function StartupPage() {
     if (!identifier) return;
 
     const url = `${window.location.origin}/startups/${identifier}`;
-    navigator.clipboard.writeText(url).then(() => {
-      toast({ title: "Link Copied", description: "Public listing URL is ready to share." });
-    });
+    
+    // Safety check for browser focus to prevent NotAllowedError
+    if (!document.hasFocus()) {
+      window.focus();
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url)
+        .then(() => {
+          toast({ title: "Link Copied", description: "Public listing URL is ready to share." });
+        })
+        .catch((err) => {
+          console.warn("Clipboard copy failed:", err);
+          toast({ 
+            title: "Copy Failed", 
+            description: "Please copy the URL manually from your address bar.",
+            variant: "destructive" 
+          });
+        });
+    } else {
+      toast({ 
+        title: "Unsupported Browser", 
+        description: "Your browser does not support automatic copying. Please copy the URL manually.",
+        variant: "destructive" 
+      });
+    }
   };
 
   if (isLoading) {
