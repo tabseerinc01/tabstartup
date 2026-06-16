@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -151,7 +150,11 @@ export default function MentorPublicProfilePage() {
                     )}
                   </>
                 )}
-                <Button variant="outline" className="h-14 px-8 rounded-2xl text-base" onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}>
+                <Button 
+                  variant="outline" 
+                  className="h-14 px-8 rounded-2xl text-base" 
+                  onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}
+                >
                   <MessageSquare className="h-5 w-5" /> Message
                 </Button>
               </div>

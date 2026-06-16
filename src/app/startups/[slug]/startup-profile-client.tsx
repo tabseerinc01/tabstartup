@@ -203,17 +203,14 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       timestamp: serverTimestamp(),
     };
 
-    // 5. Submit Records (Consolidated to prevent duplicates)
-    // Create Interest record on startup sub-collection
+    // 5. Submit Records
     const interestRef = doc(firestore, 'startups', ownerUid, 'interests', user.uid);
     setDoc(interestRef, basePayload)
       .then(() => {
         setExistingInterest(basePayload);
         toast({ title: "Interest Shared", description: "The founder has been notified of your interest." });
         
-        // Only send Connection and Notification once the interest record is initiated
-        
-        // Create Connection Request (Primary linking mechanism)
+        // Create Connection Request
         const connectionData = {
           initiatorUid: user.uid,
           recipientUid: ownerUid,
@@ -223,10 +220,10 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         };
-        addDoc(collection(firestore, 'connections'), connectionData).catch(e => console.error("Conn Error", e));
+        addDoc(collection(firestore!, 'connections'), connectionData).catch(e => console.error("Conn Error", e));
 
         // Send Notification to founder
-        createNotification(firestore, {
+        createNotification(firestore!, {
           recipientUid: ownerUid,
           actorUid: user.uid,
           type: 'investor_interest',
@@ -256,7 +253,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         hasAttemptedAutoSubmit.current = true;
         localStorage.removeItem('pending_interest_startup_id');
         localStorage.removeItem('pending_interest_owner_uid');
-        // Give profile a moment to sync before auto-submitting
         const timer = setTimeout(() => handleExpressInterest(), 1500);
         return () => clearTimeout(timer);
       }
@@ -383,11 +379,9 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                         <Button 
                           variant="outline" 
                           className="h-14 px-8 rounded-2xl text-base font-bold gap-2 border-white/30 text-white hover:bg-white/10 backdrop-blur-md" 
-                          asChild
+                          onClick={() => router.push(`/dashboard/messages?startWith=${startup.ownerUid}`)}
                         >
-                          <Link href={`/dashboard/messages?startWith=${startup.ownerUid}`}>
-                            <MessageSquare className="h-5 w-5" /> Message
-                          </Link>
+                          <MessageSquare className="h-5 w-5" /> Message
                         </Button>
                       </>
                     )}

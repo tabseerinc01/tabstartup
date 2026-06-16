@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -180,7 +179,11 @@ export default function InvestorPublicProfilePage() {
                     )}
                   </>
                 )}
-                <Button variant="outline" className="h-12 px-8 rounded-2xl text-base" onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}>
+                <Button 
+                  variant="outline" 
+                  className="h-12 px-8 rounded-2xl text-base" 
+                  onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}
+                >
                   <Mail className="h-4 w-4" /> Message
                 </Button>
               </div>

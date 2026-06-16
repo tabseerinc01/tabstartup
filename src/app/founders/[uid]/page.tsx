@@ -232,7 +232,11 @@ export default function FounderPublicProfilePage() {
                     <Link href="/dashboard/profile">Edit My Profile</Link>
                   </Button>
                 ) : (
-                  <Button variant="outline" className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base" onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base" 
+                    onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}
+                  >
                     <MessageSquare className="h-5 w-5" /> Message Founder
                   </Button>
                 )}

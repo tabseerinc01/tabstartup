@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -401,7 +400,12 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
                   </Button>
                 </>
               ) : conn.status === 'accepted' ? (
-                <Button variant="outline" size="sm" className="rounded-xl h-10 px-6 font-bold border-primary/20 text-primary gap-2" onClick={() => router.push(`/dashboard/messages?startWith=${otherUid}`)}>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="rounded-xl h-10 px-6 font-bold border-primary/20 text-primary gap-2" 
+                  onClick={() => router.push(`/dashboard/messages?startWith=${otherUid}`)}
+                >
                    <MessageSquare className="h-4 w-4" /> Message
                 </Button>
               ) : (
