@@ -1,10 +1,9 @@
 import { redirect } from 'next/navigation';
 
 /**
- * This route is now conflicting with [slug]. 
- * We are converting it to a static redirect handler to resolve the dynamic path conflict.
- * NOTE: Please delete the entire 'src/app/startups/[uid]' folder manually to fully resolve the Next.js build error.
+ * OBSOLETE BACKUP: This folder is no longer used.
+ * ID-based lookups are now handled as fallbacks within /startups/[slug].
  */
-export default async function ObsoleteRouteHandler() {
+export default async function ObsoleteUidBackup() {
   redirect('/founders');
 }

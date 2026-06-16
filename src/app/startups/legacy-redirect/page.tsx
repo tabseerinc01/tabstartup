@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation';
 
 /**
- * DEPRECATED: This route is part of a migration to consolidate dynamic startup routing.
- * The logic is now handled exclusively by /startups/[slug].
+ * OBSOLETE: This path is deprecated. 
+ * Public access is now handled exclusively via /startups/[slug].
  */
-export default async function LegacyRedirectHandler() {
+export default async function ObsoleteLegacyRedirect() {
   redirect('/founders');
 }

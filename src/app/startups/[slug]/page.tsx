@@ -41,7 +41,7 @@ async function getStartupData(identifier: string) {
       };
     }
 
-    // 2. Fallback to ID-based lookup (Identifier might be the document UID)
+    // 2. Fallback to ID-based lookup if identifier is a UID
     const idUrl = `${baseUrl}/startups/${identifier}`;
     const idResponse = await fetch(idUrl, { next: { revalidate: 60 } });
     if (idResponse.ok) {
