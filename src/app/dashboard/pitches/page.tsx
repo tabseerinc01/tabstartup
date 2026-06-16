@@ -3,7 +3,17 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, updateDoc, doc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { 
+  collection, 
+  query, 
+  where, 
+  updateDoc, 
+  doc, 
+  serverTimestamp, 
+  getDoc,
+  getDocs,
+  writeBatch
+} from 'firebase/firestore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +62,35 @@ export default function VenturePitchesPage() {
   const { data: sentPitches, isLoading: isSentLoading } = useCollection(sentQuery);
   const { data: receivedPitches, isLoading: isReceivedLoading } = useCollection(receivedQuery);
 
+  // Auto-clear pitch notifications when entering this page
+  useEffect(() => {
+    if (!firestore || !user?.uid) return;
+    
+    const clearNotifications = async () => {
+      const q = query(
+        collection(firestore, 'notifications'),
+        where('recipientUid', '==', user.uid),
+        where('read', '==', false),
+        where('type', '==', 'venture_pitch')
+      );
+      
+      try {
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const batch = writeBatch(firestore);
+          snap.docs.forEach(d => {
+            batch.update(d.ref, { read: true });
+          });
+          await batch.commit();
+        }
+      } catch (e) {
+        console.warn("Could not auto-clear pitch notifications", e);
+      }
+    };
+    
+    clearNotifications();
+  }, [firestore, user?.uid]);
+
   const handleUpdateStatus = async (pitchId: string, status: string) => {
     if (!firestore || isActionLoading) return;
     setIsActionLoading(pitchId);
@@ -72,6 +111,11 @@ export default function VenturePitchesPage() {
       setIsActionLoading(null);
     }
   };
+
+  // Count only received pitches that need action (pending or reviewed)
+  const pendingReceivedCount = useMemo(() => {
+    return (receivedPitches || []).filter(p => p.status === 'pending' || p.status === 'reviewed').length;
+  }, [receivedPitches]);
 
   const isLoading = isUserLoading || isSentLoading || isReceivedLoading;
 
@@ -100,7 +144,7 @@ export default function VenturePitchesPage() {
       <Tabs defaultValue="received" className="space-y-6">
         <TabsList className="bg-slate-100 p-1 rounded-2xl w-full sm:w-auto h-auto flex gap-1">
           <TabsTrigger value="received" className="flex-1 sm:flex-none rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white shadow-sm">
-            Received {receivedPitches && receivedPitches.length > 0 && <Badge variant="destructive" className="ml-2 h-4 px-1">{receivedPitches.length}</Badge>}
+            Received {pendingReceivedCount > 0 && <Badge variant="destructive" className="ml-2 h-4 px-1">{pendingReceivedCount}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="sent" className="flex-1 sm:flex-none rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white">Sent Pitches</TabsTrigger>
         </TabsList>
