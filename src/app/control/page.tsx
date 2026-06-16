@@ -13,7 +13,8 @@ import {
   TrendingUp,
   Activity,
   DatabaseZap,
-  Globe
+  Globe,
+  Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -29,7 +30,7 @@ export default function AdminOverviewPage() {
     users: 0,
     startups: 0,
     services: 0,
-    interests: 0,
+    pitches: 0,
     seoPages: 0
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -43,7 +44,7 @@ export default function AdminOverviewPage() {
         getDocs(collection(firestore, 'users')),
         getDocs(collection(firestore, 'startups')),
         getDocs(collection(firestore, 'services')),
-        getDocs(collection(firestore, 'pitches')),
+        getDocs(collection(firestore, 'venturePitches')),
         getDocs(collection(firestore, 'seoPages'))
       ]);
       
@@ -51,7 +52,7 @@ export default function AdminOverviewPage() {
         users: uSnap.size,
         startups: sSnap.size,
         services: svSnap.size,
-        interests: pSnap.size,
+        pitches: pSnap.size,
         seoPages: seoSnap.size
       });
     } catch (serverError: any) {
@@ -148,7 +149,6 @@ export default function AdminOverviewPage() {
       ];
 
       for (const page of pages) {
-        // Check if slug exists
         const q = query(collection(firestore, 'seoPages'), where('slug', '==', page.slug), limit(1));
         const snap = await getDocs(q);
         if (snap.empty) {
@@ -198,7 +198,7 @@ export default function AdminOverviewPage() {
           { label: 'Total Users', value: stats.users, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Active Startups', value: stats.startups, icon: Rocket, color: 'text-purple-600', bg: 'bg-purple-50' },
           { label: 'Live Services', value: stats.services, icon: Wrench, color: 'text-orange-600', bg: 'bg-orange-50' },
-          { label: 'Interests Log', value: stats.interests, icon: Heart, color: 'text-rose-600', bg: 'bg-rose-50' },
+          { label: 'Venture Pitches', value: stats.pitches, icon: Zap, color: 'text-rose-600', bg: 'bg-rose-50' },
           { label: 'SEO Hubs', value: stats.seoPages, icon: Globe, color: 'text-emerald-600', bg: 'bg-emerald-50' },
         ].map((stat, i) => (
           <Card key={i} className="border-none shadow-sm hover:shadow-md transition-shadow rounded-[2rem] overflow-hidden">

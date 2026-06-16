@@ -151,8 +151,8 @@ export default function UserManagementPage() {
       const startupsSnap = await getDocs(startupsQ);
       
       const rolesArr = (targetUser.roles || (targetUser.role ? [targetUser.role] : ['user'])).filter(Boolean) as string[];
-      const field = rolesArr.includes('investor') ? 'fromInvestorUid' : 'toFounderUid';
-      const pitchesQ = query(collection(firestore, 'pitches'), where(field, '==', targetUser.id));
+      const pitchField = rolesArr.includes('investor') ? 'recipientUid' : 'senderUid';
+      const pitchesQ = query(collection(firestore, 'venturePitches'), where(pitchField, '==', targetUser.id));
       const pitchesSnap = await getDocs(pitchesQ);
 
       const chatsQ = query(collection(firestore, 'chats'), where('participants', 'array-contains', targetUser.id));
@@ -259,6 +259,65 @@ export default function UserManagementPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog open={isViewingInsights} onOpenChange={setIsViewingInsights}>
+        <DialogContent className="sm:max-w-[450px] rounded-[2.5rem]">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black">User Insights</DialogTitle>
+            <DialogDescription>Activity metrics for {selectedUser?.fullName}</DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-6">
+            {isFetchingActivity ? (
+              <div className="flex py-12 justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary opacity-20" /></div>
+            ) : (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 rounded-2xl bg-primary/5 text-center">
+                  <Rocket className="h-5 w-5 text-primary mx-auto mb-2" />
+                  <p className="text-2xl font-black">{activityStats.startups}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Startups</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-amber-50 text-center">
+                  <Zap className="h-5 w-5 text-amber-500 mx-auto mb-2" />
+                  <p className="text-2xl font-black">{activityStats.pitches}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Pitches</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-blue-50 text-center">
+                  <MessageSquare className="h-5 w-5 text-blue-500 mx-auto mb-2" />
+                  <p className="text-2xl font-black">{activityStats.chats}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Chats</p>
+                </div>
+              </div>
+            )}
+            
+            <Separator className="bg-slate-100" />
+            
+            <div className="space-y-4">
+               <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Security Governance</Label>
+               <div className="flex flex-wrap gap-2">
+                 {['founder', 'investor', 'mentor', 'admin', 'super_admin'].map(role => {
+                    const rolesArr = (selectedUser?.roles || (selectedUser?.role ? [selectedUser.role] : ['user'])).filter(Boolean);
+                    const hasRole = rolesArr.includes(role);
+                    return (
+                      <Button 
+                        key={role}
+                        variant={hasRole ? "default" : "outline"}
+                        size="sm"
+                        className={cn(
+                          "rounded-xl h-10 px-4 font-bold text-[10px] uppercase tracking-widest transition-all",
+                          hasRole ? "bg-primary text-white" : "border-slate-200 text-slate-400"
+                        )}
+                        onClick={() => handleToggleRole(selectedUser.id, role, rolesArr)}
+                      >
+                         {hasRole ? <ShieldCheck className="h-3 w-3 mr-2" /> : <ShieldAlert className="h-3 w-3 mr-2" />}
+                         {role.replace('_', ' ')}
+                      </Button>
+                    )
+                 })}
+               </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

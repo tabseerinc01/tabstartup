@@ -54,7 +54,8 @@ export default function ConnectionsManagerPage() {
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
-  // 1. Unified Connections Queries
+  // 1. Unified Connections Queries - Only loading networking connections here
+  // Pitches are now handled in /dashboard/pitches
   const incomingQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid));
@@ -65,21 +66,8 @@ export default function ConnectionsManagerPage() {
     return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid));
   }, [firestore, user?.uid]);
 
-  // 2. Legacy Pitches Queries
-  const legacyIncomingPitchesQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'pitches'), where('toFounderUid', '==', user.uid));
-  }, [firestore, user?.uid]);
-
-  const legacyOutgoingPitchesQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'pitches'), where('fromInvestorUid', '==', user.uid));
-  }, [firestore, user?.uid]);
-
   const { data: incoming, isLoading: isIncomingLoading } = useCollection(incomingQuery);
   const { data: outgoing, isLoading: isOutgoingLoading } = useCollection(outgoingQuery);
-  const { data: legacyIncoming, isLoading: isLegacyIncomingLoading } = useCollection(legacyIncomingPitchesQuery);
-  const { data: legacyOutgoing, isLoading: isLegacyOutgoingLoading } = useCollection(legacyOutgoingPitchesQuery);
 
   // Auto-clear connection notifications when entering this page
   useEffect(() => {
@@ -90,7 +78,7 @@ export default function ConnectionsManagerPage() {
         collection(firestore, 'notifications'),
         where('recipientUid', '==', user.uid),
         where('read', '==', false),
-        where('type', 'in', ['connection', 'investor_interest', 'cofounder_interest', 'rejection', 'pitch'])
+        where('type', 'in', ['connection', 'investor_interest', 'cofounder_interest', 'rejection'])
       );
       
       try {
@@ -112,20 +100,7 @@ export default function ConnectionsManagerPage() {
 
   // Merge and Normalize Data
   const allConns = useMemo(() => {
-    const rawConnections = [...(incoming || []), ...(outgoing || [])];
-    
-    const normalizedLegacy = [...(legacyIncoming || []), ...(legacyOutgoing || [])].map(p => ({
-      id: p.id,
-      initiatorUid: p.fromInvestorUid,
-      recipientUid: p.toFounderUid,
-      type: 'investor',
-      status: p.status || 'pending',
-      message: p.message || '',
-      createdAt: p.createdAt,
-      isLegacy: true
-    }));
-
-    const combined = [...rawConnections, ...normalizedLegacy];
+    const combined = [...(incoming || []), ...(outgoing || [])];
     const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
     
     return unique.sort((a, b) => {
@@ -133,7 +108,7 @@ export default function ConnectionsManagerPage() {
       const timeB = b.createdAt?.toMillis?.() || 0;
       return timeB - timeA;
     });
-  }, [incoming, outgoing, legacyIncoming, legacyOutgoing]);
+  }, [incoming, outgoing]);
 
   // Load profiles
   useEffect(() => {
@@ -171,10 +146,9 @@ export default function ConnectionsManagerPage() {
   const handleStatus = (conn: any, status: 'accepted' | 'rejected') => {
     if (!firestore || !user || isActionLoading) return;
     setIsActionLoading(conn.id);
-    const collectionName = conn.isLegacy ? 'pitches' : 'connections';
     const otherUid = conn.initiatorUid === user.uid ? conn.recipientUid : conn.initiatorUid;
 
-    updateDoc(doc(firestore, collectionName, conn.id), { 
+    updateDoc(doc(firestore, 'connections', conn.id), { 
       status,
       updatedAt: serverTimestamp() 
     })
@@ -205,7 +179,7 @@ export default function ConnectionsManagerPage() {
       })
       .catch((e) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: `${collectionName}/${conn.id}`,
+          path: `connections/${conn.id}`,
           operation: 'update',
           requestResourceData: { status }
         }));
@@ -221,7 +195,7 @@ export default function ConnectionsManagerPage() {
   const sent = filtered.filter(c => c.initiatorUid === user?.uid && c.status === 'pending');
   const rejected = filtered.filter(c => c.status === 'rejected');
 
-  const isLoading = isUserLoading || isIncomingLoading || isOutgoingLoading || isLegacyIncomingLoading || isLegacyOutgoingLoading;
+  const isLoading = isUserLoading || isIncomingLoading || isOutgoingLoading;
 
   if (isLoading && allConns.length === 0) {
     return (
@@ -237,7 +211,7 @@ export default function ConnectionsManagerPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-4xl font-black tracking-tight text-slate-900">Connections</h1>
-          <p className="text-slate-500 font-medium">Manage all professional relationships and interests.</p>
+          <p className="text-slate-500 font-medium">Manage all professional networking relationships.</p>
         </div>
         <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
           {(['all', 'investor', 'mentor', 'cofounder', 'service', 'founder'] as ConnType[]).map(t => (
@@ -329,7 +303,6 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
   const avatarUrl = profile?.imageUrl || `https://picsum.photos/seed/${profile?.uid || conn.id}/200/200`;
   const otherUid = conn.initiatorUid === currentUserId ? conn.recipientUid : conn.initiatorUid;
   
-  // Determine profile link base
   const roles = profile?.roles || (profile?.role ? [profile.role] : []) || [];
   const profileLink = roles.includes('investor') ? `/investors/${otherUid}` : `/founders/${otherUid}`;
 
@@ -360,7 +333,7 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
                   <h4 className="text-xl font-black text-slate-900 truncate hover:text-primary transition-colors">{name}</h4>
                 </Link>
                 <div className="flex items-center gap-1.5 text-[10px] font-black text-primary uppercase tracking-[0.15em] mt-1">
-                  <Icon className="h-3.5 w-3.5" /> {conn.type} {conn.isLegacy ? 'interest' : 'request'}
+                  <Icon className="h-3.5 w-3.5" /> {conn.type} request
                 </div>
               </div>
               <Badge className={cn(
