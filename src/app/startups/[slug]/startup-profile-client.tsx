@@ -107,11 +107,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
 
         // Load Current User Status
         if (user?.uid) {
-          const [profileSnap, interestSnap] = await Promise.all([
-            getDoc(doc(firestore, 'users', user.uid)),
-            getDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid))
-          ]);
-
+          const profileSnap = await getDoc(doc(firestore, 'users', user.uid));
           if (profileSnap.exists()) {
             const profileData = profileSnap.data();
             setCurrentUserProfile(profileData);
@@ -124,6 +120,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             }
           }
 
+          const interestSnap = await getDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid));
           if (interestSnap.exists()) {
             setExistingInterest(interestSnap.data());
           }
