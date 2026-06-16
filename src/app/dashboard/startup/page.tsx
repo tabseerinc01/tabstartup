@@ -106,6 +106,7 @@ export default function StartupPage() {
     setIsSaving(true);
     try {
       const tagsArray = startup.tags.split(',').map(t => t.trim()).filter(t => t !== '');
+      // Ensure slug is always generated or updated
       const slug = slugify(startup.name);
       
       const updateData = {
@@ -131,6 +132,7 @@ export default function StartupPage() {
   };
 
   const copyListingLink = () => {
+    // PRIORITIZE SLUG FOR SHARING
     const identifier = startupData?.slug || user?.uid;
     if (!identifier) return;
 
