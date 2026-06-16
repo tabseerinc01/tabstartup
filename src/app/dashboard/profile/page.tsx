@@ -213,7 +213,6 @@ export default function ProfilePage() {
     };
 
     try {
-      // Using setDoc with merge: true is more robust than updateDoc for role activation
       await setDoc(doc(firestore, 'users', user.uid), updatePayload, { merge: true });
       
       setUserRoles(prev => [...new Set([...prev, roleId])]);
@@ -579,14 +578,13 @@ export default function ProfilePage() {
               <div className="space-y-4">
                 {formData.experience.map((exp, index) => (
                   <div key={index} className="space-y-4 p-6 bg-slate-50 rounded-[2rem] border border-slate-100 relative group transition-all hover:bg-white hover:shadow-lg hover:ring-1 hover:ring-slate-100">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-destructive h-8 w-8"
+                    <button 
+                      type="button"
+                      className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-destructive h-8 w-8 flex items-center justify-center rounded-full hover:bg-destructive/5"
                       onClick={() => removeExperience(index)}
                     >
                       <Trash2 className="h-4 w-4" />
-                    </Button>
+                    </button>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-[10px] font-bold uppercase tracking-tight text-slate-400">Organization</Label>
@@ -617,7 +615,7 @@ export default function ProfilePage() {
                   </div>
                 ))}
               </div>
-              <Button variant="outline" className="w-full h-14 rounded-2xl border-dashed border-slate-200 text-slate-400 hover:bg-slate-50 font-bold gap-2" onClick={addExperience}>
+              <Button type="button" variant="outline" className="w-full h-14 rounded-2xl border-dashed border-slate-200 text-slate-400 hover:bg-slate-50 font-bold gap-2" onClick={addExperience}>
                 <Plus className="h-5 w-5" /> Add Professional Milestone
               </Button>
             </CardContent>

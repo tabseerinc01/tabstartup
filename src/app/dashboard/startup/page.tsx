@@ -149,15 +149,15 @@ export default function StartupPage() {
         .catch((err) => {
           console.warn("Clipboard copy failed:", err);
           toast({ 
-            title: "Copy Failed", 
-            description: "Please copy the URL manually from your address bar.",
+            title: "Copy Manual", 
+            description: "Please copy the URL from your address bar.",
             variant: "destructive" 
           });
         });
     } else {
       toast({ 
         title: "Unsupported Browser", 
-        description: "Your browser does not support automatic copying. Please copy the URL manually.",
+        description: "Please copy the URL manually from your address bar.",
         variant: "destructive" 
       });
     }

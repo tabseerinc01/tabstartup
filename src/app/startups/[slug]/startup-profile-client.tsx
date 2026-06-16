@@ -135,8 +135,10 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
 
   // Unified submission logic with retry capability
   const handleExpressInterest = useCallback(async () => {
-    if (!firestore || !startup || isSubmittingInterest) return;
+    // 1. Initial State Guards
+    if (!firestore || !startup || isSubmittingInterest || existingInterest) return;
 
+    // 2. Auth Guard
     if (!user) {
       localStorage.setItem('pending_interest_startup_id', startup.id);
       localStorage.setItem('pending_interest_owner_uid', startup.ownerUid);
@@ -146,9 +148,14 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       return;
     }
 
+    if (user.uid === startup.ownerUid) {
+      toast({ title: "Action Denied", description: "You cannot pitch your own startup.", variant: "destructive" });
+      return;
+    }
+
     setIsSubmittingInterest(true);
 
-    // Refresh profile state if it was just logged in or is null
+    // 3. Resolve Profile (Retry if state is lagging)
     let profileToUse = currentUserProfile;
     if (!profileToUse) {
       try {
@@ -165,20 +172,14 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     if (!profileToUse) {
       toast({ 
         title: "Account Verification", 
-        description: "We are still loading your profile data. Please try again in a moment.",
+        description: "Checking your investor status. Please click again in 2 seconds.",
         variant: "default"
       });
       setIsSubmittingInterest(false);
       return;
     }
 
-    if (user.uid === startup.ownerUid) {
-      toast({ title: "Action Denied", description: "You cannot pitch your own startup.", variant: "destructive" });
-      setIsSubmittingInterest(false);
-      return;
-    }
-
-    // Role check logic
+    // 4. Role Authorization
     const rolesArr = (profileToUse.roles || (profileToUse.role ? [profileToUse.role] : ['user'])).filter(Boolean);
     const isInvestor = rolesArr.includes('investor') || profileToUse.primaryRole === 'investor' || profileToUse.role === 'investor';
     
@@ -202,12 +203,38 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       timestamp: serverTimestamp(),
     };
 
-    // Use non-blocking writes for better UX
+    // 5. Submit Records (Consolidated to prevent duplicates)
+    // Create Interest record on startup sub-collection
     const interestRef = doc(firestore, 'startups', ownerUid, 'interests', user.uid);
     setDoc(interestRef, basePayload)
       .then(() => {
         setExistingInterest(basePayload);
         toast({ title: "Interest Shared", description: "The founder has been notified of your interest." });
+        
+        // Only send Connection and Notification once the interest record is initiated
+        
+        // Create Connection Request (Primary linking mechanism)
+        const connectionData = {
+          initiatorUid: user.uid,
+          recipientUid: ownerUid,
+          type: 'investor',
+          status: 'pending',
+          message: `I would like to explore an investment opportunity with ${startup.name}.`,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        };
+        addDoc(collection(firestore, 'connections'), connectionData).catch(e => console.error("Conn Error", e));
+
+        // Send Notification to founder
+        createNotification(firestore, {
+          recipientUid: ownerUid,
+          actorUid: user.uid,
+          type: 'investor_interest',
+          title: 'New Venture Interest',
+          message: `${investorName} has expressed interest in ${startup.name}.`,
+          targetId: ownerUid,
+          targetType: 'user'
+        });
       })
       .catch(error => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -215,55 +242,11 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           operation: 'create',
           requestResourceData: basePayload
         }));
+      })
+      .finally(() => {
+        setIsSubmittingInterest(false);
       });
-
-    // Create Pitch record
-    const pitchData = {
-      fromInvestorUid: user.uid,
-      toFounderUid: ownerUid,
-      status: 'pending',
-      message: `Interested in pitching for ${startup.name}.`,
-      createdAt: serverTimestamp(),
-    };
-    addDoc(collection(firestore, 'pitches'), pitchData).catch(error => {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: 'pitches',
-        operation: 'create',
-        requestResourceData: pitchData
-      }));
-    });
-
-    // Create Connection Request
-    const connectionData = {
-      initiatorUid: user.uid,
-      recipientUid: ownerUid,
-      type: 'investor',
-      status: 'pending',
-      message: `I would like to explore an investment opportunity with ${startup.name}.`,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    };
-    addDoc(collection(firestore, 'connections'), connectionData).catch(error => {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: 'connections',
-        operation: 'create',
-        requestResourceData: connectionData
-      }));
-    });
-
-    // Send Notification to founder
-    createNotification(firestore, {
-      recipientUid: ownerUid,
-      actorUid: user.uid,
-      type: 'investor_interest',
-      title: 'New Venture Interest',
-      message: `${investorName} has expressed interest in ${startup.name}.`,
-      targetId: ownerUid,
-      targetType: 'user'
-    });
-
-    setIsSubmittingInterest(false);
-  }, [user, firestore, startup, currentUserProfile, isSubmittingInterest, router, toast]);
+  }, [user, firestore, startup, currentUserProfile, isSubmittingInterest, existingInterest, router, toast]);
 
   // Auto-resume logic after login
   useEffect(() => {
@@ -274,7 +257,8 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         localStorage.removeItem('pending_interest_startup_id');
         localStorage.removeItem('pending_interest_owner_uid');
         // Give profile a moment to sync before auto-submitting
-        setTimeout(() => handleExpressInterest(), 1000);
+        const timer = setTimeout(() => handleExpressInterest(), 1500);
+        return () => clearTimeout(timer);
       }
     }
   }, [isLoading, user, startup, handleExpressInterest]);
@@ -286,9 +270,17 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     const url = `${window.location.origin}/startups/${identifier}`;
     
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(() => {
-        toast({ title: "Link Copied", description: "The startup profile URL is ready to share." });
-      });
+      navigator.clipboard.writeText(url)
+        .then(() => {
+          toast({ title: "Link Copied", description: "The startup profile URL is ready to share." });
+        })
+        .catch(() => {
+          toast({ 
+            title: "Copy Manual", 
+            description: "Could not auto-copy. Please copy from the address bar.",
+            variant: "destructive"
+          });
+        });
     }
   };
 
