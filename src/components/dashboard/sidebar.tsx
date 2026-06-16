@@ -23,7 +23,7 @@ import {
   LayoutGrid,
   CheckSquare,
   FileText,
-  Bell
+  Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -59,7 +59,8 @@ export function DashboardSidebar({ className }: { className?: string }) {
   const [unreadCounts, setUnreadCounts] = useState({
     connections: 0,
     messages: 0,
-    notifications: 0
+    notifications: 0,
+    pitches: 0
   });
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     workspace: true,
@@ -98,15 +99,18 @@ export function DashboardSidebar({ className }: { className?: string }) {
       const counts = {
         connections: 0,
         messages: 0,
-        notifications: 0
+        notifications: 0,
+        pitches: 0
       };
 
       snapshot.docs.forEach(doc => {
         const data = doc.data();
         if (data.type === 'message') {
           counts.messages++;
-        } else if (['connection', 'investor_interest', 'cofounder_interest', 'pitch'].includes(data.type)) {
+        } else if (['connection', 'investor_interest', 'cofounder_interest'].includes(data.type)) {
           counts.connections++;
+        } else if (data.type === 'venture_pitch') {
+          counts.pitches++;
         }
         counts.notifications++;
       });
@@ -128,6 +132,7 @@ export function DashboardSidebar({ className }: { className?: string }) {
 
   const roles = profile?.roles || (profile?.role ? [profile.role] : []) || [];
   const isFounder = roles.includes('founder');
+  const isInvestor = roles.includes('investor');
 
   const groups: SidebarGroup[] = [
     {
@@ -139,6 +144,12 @@ export function DashboardSidebar({ className }: { className?: string }) {
         { href: '/dashboard/pipeline', label: 'Pipeline', icon: LayoutGrid },
         { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare },
         { href: '/dashboard/invoices', label: 'Invoices', icon: FileText },
+        { 
+          href: '/dashboard/pitches', 
+          label: 'Venture Pitches', 
+          icon: Zap,
+          badgeCount: unreadCounts.pitches
+        },
         ...(isFounder ? [
           { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
           { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }

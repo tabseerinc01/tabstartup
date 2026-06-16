@@ -7,6 +7,18 @@ export interface UserAccount {
   createdDate: string;
 }
 
+export interface VenturePitch {
+  id: string;
+  senderUid: string;
+  senderName: string;
+  recipientUid: string;
+  startupId: string | null;
+  startupName: string | null;
+  pitchMessage: string;
+  status: "pending" | "reviewed" | "accepted" | "rejected";
+  createdAt: any;
+}
+
 export interface Wallet {
   id: string;
   userAccountId: string;
@@ -68,13 +80,13 @@ export interface Notification {
   id: string;
   recipientUid: string;
   actorUid: string;
-  type: 'like' | 'comment' | 'pitch' | 'connection' | 'system' | 'message' | 'cofounder_interest' | 'investor_interest' | 'rejection' | 'moderation' | 'task_due';
+  type: 'like' | 'comment' | 'pitch' | 'connection' | 'system' | 'message' | 'cofounder_interest' | 'investor_interest' | 'rejection' | 'moderation' | 'task_due' | 'venture_pitch';
   title: string;
   message: string;
   targetId?: string;
-  targetType?: 'post' | 'pitch' | 'chat' | 'user' | 'task';
+  targetType?: 'post' | 'pitch' | 'chat' | 'user' | 'task' | 'venture_pitch';
   read: boolean;
-  createdAt: any; // Firestore Timestamp
+  createdAt: any;
 }
 
 export interface Task {

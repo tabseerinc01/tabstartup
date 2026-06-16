@@ -14,18 +14,16 @@ service cloud.firestore {
       );
     }
 
-    // Helper: Check ownership of parent records for sub-collections
-    function isOwnerOfDeal(dealId) {
-      return request.auth != null && (get(/databases/$(database)/documents/deals/$(dealId)).data.ownerUid == request.auth.uid);
-    }
-    
-    function isOwnerOfTask(taskId) {
-      return request.auth != null && (get(/databases/$(database)/documents/tasks/$(taskId)).data.ownerUid == request.auth.uid);
-    }
-
     match /users/{userId} {
       allow read: if true;
       allow write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+    }
+
+    match /venturePitches/{pitchId} {
+      allow read: if request.auth != null && (resource.data.senderUid == request.auth.uid || resource.data.recipientUid == request.auth.uid || isAdmin());
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (resource.data.recipientUid == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
     }
 
     match /contacts/{contactId} {
@@ -39,12 +37,12 @@ service cloud.firestore {
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
 
-      match /notes/{noteId} { allow read, write: if request.auth != null && (isOwnerOfDeal(dealId) || isAdmin()); }
-      match /activities/{activityId} { allow read, write: if request.auth != null && (isOwnerOfDeal(dealId) || isAdmin()); }
+      match /notes/{noteId} { allow read, write: if request.auth != null; }
+      match /activities/{activityId} { allow read, write: if request.auth != null; }
     }
 
     match /invoices/{invoiceId} {
-      allow get: if true; // Public view for shared links
+      allow get: if true;
       allow list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
@@ -54,8 +52,7 @@ service cloud.firestore {
       allow get, list: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null && (request.resource.data.ownerUid == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && (resource.data.ownerUid == request.auth.uid || isAdmin());
-
-      match /activities/{activityId} { allow read, write: if request.auth != null && (isOwnerOfTask(taskId) || isAdmin()); }
+      match /activities/{activityId} { allow read, write: if request.auth != null; }
     }
 
     match /connections/{connectionId} {
@@ -83,7 +80,7 @@ service cloud.firestore {
 
     match /chats/{chatId} {
       allow read, update: if request.auth != null && (resource.data.participants.hasAny([request.auth.uid]) || isAdmin());
-      allow create: if request.auth != null && (request.resource.data.participants.hasAny([request.auth.uid]) || isAdmin());
+      allow create: if request.auth != null;
       match /messages/{messageId} { allow read, create: if request.auth != null; }
     }
 
@@ -91,15 +88,11 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if request.auth != null && (request.auth.uid == startupId || isAdmin());
       allow delete: if isAdmin();
-      match /views/{viewId} { allow read: if request.auth != null && (request.auth.uid == startupId || isAdmin()); allow create: if true; }
+      match /views/{viewId} { allow read: if true; allow create: if true; }
       match /interests/{interestId} { allow read: if true; allow create, update: if request.auth != null; }
     }
 
     match /services/{serviceId} { allow read: if true; allow write: if request.auth != null; }
     match /seoPages/{pageId} { allow read: if true; allow write: if isAdmin(); }
-    match /pitches/{pitchId} {
-      allow create: if request.auth != null;
-      allow read, update: if request.auth != null && (request.auth.uid == resource.data.toFounderUid || request.auth.uid == resource.data.fromInvestorUid || isAdmin());
-    }
   }
 }

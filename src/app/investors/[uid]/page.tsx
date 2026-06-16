@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -12,7 +13,7 @@ import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, ArrowLeft, ArrowRight, MapPin, Globe, Briefcase, TrendingUp, Linkedin, CheckCircle2, Mail, Target, Zap, Users, Rocket, Send, Clock, Check } from 'lucide-react';
+import { Loader2, ArrowLeft, TrendingUp, Linkedin, CheckCircle2, Mail, Zap, Send, Clock, Check, Globe } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
@@ -26,10 +27,11 @@ export default function InvestorPublicProfilePage() {
   const uid = params?.uid as string;
 
   const [investor, setInvestor] = useState<any>(null);
+  const [startup, setStartup] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [existingConnection, setExistingConnection] = useState<any>(null);
-  const [isSendingRequest, setIsSendingRequest] = useState(false);
-  const [interestMessage, setInterestMessage] = useState('');
+  const [existingPitch, setExistingPitch] = useState<any>(null);
+  const [isSendingPitch, setIsSendingPitch] = useState(false);
+  const [pitchMessage, setPitchMessage] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -43,15 +45,22 @@ export default function InvestorPublicProfilePage() {
         }
 
         if (currentUser?.uid) {
-          const connQ = query(
-            collection(firestore, 'connections'),
-            where('initiatorUid', '==', currentUser.uid),
+          // Load current user's startup if exists
+          const startupSnap = await getDoc(doc(firestore, 'startups', currentUser.uid));
+          if (startupSnap.exists()) {
+            setStartup(startupSnap.data());
+          }
+
+          // Check for existing pitch
+          const pitchQ = query(
+            collection(firestore, 'venturePitches'),
+            where('senderUid', '==', currentUser.uid),
             where('recipientUid', '==', uid),
             limit(1)
           );
-          const connSnap = await getDocs(connQ);
-          if (!connSnap.empty) {
-            setExistingConnection(connSnap.docs[0].data());
+          const pitchSnap = await getDocs(pitchQ);
+          if (!pitchSnap.empty) {
+            setExistingPitch(pitchSnap.docs[0].data());
           }
         }
       } catch (error) {
@@ -63,48 +72,49 @@ export default function InvestorPublicProfilePage() {
     loadData();
   }, [firestore, uid, currentUser?.uid]);
 
-  const handleSendRequest = async () => {
+  const handleSendPitch = async () => {
     if (!currentUser || !firestore || !uid) {
       toast({ title: "Login Required", variant: "destructive" });
       router.push('/login');
       return;
     }
 
-    setIsSendingRequest(true);
-    const connData = {
-      initiatorUid: currentUser.uid,
+    setIsSendingPitch(true);
+    const pitchData = {
+      senderUid: currentUser.uid,
+      senderName: currentUser.displayName || 'TabStartup Founder',
       recipientUid: uid,
-      type: 'investor',
+      startupId: currentUser.uid,
+      startupName: startup?.name || 'My Venture',
+      pitchMessage: pitchMessage || "I'd like to pitch my venture for potential investment.",
       status: 'pending',
-      message: interestMessage || "I'd like to pitch my venture for potential investment.",
       createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
     };
 
     try {
-      await addDoc(collection(firestore, 'connections'), connData);
+      const docRef = await addDoc(collection(firestore, 'venturePitches'), pitchData);
 
       createNotification(firestore, {
         recipientUid: uid,
         actorUid: currentUser.uid,
-        type: 'investor_interest',
-        title: 'New Venture Pitch',
-        message: `${currentUser.displayName || 'A founder'} sent you a connection request.`,
-        targetId: uid,
-        targetType: 'user'
+        type: 'venture_pitch',
+        title: '🚀 New Venture Pitch',
+        message: `${pitchData.senderName} sent you a venture pitch for ${pitchData.startupName}.`,
+        targetId: docRef.id,
+        targetType: 'venture_pitch'
       });
 
-      toast({ title: "Request Sent", description: "The investor has been notified." });
-      setExistingConnection(connData);
+      toast({ title: "Pitch Sent", description: "The investor has been notified." });
+      setExistingPitch(pitchData);
       setIsDialogOpen(false);
     } catch (e) {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: 'connections',
+        path: 'venturePitches',
         operation: 'create',
-        requestResourceData: connData
+        requestResourceData: pitchData
       }));
     } finally {
-      setIsSendingRequest(false);
+      setIsSendingPitch(false);
     }
   };
 
@@ -144,10 +154,9 @@ export default function InvestorPublicProfilePage() {
               <div className="flex flex-wrap gap-4 mb-12">
                 {!isOwnProfile && (
                   <>
-                    {existingConnection ? (
-                      <Button disabled className="h-12 px-8 gap-2 rounded-2xl text-base bg-muted text-muted-foreground">
-                        {existingConnection.status === 'pending' ? <Clock className="h-5 w-5" /> : <Check className="h-5 w-5" />}
-                        Connection {existingConnection.status}
+                    {existingPitch ? (
+                      <Button disabled className="h-12 px-8 gap-2 rounded-2xl text-base bg-muted text-muted-foreground font-bold">
+                        <Check className="h-5 w-5" /> Pitch {existingPitch.status}
                       </Button>
                     ) : (
                       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -156,22 +165,32 @@ export default function InvestorPublicProfilePage() {
                             <Zap className="h-5 w-5" /> Pitch Venture
                           </Button>
                         </DialogTrigger>
-                        <DialogContent>
+                        <DialogContent className="rounded-[2rem] sm:max-w-[500px]">
                           <DialogHeader>
-                            <DialogTitle>Pitch to {displayName}</DialogTitle>
+                            <DialogTitle className="text-2xl font-black">Pitch to {displayName}</DialogTitle>
                             <DialogDescription>Briefly introduce your venture and why it matches this investor's focus.</DialogDescription>
                           </DialogHeader>
-                          <Textarea 
-                            placeholder="Introduce your startup..." 
-                            className="min-h-[150px] rounded-xl"
-                            value={interestMessage}
-                            onChange={(e) => setInterestMessage(e.target.value)}
-                          />
+                          <div className="py-4 space-y-4">
+                            <div className="p-4 bg-primary/5 rounded-xl border border-primary/10">
+                               <p className="text-xs font-bold text-primary uppercase tracking-widest mb-1">Pitching as:</p>
+                               <p className="font-bold text-slate-900">{startup?.name || "Register your startup first"}</p>
+                            </div>
+                            <Textarea 
+                              placeholder="Introduce your startup mission and traction..." 
+                              className="min-h-[150px] rounded-xl"
+                              value={pitchMessage}
+                              onChange={(e) => setPitchMessage(e.target.value)}
+                              disabled={!startup}
+                            />
+                            {!startup && (
+                              <p className="text-xs text-destructive font-bold">You need to list a startup in your dashboard before pitching.</p>
+                            )}
+                          </div>
                           <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                            <Button onClick={handleSendRequest} disabled={isSendingRequest}>
-                              {isSendingRequest ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                              Send Pitch
+                            <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="rounded-xl">Cancel</Button>
+                            <Button onClick={handleSendPitch} disabled={isSendingPitch || !startup} className="rounded-xl font-bold">
+                              {isSendingPitch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                              Send Official Pitch
                             </Button>
                           </DialogFooter>
                         </DialogContent>
@@ -181,14 +200,26 @@ export default function InvestorPublicProfilePage() {
                 )}
                 <Button 
                   variant="outline" 
-                  className="h-12 px-8 rounded-2xl text-base" 
+                  className="h-12 px-8 rounded-2xl text-base font-bold border-slate-200" 
                   onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}
                 >
                   <Mail className="h-4 w-4" /> Message
                 </Button>
+                <div className="flex gap-2">
+                  {investor?.socialLinks?.linkedin && (
+                    <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl" asChild>
+                      <a href={investor.socialLinks.linkedin} target="_blank" rel="noopener noreferrer"><Linkedin className="h-6 w-6" /></a>
+                    </Button>
+                  )}
+                  {investor?.socialLinks?.website && (
+                    <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl" asChild>
+                      <a href={investor.socialLinks.website} target="_blank" rel="noopener noreferrer"><Globe className="h-6 w-6" /></a>
+                    </Button>
+                  )}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 pt-4">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 pt-4 border-t border-slate-50">
                 <div className="lg:col-span-2 space-y-12">
                   {bio && (
                     <section>
@@ -196,10 +227,30 @@ export default function InvestorPublicProfilePage() {
                         <TrendingUp className="h-6 w-6 text-primary" /> Investment Philosophy
                       </h3>
                       <div className="bg-primary/5 p-8 rounded-3xl border border-primary/10 relative">
-                        <p className="text-primary text-lg font-medium italic leading-relaxed">{bio}</p>
+                        <p className="text-primary text-lg font-medium italic leading-relaxed">"{bio}"</p>
                       </div>
                     </section>
                   )}
+                </div>
+                
+                <div className="space-y-6">
+                   <Card className="border-none shadow-sm rounded-3xl bg-slate-50 p-6">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Investment Metadata</p>
+                      <div className="space-y-4">
+                         <div className="space-y-1">
+                            <p className="text-xs font-bold text-slate-500">Ticket Size</p>
+                            <p className="font-black text-slate-900">{investor?.ticketSize || 'N/A'}</p>
+                         </div>
+                         <div className="space-y-1">
+                            <p className="text-xs font-bold text-slate-500">Preferred Stage</p>
+                            <div className="flex flex-wrap gap-1">
+                               {Array.isArray(investor?.preferredStage) ? investor.preferredStage.map((s: string) => (
+                                 <Badge key={s} variant="outline" className="bg-white">{s}</Badge>
+                               )) : <Badge variant="outline" className="bg-white">{investor?.preferredStage || 'Any'}</Badge>}
+                            </div>
+                         </div>
+                      </div>
+                   </Card>
                 </div>
               </div>
             </div>

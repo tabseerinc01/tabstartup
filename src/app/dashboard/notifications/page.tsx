@@ -121,6 +121,8 @@ export default function NotificationsPage() {
     // Logic for routing based on notification target
     if (n.type === 'message' && n.targetId) {
       router.push(`/chats/${n.targetId}`);
+    } else if (n.type === 'venture_pitch') {
+      router.push('/dashboard/pitches');
     } else if ((n.type === 'like' || n.type === 'comment' || n.type === 'moderation') && n.targetType === 'post') {
       router.push('/community');
     } else if (['investor_interest', 'cofounder_interest', 'connection', 'rejection'].includes(n.type)) {
@@ -135,6 +137,7 @@ export default function NotificationsPage() {
       case 'comment': return <Inbox className="h-5 w-5 text-emerald-500" />;
       case 'cofounder_interest': return <Users className="h-5 w-5 text-amber-500" />;
       case 'investor_interest': return <Zap className="h-5 w-5 text-primary fill-primary" />;
+      case 'venture_pitch': return <Zap className="h-5 w-5 text-primary fill-primary animate-pulse" />;
       case 'connection': return <ShieldCheck className="h-5 w-5 text-green-500" />;
       case 'rejection': return <XCircle className="h-5 w-5 text-slate-400" />;
       case 'moderation': return <ShieldAlert className="h-5 w-5 text-destructive" />;
@@ -246,7 +249,7 @@ export default function NotificationsPage() {
             </div>
             <h3 className="text-2xl font-bold text-slate-900 mb-2">No notifications yet</h3>
             <p className="text-muted-foreground max-w-sm mx-auto mb-8 text-lg">
-              When someone likes your post, messages you, or shows interest in your startup, you'll find those updates here.
+              When someone likes your post, messages you, or sends you a venture pitch, you'll find those updates here.
             </p>
             <Button 
               size="lg" 
