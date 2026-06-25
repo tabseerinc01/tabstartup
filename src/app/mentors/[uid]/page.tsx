@@ -11,11 +11,14 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
-import { Loader2, ArrowLeft, MapPin, Briefcase, Linkedin, CheckCircle2, Target, MessageSquare, Award, Zap, Rocket, Clock, Check, AlertCircle } from 'lucide-react';
+import { Loader2, ArrowLeft, MapPin, Briefcase, Linkedin, CheckCircle2, Target, MessageSquare, Award, Zap, Rocket, Clock, Check, AlertCircle, ShieldCheck, Globe, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
+import { calculateProfileStrength, calculateTrustScore } from '@/lib/profile-utils';
+import { cn } from '@/lib/utils';
 
 const BASIC_PLAN_CONN_LIMIT = 5;
 
@@ -76,20 +79,8 @@ export default function MentorPublicProfilePage() {
   const isLimitReached = userPlan === 'basic' && sentConnectionsCount >= BASIC_PLAN_CONN_LIMIT;
 
   async function handleConnect() {
-    if (!firestore || !currentUser?.uid || !uid) {
-        toast({ title: "Login Required", variant: "destructive" });
-        router.push('/login');
-        return;
-    }
-
-    if (isLimitReached) {
-      toast({ 
-        title: "Limit Reached", 
-        description: `Basic Plan is limited to ${BASIC_PLAN_CONN_LIMIT} monthly connection requests.`, 
-        variant: "destructive" 
-      });
-      return;
-    }
+    if (!firestore || !currentUser?.uid || !uid) return;
+    if (isLimitReached) return;
     
     setIsSendingRequest(true);
     const connData = {
@@ -97,25 +88,23 @@ export default function MentorPublicProfilePage() {
       recipientUid: uid,
       type: 'mentor',
       status: 'pending',
-      message: "I'm looking for mentorship and would love to connect.",
+      message: "I'm looking for mentorship.",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
 
     try {
       await addDoc(collection(firestore, 'connections'), connData);
-
       createNotification(firestore, {
         recipientUid: uid,
         actorUid: currentUser.uid,
         type: 'connection',
-        title: 'New Mentorship Request',
-        message: `${currentUser.displayName || 'A founder'} requested mentorship.`,
+        title: 'Mentorship Request',
+        message: 'A founder requested mentorship.',
         targetId: uid,
         targetType: 'user'
       });
-
-      toast({ title: "Request Sent", description: "The mentor will review your profile." });
+      toast({ title: "Request Sent" });
       setExistingConnection(connData);
     } catch (e) {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -132,82 +121,147 @@ export default function MentorPublicProfilePage() {
 
   const name = mentor?.fullName || 'Mentor';
   const isOwnProfile = currentUser?.uid === uid;
+  
+  const strength = calculateProfileStrength(mentor);
+  const trustScore = calculateTrustScore(mentor);
+  const hasLinkedIn = !!(mentor?.linkedinUrl || mentor?.socialLinks?.linkedin);
+  const hasWebsite = !!(mentor?.website || mentor?.socialLinks?.website);
+  const isMentorVerified = !!mentor?.mentorBio;
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
       <main className="flex-1 container mx-auto px-4 py-12">
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div className="max-w-6xl mx-auto space-y-8">
           <Button variant="ghost" asChild className="mb-2 -ml-4">
             <Link href="/mentors" className="gap-2"><ArrowLeft className="h-4 w-4" /> Back to Directory</Link>
           </Button>
 
-          <Card className="overflow-hidden border-none shadow-2xl rounded-[3rem] bg-background">
-            <div className="h-48 bg-gradient-to-r from-primary/30 via-slate-200 to-primary/20" />
-            <div className="px-6 md:px-12 pb-12 -mt-20">
-              <div className="flex flex-col md:flex-row gap-8 items-end mb-10">
-                <Avatar className="h-40 w-40 rounded-3xl border-8 border-background bg-muted shrink-0 shadow-2xl">
-                  <AvatarImage src={mentor?.imageUrl} className="object-cover" />
-                  <AvatarFallback className="text-4xl font-bold">{name[0]}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-4xl font-extrabold tracking-tight">{name}</h1>
-                    {mentor?.isVerified && <CheckCircle2 className="h-8 w-8 text-primary fill-primary/10" />}
-                  </div>
-                  <p className="text-xl text-primary font-semibold">{mentor?.headline || "Industry Expert"}</p>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-8 space-y-8">
+              <Card className="overflow-hidden border-none shadow-2xl rounded-[3rem] bg-background">
+                <div className="h-48 bg-muted relative">
+                   {mentor.coverImageUrl ? (
+                     <Image src={mentor.coverImageUrl} alt="Cover" fill className="object-cover" />
+                   ) : (
+                     <div className="h-full w-full bg-gradient-to-r from-primary/30 via-slate-200 to-primary/20" />
+                   )}
                 </div>
-              </div>
+                <div className="px-6 md:px-12 pb-12 -mt-20">
+                  <div className="flex flex-col md:flex-row gap-8 items-end mb-10">
+                    <Avatar className="h-40 w-40 rounded-3xl border-8 border-background bg-muted shrink-0 shadow-2xl">
+                      <AvatarImage src={mentor?.imageUrl} className="object-cover" />
+                      <AvatarFallback className="text-4xl font-bold">{name[0]}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h1 className="text-4xl font-extrabold tracking-tight">{name}</h1>
+                        {mentor?.isVerified && <CheckCircle2 className="h-8 w-8 text-primary fill-primary/10" />}
+                      </div>
+                      <p className="text-xl text-primary font-semibold">{mentor?.headline || "Industry Expert"}</p>
+                    </div>
+                  </div>
 
-              <div className="flex flex-wrap gap-4 mb-12">
-                {!isOwnProfile && (
-                  <>
-                    {existingConnection ? (
-                      <Button disabled className="h-14 px-8 rounded-2xl text-base bg-muted text-muted-foreground">
-                        {existingConnection.status === 'pending' ? <Clock className="h-5 w-5" /> : <Check className="h-5 w-5" />}
-                        Mentorship {existingConnection.status}
-                      </Button>
-                    ) : (
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button className="h-14 px-10 rounded-2xl text-base gap-2 font-bold shadow-xl">
-                            <Zap className="h-5 w-5" /> Request Mentorship
+                  <div className="flex flex-wrap gap-4 mb-12">
+                    {!isOwnProfile && (
+                      <>
+                        {existingConnection ? (
+                          <Button disabled className="h-14 px-8 rounded-2xl text-base bg-muted text-muted-foreground">
+                            {existingConnection.status === 'pending' ? <Clock className="h-5 w-5" /> : <Check className="h-5 w-5" />}
+                            Mentorship {existingConnection.status}
                           </Button>
-                        </DialogTrigger>
-                        <DialogContent className="rounded-[2rem]">
-                          {isLimitReached ? (
-                             <div className="py-8 text-center space-y-6">
-                                <Zap className="h-12 w-12 text-primary mx-auto" />
-                                <div className="space-y-2">
-                                  <h3 className="text-xl font-black">Connection Limit Reached</h3>
-                                  <p className="text-sm text-slate-500">You have reached your Basic Plan limit of {BASIC_PLAN_CONN_LIMIT} monthly requests.</p>
-                                </div>
-                                <Button className="rounded-xl" asChild><Link href="/dashboard/billing">Upgrade to Pro</Link></Button>
-                             </div>
-                          ) : (
-                            <div className="py-8 text-center space-y-6">
-                               <h3 className="text-2xl font-black">Ready to connect?</h3>
-                               <p className="text-slate-500">Mentorship requests allow you to establish a structured learning relationship.</p>
-                               <Button className="w-full h-12 rounded-xl font-bold" onClick={handleConnect} disabled={isSendingRequest}>
-                                 {isSendingRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Mentorship Request"}
-                               </Button>
-                            </div>
-                          )}
-                        </DialogContent>
-                      </Dialog>
+                        ) : (
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button className="h-14 px-10 rounded-2xl text-base gap-2 font-bold shadow-xl">
+                                <Zap className="h-5 w-5" /> Request Mentorship
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="rounded-[2rem]">
+                              <div className="py-8 text-center space-y-6">
+                                 <h3 className="text-2xl font-black">Establish Connection</h3>
+                                 <Button className="w-full" onClick={handleConnect} disabled={isSendingRequest}>Confirm Request</Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-                <Button 
-                  variant="outline" 
-                  className="h-14 px-8 rounded-2xl text-base" 
-                  onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}
-                >
-                  <MessageSquare className="h-5 w-5" /> Message
-                </Button>
-              </div>
+                    <Button 
+                      variant="outline" 
+                      className="h-14 px-8 rounded-2xl text-base font-bold" 
+                      onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}
+                    >
+                      <MessageSquare className="h-5 w-5" /> Message
+                    </Button>
+                  </div>
+
+                  <div className="space-y-6">
+                    <h3 className="text-2xl font-black flex items-center gap-2">
+                       <Award className="h-6 w-6 text-primary" /> Expert Overview
+                    </h3>
+                    <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 text-lg text-slate-700 leading-relaxed italic">
+                       "{mentor.mentorBio || mentor.bio || "Available to support early-stage founders with strategic guidance and operational expertise."}"
+                    </div>
+                  </div>
+                </div>
+              </Card>
             </div>
-          </Card>
+
+            <div className="lg:col-span-4 space-y-6">
+              <Card className="border-none shadow-xl rounded-[2rem] bg-slate-900 text-white p-8 space-y-6 relative overflow-hidden group">
+                 <div className="relative z-10 space-y-4">
+                    <div className="flex items-center justify-between">
+                       <p className="text-[10px] font-black uppercase tracking-widest text-primary">Trust Status</p>
+                       <span className="text-2xl font-black">{trustScore}%</span>
+                    </div>
+                    <Progress value={strength} className="h-2 bg-white/10" />
+                 </div>
+                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16" />
+              </Card>
+
+              <Card className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 p-8">
+                 <div className="space-y-6">
+                    <div className="flex items-center gap-2 border-b border-slate-50 pb-4">
+                       <ShieldCheck className="h-5 w-5 text-primary" />
+                       <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Verification Status</h3>
+                    </div>
+
+                    <div className="space-y-4">
+                       <div className={cn(
+                         "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                         hasLinkedIn ? "bg-blue-50 border-blue-100 text-blue-700" : "bg-slate-50 border-slate-100 text-slate-400"
+                       )}>
+                          <div className="flex items-center gap-3 text-sm font-bold">
+                             <Linkedin className="h-4 w-4" /> LinkedIn
+                          </div>
+                          {hasLinkedIn ? <CheckCircle2 className="h-4 w-4" /> : <Lock className="h-4 w-4 opacity-30" />}
+                       </div>
+
+                       <div className={cn(
+                         "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                         hasWebsite ? "bg-primary/5 border-primary/10 text-primary" : "bg-slate-50 border-slate-100 text-slate-400"
+                       )}>
+                          <div className="flex items-center gap-3 text-sm font-bold">
+                             <Globe className="h-4 w-4" /> Website
+                          </div>
+                          {hasWebsite ? <CheckCircle2 className="h-4 w-4" /> : <Lock className="h-4 w-4 opacity-30" />}
+                       </div>
+
+                       <div className={cn(
+                         "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                         isMentorVerified ? "bg-emerald-50 border-emerald-100 text-emerald-700" : "bg-slate-50 border-slate-100 text-slate-400"
+                       )}>
+                          <div className="flex items-center gap-3 text-sm font-bold">
+                             <Award className="h-4 w-4" /> Mentor Profile
+                          </div>
+                          {isMentorVerified ? <CheckCircle2 className="h-4 w-4" /> : <Lock className="h-4 w-4 opacity-30" />}
+                       </div>
+                    </div>
+                 </div>
+              </Card>
+            </div>
+          </div>
         </div>
       </main>
       <PublicFooter />

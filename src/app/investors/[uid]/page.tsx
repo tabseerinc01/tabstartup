@@ -13,10 +13,13 @@ import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, ArrowLeft, TrendingUp, Linkedin, CheckCircle2, Mail, Zap, Send, Clock, Check, Globe, AlertCircle } from 'lucide-react';
+import { Loader2, ArrowLeft, TrendingUp, Linkedin, CheckCircle2, Mail, Zap, Send, Clock, Check, Globe, AlertCircle, ShieldCheck, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
+import { Progress } from '@/components/ui/progress';
+import { calculateProfileStrength, calculateTrustScore } from '@/lib/profile-utils';
+import { cn } from '@/lib/utils';
 
 const BASE_PITCH_LIMIT = 2;
 
@@ -96,11 +99,7 @@ export default function InvestorPublicProfilePage() {
     }
 
     if (isLimitReached) {
-      toast({ 
-        title: "Limit Reached", 
-        description: `Your effective limit is ${effectiveLimit} venture pitches.`, 
-        variant: "destructive" 
-      });
+      toast({ title: "Limit Reached", variant: "destructive" });
       return;
     }
 
@@ -118,18 +117,16 @@ export default function InvestorPublicProfilePage() {
 
     try {
       const docRef = await addDoc(collection(firestore, 'venturePitches'), pitchData);
-
       createNotification(firestore, {
         recipientUid: uid,
         actorUid: currentUser.uid,
         type: 'venture_pitch',
         title: '🚀 New Venture Pitch',
-        message: `${pitchData.senderName} sent you a venture pitch for ${pitchData.startupName}.`,
+        message: `${pitchData.senderName} sent you a venture pitch.`,
         targetId: docRef.id,
         targetType: 'venture_pitch'
       });
-
-      toast({ title: "Pitch Sent", description: "The investor has been notified." });
+      toast({ title: "Pitch Sent" });
       setExistingPitch(pitchData);
       setIsDialogOpen(false);
     } catch (e) {
@@ -150,40 +147,48 @@ export default function InvestorPublicProfilePage() {
   const bio = investor?.investorBio || investor?.bio;
   const isOwnProfile = currentUser?.uid === uid;
 
+  const strength = calculateProfileStrength(investor);
+  const trustScore = calculateTrustScore(investor);
+  const hasLinkedIn = !!(investor?.linkedinUrl || investor?.socialLinks?.linkedin);
+  const hasWebsite = !!(investor?.website || investor?.socialLinks?.website);
+  const isInvestorVerified = !!investor?.investorBio;
+
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
       <main className="flex-1 container mx-auto px-4 py-12">
-        <div className="max-w-4xl auto space-y-8">
+        <div className="max-w-6xl mx-auto space-y-8">
           <Button variant="ghost" asChild className="mb-2 -ml-4">
             <Link href="/investors" className="gap-2"><ArrowLeft className="h-4 w-4" /> Back to Directory</Link>
           </Button>
 
-          <Card className="overflow-hidden border-none shadow-xl rounded-3xl bg-background">
-            <div className="h-48 bg-gradient-to-r from-accent/20 via-primary/20 to-accent/10" />
-            <div className="px-6 md:px-12 pb-12 -mt-20">
-              <div className="flex flex-col md:flex-row gap-8 items-end mb-10">
-                <Avatar className="h-40 w-40 rounded-3xl border-8 border-background bg-muted shrink-0 shadow-2xl">
-                  <AvatarImage src={investor?.imageUrl} className="object-cover" />
-                  <AvatarFallback className="text-4xl font-bold">{displayName[0]}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-4xl font-extrabold tracking-tight">{displayName}</h1>
-                    {investor?.isVerified && <CheckCircle2 className="h-8 w-8 text-primary fill-primary/10" />}
-                  </div>
-                  <p className="text-xl text-primary font-semibold">{headline}</p>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-8 space-y-8">
+              <Card className="overflow-hidden border-none shadow-xl rounded-3xl bg-background">
+                <div className="h-48 bg-muted relative">
+                   {investor.coverImageUrl ? (
+                     <Image src={investor.coverImageUrl} alt="Cover" fill className="object-cover" />
+                   ) : (
+                     <div className="h-full w-full bg-gradient-to-r from-accent/20 via-primary/20 to-accent/10" />
+                   )}
                 </div>
-              </div>
+                <div className="px-6 md:px-12 pb-12 -mt-20">
+                  <div className="flex flex-col md:flex-row gap-8 items-end mb-10">
+                    <Avatar className="h-40 w-40 rounded-3xl border-8 border-background bg-muted shrink-0 shadow-2xl">
+                      <AvatarImage src={investor?.imageUrl} className="object-cover" />
+                      <AvatarFallback className="text-4xl font-bold">{displayName[0]}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h1 className="text-4xl font-extrabold tracking-tight">{displayName}</h1>
+                        {investor?.isVerified && <CheckCircle2 className="h-8 w-8 text-primary fill-primary/10" />}
+                      </div>
+                      <p className="text-xl text-primary font-semibold">{headline}</p>
+                    </div>
+                  </div>
 
-              <div className="flex flex-wrap gap-4 mb-12">
-                {!isOwnProfile && (
-                  <>
-                    {existingPitch ? (
-                      <Button disabled className="h-12 px-8 gap-2 rounded-2xl text-base bg-muted text-muted-foreground font-bold">
-                        <Check className="h-5 w-5" /> Pitch {existingPitch.status}
-                      </Button>
-                    ) : (
+                  <div className="flex flex-wrap gap-4 mb-12">
+                    {!isOwnProfile && (
                       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                         <DialogTrigger asChild>
                           <Button className="h-12 px-8 rounded-2xl text-base gap-2 font-bold shadow-xl">
@@ -193,79 +198,42 @@ export default function InvestorPublicProfilePage() {
                         <DialogContent className="rounded-[2rem] sm:max-w-[500px]">
                           {isLimitReached ? (
                              <div className="py-12 text-center space-y-6">
-                                <div className="p-4 bg-primary/10 rounded-full w-fit mx-auto">
-                                  <Zap className="h-12 w-12 text-primary" />
-                                </div>
-                                <div className="space-y-2">
-                                  <h3 className="text-2xl font-black text-slate-900">Pitch Limit Reached</h3>
-                                  <p className="text-slate-500 font-medium px-4">
-                                    Your current limit is {effectiveLimit} venture pitches. 
-                                    Refer friends to earn bonus pitches or upgrade for high-volume tools.
-                                  </p>
-                                </div>
-                                <Button className="rounded-xl h-12 px-8 font-bold" asChild>
-                                  <Link href="/dashboard/billing">View Plans & Upgrade</Link>
-                                </Button>
+                                <Zap className="h-12 w-12 text-primary mx-auto" />
+                                <h3 className="text-2xl font-black">Limit Reached</h3>
+                                <Button className="rounded-xl" asChild><Link href="/dashboard/billing">Upgrade</Link></Button>
                              </div>
                           ) : (
                             <>
                               <DialogHeader>
-                                <DialogTitle className="text-2xl font-black">Pitch to {displayName}</DialogTitle>
-                                <DialogDescription>Briefly introduce your venture and why it matches this investor's focus.</DialogDescription>
+                                <DialogTitle>Pitch to {displayName}</DialogTitle>
+                                <DialogDescription>Share your mission and traction.</DialogDescription>
                               </DialogHeader>
                               <div className="py-4 space-y-4">
-                                <div className="p-4 bg-primary/5 rounded-xl border border-primary/10">
-                                   <p className="text-xs font-bold text-primary uppercase tracking-widest mb-1">Pitching as:</p>
-                                   <p className="font-bold text-slate-900">{startup?.name || "Register your startup first"}</p>
-                                </div>
                                 <Textarea 
-                                  placeholder="Introduce your startup mission and traction..." 
+                                  placeholder="Introduction..." 
                                   className="min-h-[150px] rounded-xl"
                                   value={pitchMessage}
                                   onChange={(e) => setPitchMessage(e.target.value)}
                                   disabled={!startup}
                                 />
-                                {!startup && (
-                                  <p className="text-xs text-destructive font-bold">You need to list a startup in your dashboard before pitching.</p>
-                                )}
                               </div>
                               <DialogFooter>
-                                <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="rounded-xl">Cancel</Button>
-                                <Button onClick={handleSendPitch} disabled={isSendingPitch || !startup} className="rounded-xl font-bold">
-                                  {isSendingPitch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                                  Send Official Pitch
-                                </Button>
+                                <Button onClick={handleSendPitch} disabled={isSendingPitch || !startup}>Send Official Pitch</Button>
                               </DialogFooter>
                             </>
                           )}
                         </DialogContent>
                       </Dialog>
                     )}
-                  </>
-                )}
-                <Button 
-                  variant="outline" 
-                  className="h-12 px-8 rounded-2xl text-base font-bold border-slate-200" 
-                  onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}
-                >
-                  <Mail className="h-4 w-4" /> Message
-                </Button>
-                <div className="flex gap-2">
-                  {investor?.socialLinks?.linkedin && (
-                    <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl" asChild>
-                      <a href={investor.socialLinks.linkedin} target="_blank" rel="noopener noreferrer"><Linkedin className="h-6 w-6" /></a>
+                    <Button 
+                      variant="outline" 
+                      className="h-12 px-8 rounded-2xl text-base font-bold border-slate-200" 
+                      onClick={() => router.push(`/dashboard/messages?startWith=${uid}`)}
+                    >
+                      <Mail className="h-4 w-4" /> Message
                     </Button>
-                  )}
-                  {investor?.socialLinks?.website && (
-                    <Button variant="ghost" size="icon" className="h-12 w-12 rounded-2xl" asChild>
-                      <a href={investor.socialLinks.website} target="_blank" rel="noopener noreferrer"><Globe className="h-6 w-6" /></a>
-                    </Button>
-                  )}
-                </div>
-              </div>
+                  </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 pt-4 border-t border-slate-50">
-                <div className="lg:col-span-2 space-y-12">
                   {bio && (
                     <section>
                       <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
@@ -277,29 +245,63 @@ export default function InvestorPublicProfilePage() {
                     </section>
                   )}
                 </div>
-                
-                <div className="space-y-6">
-                   <Card className="border-none shadow-sm rounded-3xl bg-slate-50 p-6">
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Investment Metadata</p>
-                      <div className="space-y-4">
-                         <div className="space-y-1">
-                            <p className="text-xs font-bold text-slate-500">Ticket Size</p>
-                            <p className="font-black text-slate-900">{investor?.ticketSize || 'N/A'}</p>
-                         </div>
-                         <div className="space-y-1">
-                            <p className="text-xs font-bold text-slate-500">Preferred Stage</p>
-                            <div className="flex flex-wrap gap-1">
-                               {Array.isArray(investor?.preferredStage) ? investor.preferredStage.map((s: string) => (
-                                 <Badge key={s} variant="outline" className="bg-white">{s}</Badge>
-                               )) : <Badge variant="outline" className="bg-white">{investor?.preferredStage || 'Any'}</Badge>}
-                            </div>
-                         </div>
-                      </div>
-                   </Card>
-                </div>
-              </div>
+              </Card>
             </div>
-          </Card>
+            
+            <div className="lg:col-span-4 space-y-6">
+              <Card className="border-none shadow-xl rounded-[2rem] bg-slate-900 text-white p-8 space-y-6 relative overflow-hidden group">
+                 <div className="relative z-10 space-y-4">
+                    <div className="flex items-center justify-between">
+                       <p className="text-[10px] font-black uppercase tracking-widest text-primary">Trust Level</p>
+                       <span className="text-2xl font-black">{trustScore}%</span>
+                    </div>
+                    <Progress value={strength} className="h-2 bg-white/10" />
+                 </div>
+                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16" />
+              </Card>
+
+              <Card className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 p-8">
+                 <div className="space-y-6">
+                    <div className="flex items-center gap-2 border-b border-slate-50 pb-4">
+                       <ShieldCheck className="h-5 w-5 text-primary" />
+                       <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Verification Status</h3>
+                    </div>
+
+                    <div className="space-y-4">
+                       <div className={cn(
+                         "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                         hasLinkedIn ? "bg-blue-50 border-blue-100 text-blue-700" : "bg-slate-50 border-slate-100 text-slate-400"
+                       )}>
+                          <div className="flex items-center gap-3 text-sm font-bold">
+                             <Linkedin className="h-4 w-4" /> LinkedIn
+                          </div>
+                          {hasLinkedIn ? <CheckCircle2 className="h-4 w-4" /> : <Lock className="h-4 w-4 opacity-30" />}
+                       </div>
+
+                       <div className={cn(
+                         "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                         hasWebsite ? "bg-primary/5 border-primary/10 text-primary" : "bg-slate-50 border-slate-100 text-slate-400"
+                       )}>
+                          <div className="flex items-center gap-3 text-sm font-bold">
+                             <Globe className="h-4 w-4" /> Website
+                          </div>
+                          {hasWebsite ? <CheckCircle2 className="h-4 w-4" /> : <Lock className="h-4 w-4 opacity-30" />}
+                       </div>
+
+                       <div className={cn(
+                         "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                         isInvestorVerified ? "bg-amber-50 border-amber-100 text-amber-700" : "bg-slate-50 border-slate-100 text-slate-400"
+                       )}>
+                          <div className="flex items-center gap-3 text-sm font-bold">
+                             <ShieldCheck className="h-4 w-4" /> Investor Verified
+                          </div>
+                          {isInvestorVerified ? <CheckCircle2 className="h-4 w-4" /> : <Lock className="h-4 w-4 opacity-30" />}
+                       </div>
+                    </div>
+                 </div>
+              </Card>
+            </div>
+          </div>
         </div>
       </main>
       <PublicFooter />

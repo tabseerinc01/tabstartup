@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -11,11 +12,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore, useStorage, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp, arrayUnion, query, collection, where, getDocs, writeBatch, limit } from 'firebase/firestore';
-import { Loader2, Plus, Trash2, Linkedin, Globe, Camera, Upload, ShieldCheck, Zap, Users } from 'lucide-react';
+import { Loader2, Plus, Trash2, Linkedin, Globe, Camera, Upload, ShieldCheck, Zap, Users, ImageIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { validateImage, uploadProfileImage } from '@/lib/storage-helpers';
+import { ProfileStrengthWidget } from '@/components/dashboard/profile-strength-widget';
 
 const AVAILABLE_ROLES = [
   { id: 'founder', label: 'Founder', icon: Zap },
@@ -29,6 +31,7 @@ export default function ProfilePage() {
   const firestore = useFirestore();
   const storage = useStorage();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -36,10 +39,12 @@ export default function ProfilePage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [isActivatingRole, setIsActivatingRole] = useState<string | null>(null);
+  const [startup, setStartup] = useState<any>(null);
   
   const [formData, setFormData] = useState({
     fullName: '',
     imageUrl: '',
+    coverImageUrl: '',
     headline: '',
     investorHeadline: '',
     location: '',
@@ -83,7 +88,15 @@ export default function ProfilePage() {
       if (!firestore || !user?.uid) return;
       setIsLoading(true);
       try {
-        const snap = await getDoc(doc(firestore, 'users', user.uid));
+        const [snap, startupSnap] = await Promise.all([
+          getDoc(doc(firestore, 'users', user.uid)),
+          getDoc(doc(firestore, 'startups', user.uid))
+        ]);
+
+        if (startupSnap.exists()) {
+          setStartup(startupSnap.data());
+        }
+
         if (snap.exists()) {
           const profile = snap.data();
           const roles = Array.isArray(profile.roles) ? profile.roles : (profile.role ? [profile.role] : ['founder']);
@@ -91,6 +104,7 @@ export default function ProfilePage() {
           setFormData({
             fullName: profile.fullName || '',
             imageUrl: profile.imageUrl || '',
+            coverImageUrl: profile.coverImageUrl || '',
             headline: profile.headline || '',
             investorHeadline: profile.investorHeadline || '',
             location: profile.location || '',
@@ -130,7 +144,7 @@ export default function ProfilePage() {
     loadProfile();
   }, [firestore, user?.uid]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isCover = false) => {
     const file = e.target.files?.[0];
     if (!file || !user || !storage || !firestore) return;
 
@@ -148,18 +162,20 @@ export default function ProfilePage() {
         setUploadProgress(progress);
       });
 
+      const field = isCover ? 'coverImageUrl' : 'imageUrl';
       await setDoc(doc(firestore, 'users', user.uid), {
-        imageUrl: downloadURL,
+        [field]: downloadURL,
         updatedAt: serverTimestamp()
       }, { merge: true });
 
-      setFormData(prev => ({ ...prev, imageUrl: downloadURL }));
-      toast({ title: "Image Uploaded", description: "Your profile picture has been updated." });
+      setFormData(prev => ({ ...prev, [field]: downloadURL }));
+      toast({ title: isCover ? "Cover Updated" : "Photo Updated" });
     } catch (error: any) {
-      toast({ title: "Upload Failed", description: "Could not upload image.", variant: "destructive" });
+      toast({ title: "Upload Failed", variant: "destructive" });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      if (coverInputRef.current) coverInputRef.current.value = '';
     }
   };
 
@@ -340,51 +356,64 @@ export default function ProfilePage() {
               <CardDescription>Your public identity in the community directory.</CardDescription>
             </CardHeader>
             <CardContent className="p-8 space-y-8">
-              <div className="flex flex-col items-center sm:flex-row gap-8 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
-                <div className="relative group">
-                  <Avatar className="h-32 w-32 border-8 border-background shadow-2xl rounded-3xl overflow-hidden">
-                    <AvatarImage src={formData.imageUrl} className="object-cover" />
-                    <AvatarFallback className="text-3xl font-black rounded-3xl bg-primary/10 text-primary">{initials}</AvatarFallback>
-                  </Avatar>
-                  <button 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-3xl"
-                    disabled={isUploading}
-                  >
-                    <Camera className="h-8 w-8 text-white" />
-                  </button>
-                </div>
+              <div className="space-y-6">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Media Assets</Label>
                 
-                <div className="flex-1 space-y-4 w-full">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Profile Picture</Label>
-                    <div className="flex flex-col gap-3">
+                {/* Cover Image Upload */}
+                <div className="relative h-32 rounded-2xl bg-slate-100 overflow-hidden group border border-slate-200">
+                  {formData.coverImageUrl ? (
+                    <img src={formData.coverImageUrl} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-400">
+                      <ImageIcon className="h-8 w-8" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <input type="file" ref={coverInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, true)} />
+                    <Button variant="secondary" size="sm" className="rounded-xl h-8 text-[10px] font-bold" onClick={() => coverInputRef.current?.click()} disabled={isUploading}>
+                      {isUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
+                      Update Cover
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center sm:flex-row gap-8 p-6 bg-slate-50 rounded-[2rem] border border-slate-100 -mt-12 relative z-10 mx-4 shadow-lg shadow-slate-200/50">
+                  <div className="relative group">
+                    <Avatar className="h-24 w-24 border-4 border-background shadow-xl rounded-2xl overflow-hidden">
+                      <AvatarImage src={formData.imageUrl} className="object-cover" />
+                      <AvatarFallback className="text-2xl font-black rounded-2xl bg-primary/10 text-primary">{initials}</AvatarFallback>
+                    </Avatar>
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"
+                      disabled={isUploading}
+                    >
+                      <Camera className="h-6 w-6 text-white" />
+                    </button>
+                  </div>
+                  
+                  <div className="flex-1 space-y-4 w-full text-center sm:text-left">
+                    <div className="space-y-1">
                       <input 
                         type="file" 
                         ref={fileInputRef} 
                         className="hidden" 
-                        accept="image/jpeg,image/png,image/webp" 
-                        onChange={handleImageUpload}
+                        accept="image/*" 
+                        onChange={(e) => handleImageUpload(e, false)}
                       />
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        className="w-full sm:w-fit rounded-xl gap-2 h-10 font-bold border-slate-200"
+                        className="w-full sm:w-fit rounded-xl gap-2 h-9 font-bold border-slate-200 bg-white"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploading}
                       >
-                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                        {formData.imageUrl ? 'Change Photo' : 'Upload Photo'}
+                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-3 w-3" />}
+                        {formData.imageUrl ? 'Change Avatar' : 'Upload Photo'}
                       </Button>
-                      <p className="text-[10px] text-slate-400 font-medium italic">Supported: JPG, PNG, WebP. Max 5MB.</p>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase">JPG, PNG or WebP. Max 5MB.</p>
                     </div>
                   </div>
-                  {isUploading && (
-                    <div className="space-y-1.5">
-                      <Progress value={uploadProgress} className="h-1 bg-slate-200" />
-                      <p className="text-[9px] text-primary font-black text-right uppercase tracking-tighter">{Math.round(uploadProgress)}% Complete</p>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -431,163 +460,18 @@ export default function ProfilePage() {
                   onChange={e => setFormData({...formData, bio: e.target.value})}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="skills" className="text-xs font-bold uppercase tracking-wide text-slate-500">Skills / Interests (Comma separated)</Label>
+                <Input 
+                  id="skills" 
+                  placeholder="e.g. Strategy, Fundraising, Product"
+                  className="h-12 rounded-xl border-slate-100 bg-slate-50/50"
+                  value={formData.skills}
+                  onChange={e => setFormData({...formData, skills: e.target.value})}
+                />
+              </div>
             </CardContent>
           </Card>
-
-          {userRoles.includes('investor') && (
-            <Card className="border-none shadow-xl rounded-[2.5rem] bg-background ring-1 ring-primary/10 overflow-hidden animate-in slide-in-from-top-4 duration-500">
-              <CardHeader className="bg-primary/[0.03] p-8 border-b border-primary/5">
-                <CardTitle className="flex items-center gap-2 font-black text-primary">
-                  <ShieldCheck className="h-6 w-6" /> Investor Portfolio
-                </CardTitle>
-                <CardDescription className="text-slate-500">Define your deployment strategy to attract matching ventures.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-8 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="ticketSize">Average Ticket Size</Label>
-                    <Input 
-                      id="ticketSize" 
-                      placeholder="e.g. $10k - $50k"
-                      className="h-12 rounded-xl border-slate-100 bg-slate-50/50"
-                      value={formData.ticketSize}
-                      onChange={e => setFormData({...formData, ticketSize: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="preferredStage">Preferred Startup Stages</Label>
-                    <Input 
-                      id="preferredStage" 
-                      placeholder="e.g. Idea, Early, Growth"
-                      className="h-12 rounded-xl border-slate-100 bg-slate-50/50"
-                      value={formData.preferredStage}
-                      onChange={e => setFormData({...formData, preferredStage: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="focus">Investment Sectors / Focus</Label>
-                  <Input 
-                    id="focus" 
-                    placeholder="e.g. Fintech, AI, SaaS, HealthTech"
-                    className="h-12 rounded-xl border-slate-100 bg-slate-50/50"
-                    value={formData.investmentFocus}
-                    onChange={e => setFormData({...formData, investmentFocus: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="investorBio">Investment Philosophy</Label>
-                  <Textarea 
-                    id="investorBio" 
-                    rows={4} 
-                    placeholder="Tell founders about your support model beyond capital..."
-                    className="rounded-2xl border-slate-100 bg-slate-50/50 p-4"
-                    value={formData.investorBio}
-                    onChange={e => setFormData({...formData, investorBio: e.target.value})}
-                  />
-                </div>
-                <div className="flex items-center space-x-3 bg-primary/5 p-5 rounded-2xl border border-primary/10">
-                  <Checkbox 
-                    id="openToPitches" 
-                    className="h-5 w-5"
-                    checked={formData.isOpenToPitches}
-                    onCheckedChange={(checked) => setFormData({
-                      ...formData, 
-                      isOpenToPitches: !!checked
-                    })}
-                  />
-                  <div className="grid gap-0.5 leading-none">
-                    <Label htmlFor="openToPitches" className="font-black text-sm text-primary uppercase tracking-wide cursor-pointer">Open to Direct Pitches</Label>
-                    <p className="text-[10px] text-slate-500 font-medium italic">Founders will be able to send you investment requests via the directory.</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {userRoles.includes('founder') && (
-            <Card className="border-none shadow-xl rounded-[2.5rem] bg-background ring-1 ring-slate-100 overflow-hidden animate-in slide-in-from-top-4 duration-500">
-              <CardHeader className="p-8 pb-4">
-                <CardTitle className="flex items-center gap-2 font-black">
-                  <Zap className="h-6 w-6 text-primary" /> Venture Strategy
-                </CardTitle>
-                <CardDescription>Detail your partner requirements and building vision.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-8 space-y-8">
-                <div className="space-y-2">
-                  <Label htmlFor="why">The "Why" Behind Your Vision</Label>
-                  <Textarea 
-                    id="why" 
-                    rows={4} 
-                    placeholder="Describe your motivation. Passion attracts partners and capital."
-                    className="rounded-2xl border-slate-100 bg-slate-50/50 p-4"
-                    value={formData.whyBuilding}
-                    onChange={e => setFormData({...formData, whyBuilding: e.target.value})}
-                  />
-                </div>
-                
-                <div className="flex items-center space-x-3 bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                  <Checkbox 
-                    id="lookingForCofounder" 
-                    className="h-5 w-5"
-                    checked={formData.lookingForCofounder}
-                    onCheckedChange={(checked) => setFormData({
-                      ...formData, 
-                      lookingForCofounder: !!checked
-                    })}
-                  />
-                  <div className="grid gap-0.5 leading-none">
-                    <Label htmlFor="lookingForCofounder" className="font-black text-sm uppercase tracking-wide cursor-pointer">Actively seeking a Co-founder</Label>
-                    <p className="text-[10px] text-slate-500 font-medium italic">Highlight your profile in the co-founder directory.</p>
-                  </div>
-                </div>
-
-                {formData.lookingForCofounder && (
-                  <div className="space-y-6 pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <Label htmlFor="commitmentType">Partner Commitment</Label>
-                        <Select 
-                          value={formData.commitmentType} 
-                          onValueChange={v => setFormData({...formData, commitmentType: v})}
-                        >
-                          <SelectTrigger className="h-12 rounded-xl">
-                            <SelectValue placeholder="Select type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Full-time">Full-time Partner</SelectItem>
-                            <SelectItem value="Part-time">Part-time Partner</SelectItem>
-                            <SelectItem value="Advisory">Advisory Role</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="equityOffer">Equity Range (%)</Label>
-                        <Input 
-                          id="equityOffer" 
-                          placeholder="e.g. 10-25%"
-                          className="h-12 rounded-xl border-slate-100 bg-slate-50/50"
-                          value={formData.equityOffer}
-                          onChange={e => setFormData({...formData, equityOffer: e.target.value})}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cofounderRole">Co-founder Responsibilities</Label>
-                      <Textarea 
-                        id="cofounderRole" 
-                        placeholder="What specific skills are you missing? (e.g. CTO, Head of Growth)"
-                        className="rounded-2xl border-slate-100 bg-slate-50/50 p-4"
-                        value={formData.cofounderRole}
-                        rows={3}
-                        onChange={e => setFormData({...formData, cofounderRole: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
 
           <Card className="border-none shadow-xl rounded-[2.5rem] bg-background ring-1 ring-slate-100 overflow-hidden">
             <CardHeader className="p-8 pb-4">
@@ -643,6 +527,9 @@ export default function ProfilePage() {
         </div>
 
         <div className="space-y-6">
+          {/* Profile Strength Widget */}
+          <ProfileStrengthWidget profile={formData} startup={startup} />
+
           <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden relative group">
             <CardHeader className="pb-4 relative z-10">
               <CardTitle className="text-lg font-black flex items-center gap-2">
@@ -712,27 +599,14 @@ export default function ProfilePage() {
                 <Input 
                   placeholder="https://..."
                   className="h-11 rounded-xl bg-slate-50/50 border-slate-100"
-                  value={formData.socialLinks.website}
+                  value={formData.website}
                   onChange={e => setFormData({
                     ...formData, 
-                    socialLinks: {...formData.socialLinks, website: e.target.value}
+                    website: e.target.value
                   })}
                 />
               </div>
             </CardContent>
-          </Card>
-
-          <Card className="bg-primary text-white border-none rounded-[2.5rem] shadow-2xl shadow-primary/20 overflow-hidden relative">
-            <CardHeader className="relative z-10">
-              <CardTitle className="text-base font-black uppercase tracking-widest flex items-center gap-2">
-                <Zap className="h-5 w-5 fill-white" /> Pro Tips
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="relative z-10 text-xs space-y-4 font-medium leading-relaxed">
-              <p className="opacity-90">• <strong>Verified Identity:</strong> Profiles with authentic photos and detailed biographies receive <strong>3x more</strong> engagement from capital partners.</p>
-              <p className="opacity-90">• <strong>Global Reach:</strong> Your availability status is indexed by our search engine to highlight you to relevant founders or investors.</p>
-            </CardContent>
-            <div className="absolute bottom-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-16 -mb-16 pointer-events-none" />
           </Card>
         </div>
       </div>

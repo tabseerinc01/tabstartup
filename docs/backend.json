@@ -17,6 +17,14 @@
         "subscriptionStatus": { "type": "string", "enum": ["active", "inactive", "past_due"], "default": "inactive" },
         "referralCode": { "type": "string", "description": "Unique referral code for the user." },
         "referralCount": { "type": "number", "default": 0, "description": "Number of successful referrals." },
+        "imageUrl": { "type": "string" },
+        "coverImageUrl": { "type": "string" },
+        "headline": { "type": "string" },
+        "bio": { "type": "string" },
+        "location": { "type": "string" },
+        "website": { "type": "string" },
+        "linkedinUrl": { "type": "string" },
+        "skills": { "type": "array", "items": { "type": "string" } },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -46,6 +54,7 @@
         "stage": { "type": "string" },
         "status": { "type": "string", "enum": ["active", "hidden"] },
         "featured": { "type": "boolean" },
+        "startupVerified": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -68,65 +77,29 @@
       "required": ["senderUid", "recipientUid", "status", "createdAt"]
     },
     "Contact": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Contact",
       "type": "object",
-      "description": "A private professional contact managed by a user.",
       "properties": {
         "ownerUid": { "type": "string" },
         "contactName": { "type": "string" },
-        "companyName": { "type": "string" },
-        "email": { "type": "string", "format": "email" },
-        "phone": { "type": "string" },
-        "type": { "type": "string" },
-        "notes": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["ownerUid", "contactName", "createdAt", "updatedAt"]
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
     },
     "Deal": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Deal",
       "type": "object",
-      "description": "A sales or investment deal in the user's pipeline.",
       "properties": {
         "ownerUid": { "type": "string" },
-        "contactId": { "type": "string" },
-        "contactName": { "type": "string" },
         "title": { "type": "string" },
-        "description": { "type": "string" },
-        "value": { "type": "number" },
-        "currency": { "type": "string", "default": "USD" },
-        "stage": { "type": "string", "enum": ["Lead", "Contacted", "Proposal Sent", "Won", "Lost"] },
-        "probability": { "type": "number" },
-        "expectedCloseDate": { "type": "string", "format": "date" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["ownerUid", "title", "stage", "createdAt", "updatedAt"]
+        "stage": { "type": "string" }
+      }
     },
     "Invoice": {
       "title": "Invoice",
       "type": "object",
-      "description": "A billing document for a contact or deal.",
       "properties": {
         "ownerUid": { "type": "string" },
-        "invoiceNumber": { "type": "string" },
-        "contactId": { "type": "string" },
-        "contactName": { "type": "string" },
-        "billFromType": { "type": "string", "enum": ["Personal", "Startup"] },
-        "billFromName": { "type": "string" },
-        "description": { "type": "string" },
-        "paymentInstructions": { "type": "string" },
-        "termsAndConditions": { "type": "string" },
-        "productType": { "type": "string", "enum": ["Digital", "Physical"] },
-        "items": { "type": "array" },
-        "amount": { "type": "number" },
-        "currency": { "type": "string" },
-        "issueDate": { "type": "string" },
-        "dueDate": { "type": "string" },
-        "status": { "type": "string" }
+        "invoiceNumber": { "type": "string" }
       }
     },
     "Task": {

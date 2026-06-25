@@ -58,6 +58,7 @@ import { Button } from '@/components/ui/button';
 import { formatDistanceToNow, isToday, isPast } from 'date-fns';
 import { createNotification } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
+import { ProfileStrengthWidget } from '@/components/dashboard/profile-strength-widget';
 
 const SUPER_ADMIN_EMAIL = "shahmubaruk05@gmail.com";
 
@@ -68,6 +69,7 @@ export default function DashboardOverviewPage() {
   const router = useRouter();
 
   const [profile, setProfile] = useState<any>(null);
+  const [startup, setStartup] = useState<any>(null);
   
   // Real-time Collections with stable queries
   const tasksQ = useMemoFirebase(() => {
@@ -123,11 +125,16 @@ export default function DashboardOverviewPage() {
   }, [rawDeals, allTasks, rawContacts, rawInvoices]);
 
   useEffect(() => {
-    async function checkAdmin() {
+    async function loadIdentity() {
       if (!firestore || !user?.uid) return;
-      const profileSnap = await getDoc(doc(firestore, 'users', user.uid));
+      const [profileSnap, startupSnap] = await Promise.all([
+        getDoc(doc(firestore, 'users', user.uid)),
+        getDoc(doc(firestore, 'startups', user.uid))
+      ]);
+
       const profileData = profileSnap.exists() ? profileSnap.data() : null;
       setProfile(profileData);
+      if (startupSnap.exists()) setStartup(startupSnap.data());
 
       if (user.email === SUPER_ADMIN_EMAIL && profileData && profileData.role !== 'super_admin') {
         await updateDoc(doc(firestore, 'users', user.uid), {
@@ -138,7 +145,7 @@ export default function DashboardOverviewPage() {
         });
       }
     }
-    checkAdmin();
+    loadIdentity();
   }, [firestore, user?.uid]);
 
   const isLoading = isUserLoading || isTasksLoading || isDealsLoading || isContactsLoading || isInvoicesLoading;
@@ -178,32 +185,32 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {[
-          { label: 'Total Contacts', value: stats.totalContacts, icon: Contact2, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Active Deals', value: stats.activeDeals, icon: LayoutGrid, color: 'text-purple-600', bg: 'bg-purple-50' },
-          { label: 'Pipeline', value: formatCurrency(stats.pipelineValue), icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10' },
-          { label: 'Total Revenue', value: formatCurrency(stats.totalRevenue), icon: HandCoins, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-          { label: 'Invoices', value: stats.totalInvoices, icon: FileText, color: 'text-amber-600', bg: 'bg-amber-50' },
-          { label: 'Outstanding', value: formatCurrency(stats.outstandingValue), icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50' },
-        ].map((stat, i) => (
-          <Card key={i} className="border-none shadow-sm hover:shadow-md transition-shadow rounded-2xl overflow-hidden bg-background ring-1 ring-slate-100">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className={cn("p-1.5 rounded-lg", stat.bg)}>
-                  <stat.icon className={cn("h-4 w-4", stat.color)} />
-                </div>
-              </div>
-              <p className="text-xl font-black text-slate-900 truncate">{stat.value}</p>
-              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{stat.label}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-8 space-y-8">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {[
+              { label: 'Total Contacts', value: stats.totalContacts, icon: Contact2, color: 'text-blue-600', bg: 'bg-blue-50' },
+              { label: 'Active Deals', value: stats.activeDeals, icon: LayoutGrid, color: 'text-purple-600', bg: 'bg-purple-50' },
+              { label: 'Pipeline', value: formatCurrency(stats.pipelineValue), icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10' },
+              { label: 'Total Revenue', value: formatCurrency(stats.totalRevenue), icon: HandCoins, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+              { label: 'Invoices', value: stats.totalInvoices, icon: FileText, color: 'text-amber-600', bg: 'bg-amber-50' },
+              { label: 'Outstanding', value: formatCurrency(stats.outstandingValue), icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50' },
+            ].map((stat, i) => (
+              <Card key={i} className="border-none shadow-sm hover:shadow-md transition-shadow rounded-2xl overflow-hidden bg-background ring-1 ring-slate-100">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={cn("p-1.5 rounded-lg", stat.bg)}>
+                      <stat.icon className={cn("h-4 w-4", stat.color)} />
+                    </div>
+                  </div>
+                  <p className="text-xl font-black text-slate-900 truncate">{stat.value}</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{stat.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-           <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-2">
               <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100 h-full flex flex-col">
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
@@ -270,49 +277,13 @@ export default function DashboardOverviewPage() {
                   )}
                 </CardContent>
               </Card>
-           </div>
-
-           <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
-              <CardHeader className="px-8 py-8">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl font-black flex items-center gap-3">
-                      <Contact2 className="h-5 w-5 text-primary" /> Workspace Network
-                    </CardTitle>
-                    <CardDescription className="text-slate-400 font-medium">Recently added professional network records.</CardDescription>
-                  </div>
-                  <Button variant="outline" asChild className="rounded-xl h-10 border-slate-200 font-bold text-xs hover:bg-slate-50">
-                    <Link href="/dashboard/contacts">Directory</Link>
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="px-8 pb-10">
-                {rawContacts && rawContacts.length > 0 ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {rawContacts.slice(0, 4).map(c => (
-                      <Link key={c.id} href={`/dashboard/contacts/${c.id}`}>
-                        <div className="group p-4 rounded-2xl bg-slate-50 ring-1 ring-slate-100 hover:ring-primary/20 transition-all flex items-center gap-4">
-                           <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-black">
-                              {c.contactName?.charAt(0)}
-                           </div>
-                           <div className="min-w-0">
-                              <p className="font-bold text-slate-900 group-hover:text-primary transition-colors truncate">{c.contactName}</p>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase truncate">{c.companyName || 'Private Contact'}</p>
-                           </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-12 text-center bg-slate-50/50 rounded-[2rem] border-2 border-dashed border-slate-100">
-                     <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No contact records established</p>
-                  </div>
-                )}
-              </CardContent>
-           </Card>
+          </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="lg:col-span-4 space-y-6">
+           {/* Profile Strength Widget */}
+           <ProfileStrengthWidget profile={profile} startup={startup} />
+
            <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden group relative">
             <CardHeader className="pb-4">
               <div className="flex items-center gap-2 mb-2">

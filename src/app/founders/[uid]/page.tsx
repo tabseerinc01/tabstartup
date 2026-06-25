@@ -39,6 +39,7 @@ import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
 import { Progress } from '@/components/ui/progress';
+import { calculateProfileStrength, calculateTrustScore } from '@/lib/profile-utils';
 
 const BASE_CONN_LIMIT = 5;
 
@@ -194,26 +195,15 @@ export default function FounderPublicProfilePage() {
 
   const isOwnProfile = user?.uid === uid;
   const displayName = founder.fullName || founder.name;
-  const rolesArr = (currentUserProfile?.roles || (currentUserProfile?.role ? [currentUserProfile.role] : ['user'])).filter(Boolean);
-  const isInvestor = rolesArr.includes('investor');
+  
+  // New logic for strength and trust
+  const strength = calculateProfileStrength(founder, startup);
+  const trustScore = calculateTrustScore(founder, startup);
 
   // Verification Checks
-  const hasEmailVerified = (isOwnProfile && user?.emailVerified) || founder.isEmailVerified;
   const hasLinkedIn = !!(founder.linkedinUrl || founder.socialLinks?.linkedin);
-  const hasWebsite = !!(founder.socialLinks?.website || founder.website);
+  const hasWebsite = !!(founder.website || founder.socialLinks?.website);
   const hasStartupVerified = !!startup?.startupVerified;
-
-  const calculateStrength = () => {
-    let score = 0;
-    if (founder.imageUrl) score += 16.6;
-    if (founder.bio || founder.headline) score += 16.6;
-    if (startup) score += 16.6;
-    if (hasWebsite) score += 16.6;
-    if (hasLinkedIn) score += 16.6;
-    if (hasEmailVerified) score += 17;
-    return Math.min(Math.round(score), 100);
-  };
-  const strength = calculateStrength();
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
@@ -227,7 +217,13 @@ export default function FounderPublicProfilePage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-8 space-y-8">
               <Card className="overflow-hidden border-none shadow-xl rounded-3xl bg-background">
-                <div className="h-48 bg-gradient-to-r from-primary/20 via-accent/20 to-primary/10" />
+                <div className="h-48 bg-muted relative">
+                   {founder.coverImageUrl ? (
+                     <Image src={founder.coverImageUrl} alt="Cover" fill className="object-cover" />
+                   ) : (
+                     <div className="h-full w-full bg-gradient-to-r from-primary/20 via-accent/20 to-primary/10" />
+                   )}
+                </div>
                 <div className="px-6 md:px-12 pb-12 -mt-20">
                   <div className="flex flex-col md:flex-row gap-8 items-end mb-10">
                     <div className="relative h-40 w-40 rounded-3xl overflow-hidden border-8 border-background bg-muted shrink-0 shadow-2xl">
@@ -247,57 +243,48 @@ export default function FounderPublicProfilePage() {
                   </div>
 
                   <div className="flex flex-wrap gap-4 mb-12">
-                    {isInvestor && !isOwnProfile && (
-                      <>
-                        {existingConnection && existingConnection.type === 'investor' ? (
-                          <Button disabled className="h-12 px-8 gap-2 rounded-2xl text-base bg-muted text-muted-foreground">
-                            {existingConnection.status === 'pending' ? <Clock className="h-5 w-5" /> : <Check className="h-5 w-5" />}
-                            Interest {existingConnection.status}
+                    {!isOwnProfile && (
+                      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20">
+                            <Heart className="h-5 w-5" /> Express Interest
                           </Button>
-                        ) : (
-                          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                            <DialogTrigger asChild>
-                              <Button className="flex-1 md:flex-none h-12 px-8 gap-2 rounded-2xl text-base bg-primary hover:bg-primary/90">
-                                <Heart className="h-5 w-5" /> Express Interest
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-md">
-                              {isLimitReached ? (
-                                <div className="py-8 text-center space-y-6">
-                                  <Zap className="h-12 w-12 text-primary mx-auto" />
-                                  <div className="space-y-2">
-                                    <h3 className="text-xl font-black">Connection Limit Reached</h3>
-                                    <p className="text-sm text-slate-500">Your effective limit is {effectiveLimit} monthly networking requests. Refer friends to expand.</p>
-                                  </div>
-                                  <Button className="rounded-xl" asChild><Link href="/dashboard/billing">View Plans</Link></Button>
-                                </div>
-                              ) : (
-                                <>
-                                  <DialogHeader>
-                                    <DialogTitle>Connect with {displayName}</DialogTitle>
-                                    <DialogDescription>Share your vision and why you're interested in this founder.</DialogDescription>
-                                  </DialogHeader>
-                                  <div className="space-y-4 py-4">
-                                    <Textarea 
-                                      placeholder="Write a short message (optional)..."
-                                      className="min-h-[150px] rounded-xl"
-                                      value={interestMessage}
-                                      onChange={(e) => setInterestMessage(e.target.value)}
-                                    />
-                                  </div>
-                                  <DialogFooter>
-                                    <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                                    <Button onClick={() => handleSendRequest('investor')} disabled={isSendingRequest}>
-                                      {isSendingRequest ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                                      Send Request
-                                    </Button>
-                                  </DialogFooter>
-                                </>
-                              )}
-                            </DialogContent>
-                          </Dialog>
-                        )}
-                      </>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md">
+                          {isLimitReached ? (
+                            <div className="py-8 text-center space-y-6">
+                              <Zap className="h-12 w-12 text-primary mx-auto" />
+                              <div className="space-y-2">
+                                <h3 className="text-xl font-black">Connection Limit Reached</h3>
+                                <p className="text-sm text-slate-500">Your effective limit is {effectiveLimit} monthly networking requests. Refer friends to expand.</p>
+                              </div>
+                              <Button className="rounded-xl" asChild><Link href="/dashboard/billing">View Plans</Link></Button>
+                            </div>
+                          ) : (
+                            <>
+                              <DialogHeader>
+                                <DialogTitle>Connect with {displayName}</DialogTitle>
+                                <DialogDescription>Share your vision and why you're interested in this founder.</DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4 py-4">
+                                <Textarea 
+                                  placeholder="Write a short message (optional)..."
+                                  className="min-h-[150px] rounded-xl"
+                                  value={interestMessage}
+                                  onChange={(e) => setInterestMessage(e.target.value)}
+                                />
+                              </div>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                                <Button onClick={() => handleSendRequest('investor')} disabled={isSendingRequest}>
+                                  {isSendingRequest ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                                  Send Request
+                                </Button>
+                              </DialogFooter>
+                            </>
+                          )}
+                        </DialogContent>
+                      </Dialog>
                     )}
                     
                     {isOwnProfile ? (
@@ -348,21 +335,14 @@ export default function FounderPublicProfilePage() {
                                 <p className="text-lg font-semibold">{founder.commitmentType || 'Flexible'}</p>
                               </div>
                             </div>
-                            {isLimitReached && !existingConnection && userPlan === 'basic' ? (
-                               <div className="bg-white/50 p-4 rounded-xl border border-primary/10 flex items-center gap-3">
-                                  <AlertCircle className="h-5 w-5 text-primary" />
-                                  <p className="text-xs font-bold text-slate-600">Connection limit reached ({effectiveLimit}). <Link href="/dashboard/billing" className="text-primary underline">Upgrade to connect.</Link></p>
-                               </div>
-                            ) : (
-                              <Button 
-                                className="w-full rounded-2xl h-12 font-bold" 
-                                variant="secondary"
-                                onClick={() => handleSendRequest('cofounder')}
-                                disabled={isSendingRequest || (existingConnection?.type === 'cofounder')}
-                              >
-                                 {existingConnection?.type === 'cofounder' ? 'Request Sent' : 'Connect as Co-founder'}
-                              </Button>
-                            )}
+                            <Button 
+                              className="w-full rounded-2xl h-12 font-bold" 
+                              variant="secondary"
+                              onClick={() => handleSendRequest('cofounder')}
+                              disabled={isSendingRequest || (existingConnection?.type === 'cofounder')}
+                            >
+                                {existingConnection?.type === 'cofounder' ? 'Request Sent' : 'Connect as Co-founder'}
+                            </Button>
                           </CardContent>
                         </Card>
                       </section>
@@ -381,6 +361,12 @@ export default function FounderPublicProfilePage() {
                     </div>
                     <Progress value={strength} className="h-2 bg-white/10" />
                  </div>
+                 <div className="relative z-10 pt-4 border-t border-white/5">
+                    <div className="flex items-center justify-between">
+                       <p className="text-[10px] font-black uppercase tracking-widest text-primary">Trust Score</p>
+                       <span className="text-2xl font-black">{trustScore} / 100</span>
+                    </div>
+                 </div>
                  <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700" />
               </Card>
 
@@ -388,41 +374,46 @@ export default function FounderPublicProfilePage() {
                  <div className="space-y-6">
                     <div className="flex items-center gap-2 border-b border-slate-50 pb-4">
                        <ShieldCheck className="h-5 w-5 text-primary" />
-                       <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Trust & Verification</h3>
+                       <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Verification Status</h3>
                     </div>
 
                     <div className="space-y-4">
-                       {hasEmailVerified && (
-                         <div className="flex items-center gap-3 text-sm font-bold text-slate-700 bg-green-50/50 p-3 rounded-xl border border-green-100/50">
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
-                            Email Verified
-                         </div>
-                       )}
-                       {hasLinkedIn && (
-                         <div className="flex items-center gap-3 text-sm font-bold text-slate-700 bg-blue-50/50 p-3 rounded-xl border border-blue-100/50">
-                            <CheckCircle2 className="h-4 w-4 text-blue-600" />
-                            LinkedIn Connected
-                         </div>
-                       )}
-                       {hasWebsite && (
-                         <div className="flex items-center gap-3 text-sm font-bold text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                            <CheckCircle2 className="h-4 w-4 text-slate-400" />
-                            Website Added
-                         </div>
-                       )}
-                       {hasStartupVerified && (
-                         <div className="flex items-center gap-3 text-sm font-bold text-slate-700 bg-primary/5 p-3 rounded-xl border border-primary/10">
-                            <Zap className="h-4 w-4 text-primary fill-primary/10" />
-                            Startup Verified
-                         </div>
-                       )}
+                       <div className={cn(
+                         "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                         hasLinkedIn ? "bg-blue-50 border-blue-100 text-blue-700" : "bg-slate-50 border-slate-100 text-slate-400"
+                       )}>
+                          <div className="flex items-center gap-3 text-sm font-bold">
+                             <Linkedin className="h-4 w-4" /> LinkedIn
+                          </div>
+                          {hasLinkedIn ? <CheckCircle2 className="h-4 w-4" /> : <Lock className="h-4 w-4 opacity-30" />}
+                       </div>
 
-                       {(!hasEmailVerified && !hasLinkedIn && !hasWebsite && !hasStartupVerified) && (
-                         <div className="py-8 text-center space-y-3">
-                            <Lock className="h-8 w-8 text-slate-200 mx-auto" />
-                            <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter">Verification locked</p>
-                         </div>
-                       )}
+                       <div className={cn(
+                         "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                         hasWebsite ? "bg-primary/5 border-primary/10 text-primary" : "bg-slate-50 border-slate-100 text-slate-400"
+                       )}>
+                          <div className="flex items-center gap-3 text-sm font-bold">
+                             <Globe className="h-4 w-4" /> Website Verified
+                          </div>
+                          {hasWebsite ? <CheckCircle2 className="h-4 w-4" /> : <Lock className="h-4 w-4 opacity-30" />}
+                       </div>
+
+                       <div className={cn(
+                         "flex items-center justify-between p-3 rounded-xl border transition-colors",
+                         hasStartupVerified ? "bg-amber-50 border-amber-100 text-amber-700" : "bg-slate-50 border-slate-100 text-slate-400"
+                       )}>
+                          <div className="flex items-center gap-3 text-sm font-bold">
+                             <Rocket className="h-4 w-4" /> Startup Verified
+                          </div>
+                          {hasStartupVerified ? <CheckCircle2 className="h-4 w-4" /> : <Lock className="h-4 w-4 opacity-30" />}
+                       </div>
+
+                       <div className="flex items-center justify-between p-3 rounded-xl border bg-slate-50 border-slate-100 text-slate-300">
+                          <div className="flex items-center gap-3 text-sm font-bold">
+                             <ShieldCheck className="h-4 w-4" /> Official ID
+                          </div>
+                          <Badge variant="outline" className="text-[8px] font-black px-1.5 h-4 border-slate-200">SOON</Badge>
+                       </div>
                     </div>
                  </div>
               </Card>
