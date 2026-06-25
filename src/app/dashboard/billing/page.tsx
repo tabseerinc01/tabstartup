@@ -130,6 +130,7 @@ export default function BillingPage() {
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [isCopied, setIsCopied] = useState(false);
 
+  // Real-time usage queries
   const connectionsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid));
@@ -171,6 +172,13 @@ export default function BillingPage() {
     return query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
   const { data: invoices, isLoading: isInvoicesLoading } = useCollection(invoicesQ);
+
+  // Referral tracking
+  const referralsQ = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'referrals'), where('referrerUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+  const { data: referralsData } = useCollection(referralsQ);
 
   const generateReferralCode = () => {
     return 'TAB-' + Math.random().toString(36).substring(2, 7).toUpperCase();
@@ -367,7 +375,7 @@ export default function BillingPage() {
              </div>
           </div>
           <Badge variant="outline" className="bg-white border-primary/20 text-primary font-black text-[10px] uppercase h-7 px-3">
-            Referrals: {profile?.referralCount || 0}
+            Referrals: {referralsData?.length || 0}
           </Badge>
         </div>
         <CardContent className="p-8 space-y-8">

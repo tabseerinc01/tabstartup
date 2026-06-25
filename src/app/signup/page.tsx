@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
@@ -26,7 +25,7 @@ function SignupForm() {
   
   const roleParam = searchParams.get('role');
   const returnTo = searchParams.get('returnTo');
-  const refCode = searchParams.get('ref');
+  const refCode = searchParams.get('ref')?.toUpperCase();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -95,17 +94,17 @@ function SignupForm() {
           const referrerDoc = referrerSnap.docs[0];
           const referrerUid = referrerDoc.id;
 
-          // Record the referral
+          // Record the referral in the dedicated collection
+          // This is our primary source of truth for counting referrals
           await addDoc(collection(firestore, "referrals"), {
             referrerUid,
             referredUid: newUser.uid,
             createdAt: serverTimestamp()
           });
-
-          // Increment referrer's count
-          await updateDoc(doc(firestore, "users", referrerUid), {
-            referralCount: increment(1)
-          });
+          
+          // Note: We skip updateDoc on the referrer profile here because 
+          // Firestore Security Rules prevent a new user from writing to another user's profile.
+          // The counter is calculated in real-time on the Billing page instead.
         }
       }
 
