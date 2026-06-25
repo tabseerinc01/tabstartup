@@ -40,7 +40,7 @@ import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
 import { Progress } from '@/components/ui/progress';
 
-const BASIC_PLAN_CONN_LIMIT = 5;
+const BASE_CONN_LIMIT = 5;
 
 export default function FounderPublicProfilePage() {
   const { uid } = useParams();
@@ -106,7 +106,9 @@ export default function FounderPublicProfilePage() {
   }, [firestore, uid, user?.uid]);
 
   const userPlan = currentUserProfile?.plan || 'basic';
-  const isLimitReached = userPlan === 'basic' && sentConnectionsCount >= BASIC_PLAN_CONN_LIMIT;
+  const bonusConns = currentUserProfile?.bonusLimits?.connections || 0;
+  const effectiveLimit = userPlan === 'basic' ? (BASE_CONN_LIMIT + bonusConns) : Infinity;
+  const isLimitReached = userPlan === 'basic' && sentConnectionsCount >= effectiveLimit;
 
   const handleSendRequest = async (type: 'investor' | 'cofounder') => {
     if (!user || !firestore || !uid) {
@@ -120,7 +122,7 @@ export default function FounderPublicProfilePage() {
     if (isLimitReached) {
       toast({ 
         title: "Limit Reached", 
-        description: `Basic Plan is limited to ${BASIC_PLAN_CONN_LIMIT} monthly connection requests.`, 
+        description: `Your current monthly limit is ${effectiveLimit} connection requests.`, 
         variant: "destructive" 
       });
       return;
@@ -265,7 +267,7 @@ export default function FounderPublicProfilePage() {
                                   <Zap className="h-12 w-12 text-primary mx-auto" />
                                   <div className="space-y-2">
                                     <h3 className="text-xl font-black">Connection Limit Reached</h3>
-                                    <p className="text-sm text-slate-500">Upgrade to Pro for more than {BASIC_PLAN_CONN_LIMIT} monthly networking requests.</p>
+                                    <p className="text-sm text-slate-500">Your effective limit is {effectiveLimit} monthly networking requests. Refer friends to expand.</p>
                                   </div>
                                   <Button className="rounded-xl" asChild><Link href="/dashboard/billing">View Plans</Link></Button>
                                 </div>
@@ -349,7 +351,7 @@ export default function FounderPublicProfilePage() {
                             {isLimitReached && !existingConnection && userPlan === 'basic' ? (
                                <div className="bg-white/50 p-4 rounded-xl border border-primary/10 flex items-center gap-3">
                                   <AlertCircle className="h-5 w-5 text-primary" />
-                                  <p className="text-xs font-bold text-slate-600">Connection limit reached. <Link href="/dashboard/billing" className="text-primary underline">Upgrade to connect.</Link></p>
+                                  <p className="text-xs font-bold text-slate-600">Connection limit reached ({effectiveLimit}). <Link href="/dashboard/billing" className="text-primary underline">Upgrade to connect.</Link></p>
                                </div>
                             ) : (
                               <Button 

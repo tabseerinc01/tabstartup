@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -10,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore, useStorage, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { doc, setDoc, getDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, arrayUnion, query, collection, where, getDocs, writeBatch } from 'firebase/firestore';
 import { Loader2, Plus, Trash2, Linkedin, Globe, Camera, Upload, ShieldCheck, Zap, Users } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
@@ -187,6 +188,22 @@ export default function ProfilePage() {
       };
 
       await setDoc(doc(firestore, 'users', user.uid), updatedData, { merge: true });
+
+      // CHECK FOR QUALIFIED REFERRAL
+      // Criteria: Name, Bio, Location, and Role (implicitly roles exists)
+      if (formData.fullName && formData.bio && formData.location && userRoles.length > 0) {
+        const refQ = query(collection(firestore, 'referrals'), where('referredUid', '==', user.uid));
+        const refSnap = await getDocs(refQ);
+        if (!refSnap.empty) {
+          const batch = writeBatch(firestore);
+          refSnap.docs.forEach(d => {
+            if (!d.data().referredProfileCompleted) {
+               batch.update(d.ref, { referredProfileCompleted: true });
+            }
+          });
+          await batch.commit();
+        }
+      }
 
       toast({
         title: "Success",

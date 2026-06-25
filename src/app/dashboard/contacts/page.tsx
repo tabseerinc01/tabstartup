@@ -47,7 +47,7 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
 const CONTACT_TYPES = ["lead", "partner", "investor", "founder", "mentor", "client", "other"];
-const BASIC_PLAN_CONTACT_LIMIT = 25;
+const BASE_CONTACT_LIMIT = 25;
 
 export default function ContactsListPage() {
   const { user, isUserLoading } = useUser();
@@ -59,6 +59,7 @@ export default function ContactsListPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [userPlan, setUserPlan] = useState('basic');
+  const [bonusContacts, setBonusContacts] = useState(0);
 
   const [newContact, setNewContact] = useState({
     contactName: '',
@@ -81,13 +82,16 @@ export default function ContactsListPage() {
       if (!firestore || !user?.uid) return;
       const snap = await getDoc(doc(firestore, 'users', user.uid));
       if (snap.exists()) {
-        setUserPlan(snap.data().plan || 'basic');
+        const uData = snap.data();
+        setUserPlan(uData.plan || 'basic');
+        setBonusContacts(uData.bonusLimits?.contacts || 0);
       }
     }
     loadPlan();
   }, [firestore, user?.uid]);
 
-  const isLimitReached = userPlan === 'basic' && (contacts?.length || 0) >= BASIC_PLAN_CONTACT_LIMIT;
+  const effectiveLimit = userPlan === 'basic' ? (BASE_CONTACT_LIMIT + bonusContacts) : Infinity;
+  const isLimitReached = userPlan === 'basic' && (contacts?.length || 0) >= effectiveLimit;
 
   const filteredContacts = useMemo(() => {
     if (!contacts) return [];
@@ -110,7 +114,7 @@ export default function ContactsListPage() {
     if (isLimitReached) {
       toast({ 
         title: "Limit Reached", 
-        description: "Upgrade to Pro to manage more than 25 contacts.", 
+        description: `Your effective limit is ${effectiveLimit} contacts. Upgrade or invite friends to expand.`, 
         variant: "destructive" 
       });
       return;
@@ -181,8 +185,8 @@ export default function ContactsListPage() {
                 <div className="space-y-2">
                   <h3 className="text-2xl font-black text-slate-900">Contact Limit Reached</h3>
                   <p className="text-slate-500 font-medium px-4">
-                    You have reached your Basic Plan limit of {BASIC_PLAN_CONTACT_LIMIT} contacts. 
-                    Upgrade to Pro for unlimited CRM capacity.
+                    You have reached your effective limit of {effectiveLimit} contacts. 
+                    Upgrade to Pro or refer friends to expand your CRM capacity.
                   </p>
                 </div>
                 <Button className="rounded-xl h-12 px-8 font-bold" asChild>
@@ -311,10 +315,10 @@ export default function ContactsListPage() {
           <div className="flex items-center gap-3">
              <AlertCircle className="h-5 w-5 text-primary" />
              <p className="text-sm font-medium text-slate-600">
-               <span className="font-bold text-primary">Basic Plan Usage:</span> {contacts?.length || 0} of {BASIC_PLAN_CONTACT_LIMIT} contacts used.
+               <span className="font-bold text-primary">Workspace Capacity:</span> {contacts?.length || 0} of {effectiveLimit} contacts used. {bonusContacts > 0 && `(+${bonusContacts} bonus)`}
              </p>
           </div>
-          <Link href="/dashboard/billing" className="text-xs font-bold text-primary hover:underline uppercase tracking-widest">Upgrade</Link>
+          <Link href="/dashboard/billing" className="text-xs font-bold text-primary hover:underline uppercase tracking-widest">Manage Plan</Link>
         </div>
       )}
 

@@ -18,7 +18,7 @@ import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
 
-const BASIC_PLAN_PITCH_LIMIT = 2;
+const BASE_PITCH_LIMIT = 2;
 
 export default function InvestorPublicProfilePage() {
   const params = useParams();
@@ -38,6 +38,7 @@ export default function InvestorPublicProfilePage() {
   
   const [userPlan, setUserPlan] = useState('basic');
   const [sentPitchesCount, setSentPitchesCount] = useState(0);
+  const [bonusPitches, setBonusPitches] = useState(0);
 
   useEffect(() => {
     async function loadData() {
@@ -57,7 +58,11 @@ export default function InvestorPublicProfilePage() {
           ]);
           
           if (startupSnap.exists()) setStartup(startupSnap.data());
-          if (userSnap.exists()) setUserPlan(userSnap.data().plan || 'basic');
+          if (userSnap.exists()) {
+            const uData = userSnap.data();
+            setUserPlan(uData.plan || 'basic');
+            setBonusPitches(uData.bonusLimits?.pitches || 0);
+          }
           setSentPitchesCount(pitchesSnap.size);
 
           const existingPitchQ = query(
@@ -80,7 +85,8 @@ export default function InvestorPublicProfilePage() {
     loadData();
   }, [firestore, uid, currentUser?.uid]);
 
-  const isLimitReached = userPlan === 'basic' && sentPitchesCount >= BASIC_PLAN_PITCH_LIMIT;
+  const effectiveLimit = userPlan === 'basic' ? (BASE_PITCH_LIMIT + bonusPitches) : Infinity;
+  const isLimitReached = userPlan === 'basic' && sentPitchesCount >= effectiveLimit;
 
   const handleSendPitch = async () => {
     if (!currentUser || !firestore || !uid) {
@@ -92,7 +98,7 @@ export default function InvestorPublicProfilePage() {
     if (isLimitReached) {
       toast({ 
         title: "Limit Reached", 
-        description: `Basic Plan is limited to ${BASIC_PLAN_PITCH_LIMIT} venture pitches.`, 
+        description: `Your effective limit is ${effectiveLimit} venture pitches.`, 
         variant: "destructive" 
       });
       return;
@@ -193,8 +199,8 @@ export default function InvestorPublicProfilePage() {
                                 <div className="space-y-2">
                                   <h3 className="text-2xl font-black text-slate-900">Pitch Limit Reached</h3>
                                   <p className="text-slate-500 font-medium px-4">
-                                    Basic Plan is limited to {BASIC_PLAN_PITCH_LIMIT} venture pitches. 
-                                    Upgrade to Pro for high-volume fundraising tools.
+                                    Your current limit is {effectiveLimit} venture pitches. 
+                                    Refer friends to earn bonus pitches or upgrade for high-volume tools.
                                   </p>
                                 </div>
                                 <Button className="rounded-xl h-12 px-8 font-bold" asChild>

@@ -29,7 +29,7 @@ import { Loader2, Plus, Zap } from 'lucide-react';
 import Link from 'next/link';
 
 const STAGES = ["Lead", "Contacted", "Proposal Sent", "Won", "Lost"];
-const BASIC_PLAN_DEAL_LIMIT = 5;
+const BASE_DEAL_LIMIT = 5;
 
 export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal?: any, onSuccess?: () => void, trigger?: React.ReactNode }) {
   const { user } = useUser();
@@ -41,6 +41,7 @@ export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal
   const [contacts, setContacts] = useState<any[]>([]);
   const [activeDealsCount, setActiveDealsCount] = useState(0);
   const [userPlan, setUserPlan] = useState('basic');
+  const [bonusDeals, setBonusDeals] = useState(0);
   const [isInitialized, setIsInitialized] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -53,7 +54,8 @@ export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal
     expectedCloseDate: ''
   });
 
-  const isLimitReached = !editingDeal && userPlan === 'basic' && activeDealsCount >= BASIC_PLAN_DEAL_LIMIT;
+  const effectiveLimit = userPlan === 'basic' ? (BASE_DEAL_LIMIT + bonusDeals) : Infinity;
+  const isLimitReached = !editingDeal && userPlan === 'basic' && activeDealsCount >= effectiveLimit;
 
   useEffect(() => {
     if (!isOpen) {
@@ -99,7 +101,9 @@ export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal
         setContacts(contactsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         
         if (userSnap.exists()) {
-          setUserPlan(userSnap.data().plan || 'basic');
+          const uData = userSnap.data();
+          setUserPlan(uData.plan || 'basic');
+          setBonusDeals(uData.bonusLimits?.deals || 0);
         }
 
         // Count only ACTIVE deals for limit enforcement
@@ -125,7 +129,7 @@ export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal
     if (isLimitReached) {
       toast({ 
         title: "Limit Reached", 
-        description: `Upgrade to Pro to manage more than ${BASIC_PLAN_DEAL_LIMIT} active deals.`, 
+        description: `Effective limit is ${effectiveLimit} active deals. Upgrade or refer friends to expand.`, 
         variant: "destructive" 
       });
       return;
@@ -188,8 +192,8 @@ export function NewDealDialog({ editingDeal, onSuccess, trigger }: { editingDeal
               <div className="space-y-2">
                 <h3 className="text-2xl font-black text-slate-900">Pipeline Limit Reached</h3>
                 <p className="text-slate-500 font-medium px-4">
-                  Basic Plan is limited to {BASIC_PLAN_DEAL_LIMIT} active deals. 
-                  Close existing deals or upgrade to Pro for an unlimited pipeline.
+                  Your effective limit is {effectiveLimit} active deals. 
+                  Invite friends to earn bonus deals or upgrade for an unlimited pipeline.
                 </p>
               </div>
               <Button className="rounded-xl h-12 px-8 font-bold" asChild>

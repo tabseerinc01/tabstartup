@@ -31,7 +31,7 @@ import Link from 'next/link';
 
 const STATUSES = ["Pending", "In Progress", "Completed"];
 const PRIORITIES = ["Low", "Medium", "High"];
-const BASIC_PLAN_TASK_LIMIT = 5;
+const BASE_TASK_LIMIT = 5;
 
 interface NewTaskDialogProps {
   editingTask?: any;
@@ -52,6 +52,7 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
   const [contacts, setContacts] = useState<any[]>([]);
   const [totalTasksCount, setTotalTasksCount] = useState(0);
   const [userPlan, setUserPlan] = useState('basic');
+  const [bonusTasks, setBonusTasks] = useState(0);
   const [isInitialized, setIsInitialized] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -64,7 +65,8 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
     dueDate: ''
   });
 
-  const isLimitReached = !editingTask && userPlan === 'basic' && totalTasksCount >= BASIC_PLAN_TASK_LIMIT;
+  const effectiveLimit = userPlan === 'basic' ? (BASE_TASK_LIMIT + bonusTasks) : Infinity;
+  const isLimitReached = !editingTask && userPlan === 'basic' && totalTasksCount >= effectiveLimit;
 
   useEffect(() => {
     if (!isOpen) {
@@ -114,7 +116,9 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
         setTotalTasksCount(tasksSnap.size);
         
         if (userSnap.exists()) {
-          setUserPlan(userSnap.data().plan || 'basic');
+          const uData = userSnap.data();
+          setUserPlan(uData.plan || 'basic');
+          setBonusTasks(uData.bonusLimits?.tasks || 0);
         }
       } catch (e) {
         console.error("Error loading workspace data for task:", e);
@@ -136,7 +140,7 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
     if (!firestore || !user?.uid || isSaving) return;
 
     if (isLimitReached) {
-      toast({ title: "Limit Reached", description: `You have reached your Basic Plan limit of ${BASIC_PLAN_TASK_LIMIT} tasks.`, variant: "destructive" });
+      toast({ title: "Limit Reached", description: `You have reached your effective limit of ${effectiveLimit} tasks.`, variant: "destructive" });
       return;
     }
 
@@ -165,23 +169,13 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
         const newDoc = await addDoc(collection(firestore, 'tasks'), taskData);
         logActivity(newDoc.id, "Task created and added to workspace");
         toast({ title: "Task Created" });
-        
-        createNotification(firestore, {
-          recipientUid: user.uid,
-          actorUid: user.uid,
-          type: 'system',
-          title: 'Task Created',
-          message: `Task: "${formData.title}" added for ${taskData.contactName || 'Workspace'}.`,
-          targetId: 'tasks',
-          targetType: 'user'
-        });
       }
       setIsOpen(false);
       onSuccess?.();
     } catch (error: any) {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: editingTask ? `tasks/${editingTask.id}` : 'tasks',
-        operation: editingTask ? 'update' : 'create',
+        operation: 'update',
         requestResourceData: taskData
       }));
     } finally {
@@ -207,8 +201,8 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
               <div className="space-y-2">
                 <h3 className="text-2xl font-black text-slate-900">Task Limit Reached</h3>
                 <p className="text-slate-500 font-medium px-4">
-                  You have reached your Basic Plan limit of {BASIC_PLAN_TASK_LIMIT} tasks. 
-                  Complete your current items or upgrade to Pro for unlimited workspace tasks.
+                  Your effective limit is {effectiveLimit} tasks. 
+                  Invite friends to earn bonus tasks or upgrade for unlimited workspace tools.
                 </p>
               </div>
               <Button className="rounded-xl h-12 px-8 font-bold" asChild>
@@ -320,7 +314,7 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
               </div>
               <DialogFooter className="pt-4">
                 <Button type="submit" disabled={isSaving} className="w-full rounded-xl h-12 font-black">
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   {editingTask ? 'Update Task' : 'Add Task'}
                 </Button>
               </DialogFooter>

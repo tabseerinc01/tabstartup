@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, getDoc, setDoc, query, collection, where, serverTimestamp } from 'firebase/firestore';
+import { useUser, useFirestore, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { doc, getDoc, setDoc, query, collection, where, serverTimestamp, getDocs, writeBatch, increment } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,7 +29,8 @@ import {
   Rocket,
   Copy,
   Share2,
-  Gift
+  Gift,
+  Plus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -129,6 +131,7 @@ export default function BillingPage() {
   const [profile, setProfile] = useState<any>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [isCopied, setIsCopied] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
 
   // Real-time usage queries
   const connectionsQ = useMemoFirebase(() => {
@@ -205,6 +208,18 @@ export default function BillingPage() {
             updates.referralCount = 0;
             needsUpdate = true;
           }
+          
+          if (!data.bonusLimits) {
+            updates.bonusLimits = {
+              connections: 0,
+              pitches: 0,
+              contacts: 0,
+              deals: 0,
+              tasks: 0,
+              invoices: 0
+            };
+            needsUpdate = true;
+          }
 
           if (needsUpdate) {
             await setDoc(doc(firestore, 'users', user.uid), updates, { merge: true });
@@ -222,8 +237,66 @@ export default function BillingPage() {
     loadProfile();
   }, [firestore, user?.uid]);
 
+  // AUTO-CLAIM REWARDS
+  useEffect(() => {
+    async function claimRewards() {
+      if (!firestore || !user?.uid || isClaiming || !profile) return;
+      
+      const pendingRewardsQ = query(
+        collection(firestore, 'referrals'),
+        where('referrerUid', '==', user.uid),
+        where('referredProfileCompleted', '==', true),
+        where('rewardGranted', '==', false)
+      );
+
+      const snap = await getDocs(pendingRewardsQ);
+      if (!snap.empty) {
+        setIsClaiming(true);
+        const batch = writeBatch(firestore);
+        
+        let bonusConn = 0;
+        let bonusPitch = 0;
+        let bonusContact = 0;
+        let bonusDeal = 0;
+        let bonusTask = 0;
+        let bonusInvoice = 0;
+
+        snap.docs.forEach(d => {
+          batch.update(d.ref, { rewardGranted: true, rewardGrantedAt: serverTimestamp() });
+          bonusConn += 5;
+          bonusPitch += 2;
+          bonusContact += 10;
+          bonusDeal += 2;
+          bonusTask += 2;
+          bonusInvoice += 1;
+        });
+
+        batch.update(doc(firestore, 'users', user.uid), {
+          'bonusLimits.connections': increment(bonusConn),
+          'bonusLimits.pitches': increment(bonusPitch),
+          'bonusLimits.contacts': increment(bonusContact),
+          'bonusLimits.deals': increment(bonusDeal),
+          'bonusLimits.tasks': increment(bonusTask),
+          'bonusLimits.invoices': increment(bonusInvoice),
+          updatedAt: serverTimestamp()
+        });
+
+        await batch.commit();
+        toast({ title: "Rewards Earned!", description: `You earned bonuses from ${snap.size} qualified referrals.` });
+        
+        // Refresh local profile state
+        const updatedSnap = await getDoc(doc(firestore, 'users', user.uid));
+        if (updatedSnap.exists()) setProfile(updatedSnap.data());
+        
+        setIsClaiming(false);
+      }
+    }
+    if (!isProfileLoading) claimRewards();
+  }, [firestore, user?.uid, isClaiming, profile, isProfileLoading]);
+
   const currentPlanId = profile?.plan || 'basic';
   const currentPlan = PLANS.find(p => p.id === currentPlanId) || PLANS[0];
+  const bonusLimits = profile?.bonusLimits || { connections: 0, pitches: 0, contacts: 0, deals: 0, tasks: 0, invoices: 0 };
 
   const referralLink = typeof window !== 'undefined' 
     ? `${window.location.origin}/signup?ref=${profile?.referralCode || ''}` 
@@ -243,7 +316,8 @@ export default function BillingPage() {
       { 
         label: 'Connection Requests', 
         used: connections?.length || 0, 
-        limit: currentPlan.limits.connections, 
+        baseLimit: currentPlan.limits.connections, 
+        bonus: bonusLimits.connections,
         icon: Handshake, 
         color: 'text-blue-500',
         loading: isConnsLoading
@@ -251,7 +325,8 @@ export default function BillingPage() {
       { 
         label: 'Venture Pitches', 
         used: pitches?.length || 0, 
-        limit: currentPlan.limits.pitches, 
+        baseLimit: currentPlan.limits.pitches, 
+        bonus: bonusLimits.pitches,
         icon: Zap, 
         color: 'text-amber-500',
         loading: isPitchesLoading
@@ -259,7 +334,8 @@ export default function BillingPage() {
       { 
         label: 'Startup Profiles', 
         used: startups?.length || 0, 
-        limit: currentPlan.limits.startups, 
+        baseLimit: currentPlan.limits.startups, 
+        bonus: 0,
         icon: Rocket, 
         color: 'text-purple-500',
         loading: isStartupsLoading
@@ -267,7 +343,8 @@ export default function BillingPage() {
       { 
         label: 'CRM Contacts', 
         used: contacts?.length || 0, 
-        limit: currentPlan.limits.contacts, 
+        baseLimit: currentPlan.limits.contacts, 
+        bonus: bonusLimits.contacts,
         icon: Users, 
         color: 'text-emerald-500',
         loading: isContactsLoading
@@ -275,7 +352,8 @@ export default function BillingPage() {
       { 
         label: 'Active Deals', 
         used: activeDealsCount, 
-        limit: currentPlan.limits.deals, 
+        baseLimit: currentPlan.limits.deals, 
+        bonus: bonusLimits.deals,
         icon: LayoutGrid, 
         color: 'text-indigo-500',
         loading: isDealsLoading
@@ -283,7 +361,8 @@ export default function BillingPage() {
       { 
         label: 'Tasks', 
         used: tasks?.length || 0, 
-        limit: currentPlan.limits.tasks, 
+        baseLimit: currentPlan.limits.tasks, 
+        bonus: bonusLimits.tasks,
         icon: CheckSquare, 
         color: 'text-rose-500',
         loading: isTasksLoading
@@ -291,7 +370,8 @@ export default function BillingPage() {
       { 
         label: 'Invoices', 
         used: invoices?.length || 0, 
-        limit: currentPlan.limits.invoices, 
+        baseLimit: currentPlan.limits.invoices, 
+        bonus: bonusLimits.invoices,
         icon: FileText, 
         color: 'text-sky-500',
         loading: isInvoicesLoading
@@ -299,7 +379,7 @@ export default function BillingPage() {
     ];
   }, [
     connections, pitches, startups, contacts, deals, tasks, invoices, 
-    currentPlan, isConnsLoading, isPitchesLoading, isStartupsLoading, 
+    currentPlan, bonusLimits, isConnsLoading, isPitchesLoading, isStartupsLoading, 
     isContactsLoading, isDealsLoading, isTasksLoading, isInvoicesLoading
   ]);
 
@@ -356,7 +436,7 @@ export default function BillingPage() {
                  <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Real-Time Insight</h3>
               </div>
               <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                Your resource usage is synchronized in real-time with Firestore. Upgrade to Pro for unlimited workspace tools and priority matching.
+                Your resource usage is synchronized in real-time. Invite fellow builders to earn extra resource bonuses through our referral program.
               </p>
            </div>
         </Card>
@@ -371,18 +451,18 @@ export default function BillingPage() {
              </div>
              <div>
                 <h3 className="text-lg font-black text-slate-900">Referral Program</h3>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-tight">Invite builders, track impact</p>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-tight">Invite builders, earn resource bonuses</p>
              </div>
           </div>
           <Badge variant="outline" className="bg-white border-primary/20 text-primary font-black text-[10px] uppercase h-7 px-3">
-            Referrals: {referralsData?.length || 0}
+            Total Referrals: {referralsData?.length || 0}
           </Badge>
         </div>
         <CardContent className="p-8 space-y-8">
            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-4">
+              <div className="space-y-6">
                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Your Referral Code</Label>
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Your Unique Invite Code</Label>
                     <div className="flex items-center gap-2">
                        <code className="flex-1 p-3 rounded-xl bg-slate-50 border border-slate-100 font-mono text-lg font-bold text-slate-700 text-center tracking-widest">
                           {profile?.referralCode}
@@ -390,7 +470,7 @@ export default function BillingPage() {
                     </div>
                  </div>
                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Invitation Link</Label>
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Personal Invitation Link</Label>
                     <div className="flex gap-2">
                        <Input readOnly value={referralLink} className="rounded-xl h-11 bg-slate-50 border-slate-100 font-medium text-xs" />
                        <Button onClick={handleCopyLink} size="icon" className="shrink-0 h-11 w-11 rounded-xl shadow-lg shadow-primary/20">
@@ -399,13 +479,48 @@ export default function BillingPage() {
                     </div>
                  </div>
               </div>
-              <div className="flex flex-col justify-center p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
-                 <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-primary" /> Growing the Network
+
+              <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
+                 <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" /> Qualification Rules
                  </h4>
-                 <p className="text-sm text-slate-500 leading-relaxed font-medium italic">
-                    Share your unique link with fellow founders and investors. Successful signups are tracked in real-time. Rewards and perks for top referrers are coming soon!
+                 <ul className="space-y-2">
+                    <li className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                       <div className="h-1.5 w-1.5 rounded-full bg-primary" /> Friend signs up using your link
+                    </li>
+                    <li className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                       <div className="h-1.5 w-1.5 rounded-full bg-primary" /> Friend completes their profile setup
+                    </li>
+                    <li className="flex items-center gap-2 text-xs font-bold text-primary">
+                       <Plus className="h-3 w-3" /> You instantly receive resource bonuses
+                    </li>
+                 </ul>
+                 <p className="text-[10px] text-slate-400 italic font-medium pt-2 border-t">
+                    * Profile completion requires: Display Name, Role, Bio, and Location.
                  </p>
+              </div>
+           </div>
+
+           {/* Referral Bonuses Display */}
+           <div className="pt-8 border-t border-slate-100">
+              <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-6 flex items-center gap-2">
+                 <Gift className="h-4 w-4 text-primary" /> Earned Referral Bonuses
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                 {[
+                   { label: 'Connections', val: bonusLimits.connections, icon: Handshake },
+                   { label: 'Pitches', val: bonusLimits.pitches, icon: Zap },
+                   { label: 'Contacts', val: bonusLimits.contacts, icon: Users },
+                   { label: 'Deals', val: bonusLimits.deals, icon: LayoutGrid },
+                   { label: 'Tasks', val: bonusLimits.tasks, icon: CheckSquare },
+                   { label: 'Invoices', val: bonusLimits.invoices, icon: FileText },
+                 ].map((b, i) => (
+                   <div key={i} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center space-y-1">
+                      <b.icon className="h-4 w-4 mx-auto mb-2 text-primary opacity-40" />
+                      <p className="text-xl font-black text-slate-900">+{b.val}</p>
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{b.label}</p>
+                   </div>
+                 ))}
               </div>
            </div>
         </CardContent>
@@ -413,12 +528,13 @@ export default function BillingPage() {
 
       <div className="space-y-4">
         <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2 px-2">
-           <TrendingUp className="h-6 w-6 text-primary" /> Workspace Usage Tracker
+           <TrendingUp className="h-6 w-6 text-primary" /> Effective Workspace Capacity
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {usageData.map((item, i) => {
-            const limitVal = item.limit === Infinity ? 1000 : item.limit;
-            const displayLimit = item.limit === Infinity ? '∞' : item.limit;
+            const effectiveLimit = item.baseLimit === Infinity ? Infinity : item.baseLimit + (item.bonus || 0);
+            const limitVal = effectiveLimit === Infinity ? 1000 : effectiveLimit;
+            const displayLimit = effectiveLimit === Infinity ? '∞' : effectiveLimit;
             const percentage = Math.min((item.used / limitVal) * 100, 100);
             
             return (
@@ -434,16 +550,21 @@ export default function BillingPage() {
                     {item.loading ? (
                       <Loader2 className="h-3 w-3 animate-spin text-slate-300" />
                     ) : (
-                      <span className="text-[10px] font-bold text-slate-400">{item.used} / {displayLimit}</span>
+                      <div className="text-right">
+                         <span className="text-[10px] font-black text-slate-900">{item.used} / {displayLimit}</span>
+                         {item.bonus > 0 && effectiveLimit !== Infinity && (
+                            <p className="text-[8px] font-bold text-primary uppercase">Incl. {item.bonus} bonus</p>
+                         )}
+                      </div>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Progress value={item.loading ? 0 : percentage} className="h-1.5 bg-slate-100" />
                     <div className="flex justify-between items-center">
                        <p className="text-[9px] font-bold text-slate-400 uppercase">
-                         {item.limit === Infinity ? 'Unlimited' : item.loading ? 'Syncing...' : `${Math.round(percentage)}% Capacity`}
+                         {effectiveLimit === Infinity ? 'Unlimited' : item.loading ? 'Syncing...' : `${Math.round(percentage)}% Capacity`}
                        </p>
-                       {!item.loading && item.limit !== Infinity && percentage >= 80 && (
+                       {!item.loading && effectiveLimit !== Infinity && percentage >= 80 && (
                          <Badge className="h-4 px-1.5 text-[8px] bg-red-50 text-red-600 border-none">Limit Near</Badge>
                        )}
                     </div>
@@ -528,21 +649,6 @@ export default function BillingPage() {
           })}
         </div>
       </div>
-
-      <Card className="border-none shadow-sm rounded-[2rem] bg-primary/5 p-8 border border-primary/10">
-         <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
-            <div className="p-4 bg-white rounded-[2rem] shadow-xl text-primary">
-               <Sparkles className="h-8 w-8" />
-            </div>
-            <div className="flex-1 space-y-1">
-               <h3 className="text-xl font-black text-slate-900">Custom Infrastructure?</h3>
-               <p className="text-sm font-medium text-slate-500">Need white-label solutions for your accelerator or VC firm with dedicated limits and custom matching?</p>
-            </div>
-            <Button variant="outline" className="rounded-xl font-bold border-primary/20 text-primary h-11 px-6">
-               Contact Partnership
-            </Button>
-         </div>
-      </Card>
     </div>
   );
 }

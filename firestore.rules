@@ -20,8 +20,14 @@ service cloud.firestore {
     }
 
     match /referrals/{referralId} {
-      allow read: if request.auth != null && (resource.data.referrerUid == request.auth.uid || isAdmin());
+      allow read: if request.auth != null && (resource.data.referrerUid == request.auth.uid || resource.data.referredUid == request.auth.uid || isAdmin());
       allow create: if request.auth != null;
+      // Allow referred user to update completion status and referrer to update reward status
+      allow update: if request.auth != null && (
+        (request.auth.uid == resource.data.referredUid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['referredProfileCompleted'])) ||
+        (request.auth.uid == resource.data.referrerUid && request.resource.data.diff(resource.data).affectedKeys().hasAny(['rewardGranted', 'rewardGrantedAt'])) ||
+        isAdmin()
+      );
     }
 
     match /venturePitches/{pitchId} {

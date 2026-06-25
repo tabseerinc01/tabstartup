@@ -33,7 +33,7 @@ import Link from 'next/link';
 
 const STATUSES = ["Draft", "Sent", "Paid", "Overdue", "Cancelled"];
 const CURRENCIES = ["USD", "BDT", "EUR", "GBP"];
-const BASIC_PLAN_INVOICE_LIMIT = 2;
+const BASE_INVOICE_LIMIT = 2;
 
 interface NewInvoiceDialogProps {
   editingInvoice?: any;
@@ -59,6 +59,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
   const [contacts, setContacts] = useState<any[]>([]);
   const [invoicesCount, setInvoicesCount] = useState(0);
   const [userPlan, setUserPlan] = useState('basic');
+  const [bonusInvoices, setBonusInvoices] = useState(0);
   const [startupName, setStartupName] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   
@@ -81,7 +82,8 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
   ]);
 
   const totalAmount = items.reduce((acc, item) => acc + (parseFloat(item.total) || 0), 0);
-  const isLimitReached = !editingInvoice && userPlan === 'basic' && invoicesCount >= BASIC_PLAN_INVOICE_LIMIT;
+  const effectiveLimit = userPlan === 'basic' ? (BASE_INVOICE_LIMIT + bonusInvoices) : Infinity;
+  const isLimitReached = !editingInvoice && userPlan === 'basic' && invoicesCount >= effectiveLimit;
 
   useEffect(() => {
     if (!isOpen) {
@@ -155,6 +157,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
         if (userSnap.exists()) {
           const uData = userSnap.data();
           setUserPlan(uData.plan || 'basic');
+          setBonusInvoices(uData.bonusLimits?.invoices || 0);
           
           const startupDataSnap = await getDoc(doc(firestore, 'startups', user.uid));
           if (startupDataSnap.exists()) {
@@ -195,7 +198,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
     if (!firestore || !user?.uid || isSaving) return;
 
     if (isLimitReached) {
-      toast({ title: "Limit Reached", description: `Basic Plan is limited to ${BASIC_PLAN_INVOICE_LIMIT} invoices per month.`, variant: "destructive" });
+      toast({ title: "Limit Reached", description: `Basic Plan effective limit reached (${effectiveLimit} invoices).`, variant: "destructive" });
       return;
     }
 
@@ -264,8 +267,8 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
               <div className="space-y-2">
                 <h3 className="text-2xl font-black text-slate-900">Billing Limit Reached</h3>
                 <p className="text-slate-500 font-medium px-4">
-                  Basic Plan is limited to {BASIC_PLAN_INVOICE_LIMIT} invoices per month. 
-                  Upgrade to Pro for unlimited billing and high-volume tools.
+                  Your effective limit is {effectiveLimit} invoices. 
+                  Invite friends to earn bonus invoices or upgrade for unlimited tools.
                 </p>
               </div>
               <Button className="rounded-xl h-12 px-8 font-bold" asChild>
