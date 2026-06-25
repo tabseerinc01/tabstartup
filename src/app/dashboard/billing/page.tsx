@@ -122,49 +122,42 @@ export default function BillingPage() {
   const [profile, setProfile] = useState<any>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
 
-  // 1. Connection Requests (Sent)
   const connectionsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid));
   }, [firestore, user?.uid]);
   const { data: connections, isLoading: isConnsLoading } = useCollection(connectionsQ);
 
-  // 2. Venture Pitches (Sent)
   const pitchesQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'venturePitches'), where('senderUid', '==', user.uid));
   }, [firestore, user?.uid]);
   const { data: pitches, isLoading: isPitchesLoading } = useCollection(pitchesQ);
 
-  // 3. Startup Profiles
   const startupsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'startups'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
   const { data: startups, isLoading: isStartupsLoading } = useCollection(startupsQ);
 
-  // 4. CRM Contacts
   const contactsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
   const { data: contacts, isLoading: isContactsLoading } = useCollection(contactsQ);
 
-  // 5. Active Deals
   const dealsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
   const { data: deals, isLoading: isDealsLoading } = useCollection(dealsQ);
 
-  // 6. Tasks
   const tasksQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
   const { data: tasks, isLoading: isTasksLoading } = useCollection(tasksQ);
 
-  // 7. Invoices
   const invoicesQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid));
@@ -329,7 +322,6 @@ export default function BillingPage() {
         </Card>
       </div>
 
-      {/* Usage Summary Section */}
       <div className="space-y-4">
         <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2 px-2">
            <TrendingUp className="h-6 w-6 text-primary" /> Workspace Usage Tracker
