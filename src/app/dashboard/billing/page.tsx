@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, getDoc, setDoc, serverTimestamp, query, collection, where } from 'firebase/firestore';
+import { doc, getDoc, setDoc, query, collection, where } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -122,54 +122,54 @@ export default function BillingPage() {
   const [profile, setProfile] = useState<any>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
 
-  // 1. Connection Requests Used (Sent)
+  // 1. Connection Requests (Sent)
   const connectionsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: connections } = useCollection(connectionsQ);
+  const { data: connections, isLoading: isConnsLoading } = useCollection(connectionsQ);
 
-  // 2. Venture Pitches Used (Sent)
+  // 2. Venture Pitches (Sent)
   const pitchesQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'venturePitches'), where('senderUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: pitches } = useCollection(pitchesQ);
+  const { data: pitches, isLoading: isPitchesLoading } = useCollection(pitchesQ);
 
-  // 3. Startup Profiles Used
+  // 3. Startup Profiles
   const startupsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'startups'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: startups } = useCollection(startupsQ);
+  const { data: startups, isLoading: isStartupsLoading } = useCollection(startupsQ);
 
-  // 4. CRM Contacts Used
+  // 4. CRM Contacts
   const contactsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: contacts } = useCollection(contactsQ);
+  const { data: contacts, isLoading: isContactsLoading } = useCollection(contactsQ);
 
-  // 5. Active Deals Used
+  // 5. Active Deals
   const dealsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: deals } = useCollection(dealsQ);
+  const { data: deals, isLoading: isDealsLoading } = useCollection(dealsQ);
 
-  // 6. Tasks Used
+  // 6. Tasks
   const tasksQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: tasks } = useCollection(tasksQ);
+  const { data: tasks, isLoading: isTasksLoading } = useCollection(tasksQ);
 
-  // 7. Invoices Used
+  // 7. Invoices
   const invoicesQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: invoices } = useCollection(invoicesQ);
+  const { data: invoices, isLoading: isInvoicesLoading } = useCollection(invoicesQ);
 
   useEffect(() => {
     async function loadProfile() {
@@ -207,52 +207,63 @@ export default function BillingPage() {
         used: connections?.length || 0, 
         limit: currentPlan.limits.connections, 
         icon: Handshake, 
-        color: 'text-blue-500' 
+        color: 'text-blue-500',
+        loading: isConnsLoading
       },
       { 
         label: 'Venture Pitches', 
         used: pitches?.length || 0, 
         limit: currentPlan.limits.pitches, 
         icon: Zap, 
-        color: 'text-amber-500' 
+        color: 'text-amber-500',
+        loading: isPitchesLoading
       },
       { 
         label: 'Startup Profiles', 
         used: startups?.length || 0, 
         limit: currentPlan.limits.startups, 
         icon: Rocket, 
-        color: 'text-purple-500' 
+        color: 'text-purple-500',
+        loading: isStartupsLoading
       },
       { 
         label: 'CRM Contacts', 
         used: contacts?.length || 0, 
         limit: currentPlan.limits.contacts, 
         icon: Users, 
-        color: 'text-emerald-500' 
+        color: 'text-emerald-500',
+        loading: isContactsLoading
       },
       { 
         label: 'Active Deals', 
         used: activeDealsCount, 
         limit: currentPlan.limits.deals, 
         icon: LayoutGrid, 
-        color: 'text-indigo-500' 
+        color: 'text-indigo-500',
+        loading: isDealsLoading
       },
       { 
         label: 'Tasks', 
         used: tasks?.length || 0, 
         limit: currentPlan.limits.tasks, 
         icon: CheckSquare, 
-        color: 'text-rose-500' 
+        color: 'text-rose-500',
+        loading: isTasksLoading
       },
       { 
         label: 'Invoices', 
         used: invoices?.length || 0, 
         limit: currentPlan.limits.invoices, 
         icon: FileText, 
-        color: 'text-sky-500' 
+        color: 'text-sky-500',
+        loading: isInvoicesLoading
       },
     ];
-  }, [connections, pitches, startups, contacts, deals, tasks, invoices, currentPlan]);
+  }, [
+    connections, pitches, startups, contacts, deals, tasks, invoices, 
+    currentPlan, isConnsLoading, isPitchesLoading, isStartupsLoading, 
+    isContactsLoading, isDealsLoading, isTasksLoading, isInvoicesLoading
+  ]);
 
   if (isProfileLoading) {
     return (
@@ -304,10 +315,10 @@ export default function BillingPage() {
            <div className="space-y-4">
               <div className="flex items-center gap-2">
                  <Activity className="h-5 w-5 text-primary" />
-                 <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Usage Insight</h3>
+                 <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Real-Time Insight</h3>
               </div>
               <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                Your resource usage is synchronized in real-time with Firestore. Upgrade to Pro for unlimited workspace tools.
+                Your resource usage is synchronized in real-time with Firestore. Upgrade to Pro for unlimited workspace tools and priority matching.
               </p>
               <div className="pt-2">
                  <Button variant="link" className="p-0 h-auto text-primary font-bold text-xs" asChild>
@@ -321,7 +332,7 @@ export default function BillingPage() {
       {/* Usage Summary Section */}
       <div className="space-y-4">
         <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2 px-2">
-           <TrendingUp className="h-6 w-6 text-primary" /> Real-time Usage Summary
+           <TrendingUp className="h-6 w-6 text-primary" /> Workspace Usage Tracker
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {usageData.map((item, i) => {
@@ -339,15 +350,19 @@ export default function BillingPage() {
                       </div>
                       <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{item.label}</p>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400">{item.used} / {displayLimit}</span>
+                    {item.loading ? (
+                      <Loader2 className="h-3 w-3 animate-spin text-slate-300" />
+                    ) : (
+                      <span className="text-[10px] font-bold text-slate-400">{item.used} / {displayLimit}</span>
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <Progress value={percentage} className="h-1.5 bg-slate-100" />
+                    <Progress value={item.loading ? 0 : percentage} className="h-1.5 bg-slate-100" />
                     <div className="flex justify-between items-center">
                        <p className="text-[9px] font-bold text-slate-400 uppercase">
-                         {item.limit === Infinity ? 'Unlimited' : `${Math.round(percentage)}% Capacity`}
+                         {item.limit === Infinity ? 'Unlimited' : item.loading ? 'Syncing...' : `${Math.round(percentage)}% Capacity`}
                        </p>
-                       {item.limit !== Infinity && percentage >= 80 && (
+                       {!item.loading && item.limit !== Infinity && percentage >= 80 && (
                          <Badge className="h-4 px-1.5 text-[8px] bg-red-50 text-red-600 border-none">Limit Near</Badge>
                        )}
                     </div>
@@ -362,7 +377,7 @@ export default function BillingPage() {
       <div id="plans" className="pt-12 space-y-8">
         <div className="text-center space-y-2">
            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Select Your Scaling Pathway</h2>
-           <p className="text-slate-500 font-medium">Transparent pricing for founders and builders.</p>
+           <p className="text-slate-500 font-medium">Transparent pricing for founders, investors, and mentors.</p>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -440,7 +455,7 @@ export default function BillingPage() {
             </div>
             <div className="flex-1 space-y-1">
                <h3 className="text-xl font-black text-slate-900">Custom Infrastructure?</h3>
-               <p className="text-sm font-medium text-slate-500">Need white-label solutions for your accelerator or VC firm with dedicated limits?</p>
+               <p className="text-sm font-medium text-slate-500">Need white-label solutions for your accelerator or VC firm with dedicated limits and custom matching?</p>
             </div>
             <Button variant="outline" className="rounded-xl font-bold border-primary/20 text-primary h-11 px-6">
                Contact Partnership
