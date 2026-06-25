@@ -1,9 +1,9 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 import { 
   Contact2, 
   Plus, 
@@ -16,7 +16,9 @@ import {
   Building2, 
   ChevronRight,
   ArrowRight,
-  UserPlus
+  UserPlus,
+  AlertCircle,
+  Zap
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -45,6 +47,7 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
 const CONTACT_TYPES = ["lead", "partner", "investor", "founder", "mentor", "client", "other"];
+const BASIC_PLAN_CONTACT_LIMIT = 25;
 
 export default function ContactsListPage() {
   const { user, isUserLoading } = useUser();
@@ -55,6 +58,7 @@ export default function ContactsListPage() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [userPlan, setUserPlan] = useState('basic');
 
   const [newContact, setNewContact] = useState({
     contactName: '',
@@ -71,6 +75,19 @@ export default function ContactsListPage() {
   }, [firestore, user?.uid]);
 
   const { data: contacts, isLoading } = useCollection(contactsQuery);
+
+  useEffect(() => {
+    async function loadPlan() {
+      if (!firestore || !user?.uid) return;
+      const snap = await getDoc(doc(firestore, 'users', user.uid));
+      if (snap.exists()) {
+        setUserPlan(snap.data().plan || 'basic');
+      }
+    }
+    loadPlan();
+  }, [firestore, user?.uid]);
+
+  const isLimitReached = userPlan === 'basic' && (contacts?.length || 0) >= BASIC_PLAN_CONTACT_LIMIT;
 
   const filteredContacts = useMemo(() => {
     if (!contacts) return [];
@@ -89,6 +106,15 @@ export default function ContactsListPage() {
   const handleAddContact = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firestore || !user?.uid || isSaving) return;
+
+    if (isLimitReached) {
+      toast({ 
+        title: "Limit Reached", 
+        description: "Upgrade to Pro to manage more than 25 contacts.", 
+        variant: "destructive" 
+      });
+      return;
+    }
 
     setIsSaving(true);
     const contactData = {
@@ -137,7 +163,7 @@ export default function ContactsListPage() {
              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Workspace CRM</span>
           </div>
           <h1 className="text-4xl font-black tracking-tight text-slate-900">Private Contacts</h1>
-          <p className="text-slate-500 font-medium">Manage your personal ecosystem connections and leads.</p>
+          <p className="text-slate-50 font-medium">Manage your personal ecosystem connections and leads.</p>
         </div>
 
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -147,87 +173,107 @@ export default function ContactsListPage() {
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px] rounded-[2.5rem]">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-black">Add New Contact</DialogTitle>
-              <DialogDescription>Create a private record for your professional network.</DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleAddContact} className="space-y-4 py-4">
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="contactName">Full Name</Label>
-                  <Input 
-                    id="contactName" 
-                    required 
-                    placeholder="e.g. Jane Doe"
-                    value={newContact.contactName}
-                    onChange={e => setNewContact({...newContact, contactName: e.target.value})}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="company">Company</Label>
-                    <Input 
-                      id="company" 
-                      placeholder="e.g. TabStartup"
-                      value={newContact.companyName}
-                      onChange={e => setNewContact({...newContact, companyName: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="type">Type</Label>
-                    <Select 
-                      value={newContact.type} 
-                      onValueChange={v => setNewContact({...newContact, type: v})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CONTACT_TYPES.map(t => (
-                          <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input 
-                      id="email" 
-                      type="email" 
-                      placeholder="jane@example.com"
-                      value={newContact.email}
-                      onChange={e => setNewContact({...newContact, email: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input 
-                      id="phone" 
-                      placeholder="+880..."
-                      value={newContact.phone}
-                      onChange={e => setNewContact({...newContact, phone: e.target.value})}
-                    />
-                  </div>
+            {isLimitReached ? (
+              <div className="py-12 text-center space-y-6">
+                <div className="p-4 bg-primary/10 rounded-full w-fit mx-auto">
+                  <Zap className="h-12 w-12 text-primary" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="notes">Initial Notes</Label>
-                  <Textarea 
-                    id="notes" 
-                    placeholder="Background info, meeting notes, etc..."
-                    value={newContact.notes}
-                    onChange={e => setNewContact({...newContact, notes: e.target.value})}
-                  />
+                  <h3 className="text-2xl font-black text-slate-900">Contact Limit Reached</h3>
+                  <p className="text-slate-500 font-medium px-4">
+                    You have reached your Basic Plan limit of {BASIC_PLAN_CONTACT_LIMIT} contacts. 
+                    Upgrade to Pro for unlimited CRM capacity.
+                  </p>
                 </div>
-              </div>
-              <DialogFooter className="pt-4">
-                <Button type="submit" disabled={isSaving} className="w-full rounded-xl h-12 font-bold">
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Save Contact
+                <Button className="rounded-xl h-12 px-8 font-bold" asChild>
+                  <Link href="/dashboard/billing">View Plans & Upgrade</Link>
                 </Button>
-              </DialogFooter>
-            </form>
+              </div>
+            ) : (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-black">Add New Contact</DialogTitle>
+                  <DialogDescription>Create a private record for your professional network.</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleAddContact} className="space-y-4 py-4">
+                  <div className="grid gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="contactName">Full Name</Label>
+                      <Input 
+                        id="contactName" 
+                        required 
+                        placeholder="e.g. Jane Doe"
+                        value={newContact.contactName}
+                        onChange={e => setNewContact({...newContact, contactName: e.target.value})}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="company">Company</Label>
+                        <Input 
+                          id="company" 
+                          placeholder="e.g. TabStartup"
+                          value={newContact.companyName}
+                          onChange={e => setNewContact({...newContact, companyName: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="type">Type</Label>
+                        <Select 
+                          value={newContact.type} 
+                          onValueChange={v => setNewContact({...newContact, type: v})}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CONTACT_TYPES.map(t => (
+                              <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input 
+                          id="email" 
+                          type="email" 
+                          placeholder="jane@example.com"
+                          value={newContact.email}
+                          onChange={e => setNewContact({...newContact, email: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Phone</Label>
+                        <Input 
+                          id="phone" 
+                          placeholder="+880..."
+                          value={newContact.phone}
+                          onChange={e => setNewContact({...newContact, phone: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="notes">Initial Notes</Label>
+                      <Textarea 
+                        id="notes" 
+                        placeholder="Background info, meeting notes, etc..."
+                        value={newContact.notes}
+                        onChange={e => setNewContact({...newContact, notes: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter className="pt-4">
+                    <Button type="submit" disabled={isSaving} className="w-full rounded-xl h-12 font-bold">
+                      {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Save Contact
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </>
+            )}
           </DialogContent>
         </Dialog>
       </div>
@@ -259,6 +305,18 @@ export default function ContactsListPage() {
           </Select>
         </div>
       </div>
+
+      {userPlan === 'basic' && (
+        <div className="bg-primary/5 border border-primary/10 rounded-2xl p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+             <AlertCircle className="h-5 w-5 text-primary" />
+             <p className="text-sm font-medium text-slate-600">
+               <span className="font-bold text-primary">Basic Plan Usage:</span> {contacts?.length || 0} of {BASIC_PLAN_CONTACT_LIMIT} contacts used.
+             </p>
+          </div>
+          <Link href="/dashboard/billing" className="text-xs font-bold text-primary hover:underline uppercase tracking-widest">Upgrade</Link>
+        </div>
+      )}
 
       {!contacts || filteredContacts.length === 0 ? (
         <Card className="border-2 border-dashed rounded-[3rem] bg-background/50 py-32 text-center">

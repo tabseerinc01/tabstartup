@@ -13,10 +13,12 @@ import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, ArrowLeft, TrendingUp, Linkedin, CheckCircle2, Mail, Zap, Send, Clock, Check, Globe } from 'lucide-react';
+import { Loader2, ArrowLeft, TrendingUp, Linkedin, CheckCircle2, Mail, Zap, Send, Clock, Check, Globe, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
+
+const BASIC_PLAN_PITCH_LIMIT = 2;
 
 export default function InvestorPublicProfilePage() {
   const params = useParams();
@@ -33,6 +35,9 @@ export default function InvestorPublicProfilePage() {
   const [isSendingPitch, setIsSendingPitch] = useState(false);
   const [pitchMessage, setPitchMessage] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  const [userPlan, setUserPlan] = useState('basic');
+  const [sentPitchesCount, setSentPitchesCount] = useState(0);
 
   useEffect(() => {
     async function loadData() {
@@ -45,22 +50,25 @@ export default function InvestorPublicProfilePage() {
         }
 
         if (currentUser?.uid) {
-          // Load current user's startup if exists
-          const startupSnap = await getDoc(doc(firestore, 'startups', currentUser.uid));
-          if (startupSnap.exists()) {
-            setStartup(startupSnap.data());
-          }
+          const [startupSnap, userSnap, pitchesSnap] = await Promise.all([
+            getDoc(doc(firestore, 'startups', currentUser.uid)),
+            getDoc(doc(firestore, 'users', currentUser.uid)),
+            getDocs(query(collection(firestore, 'venturePitches'), where('senderUid', '==', currentUser.uid)))
+          ]);
+          
+          if (startupSnap.exists()) setStartup(startupSnap.data());
+          if (userSnap.exists()) setUserPlan(userSnap.data().plan || 'basic');
+          setSentPitchesCount(pitchesSnap.size);
 
-          // Check for existing pitch
-          const pitchQ = query(
+          const existingPitchQ = query(
             collection(firestore, 'venturePitches'),
             where('senderUid', '==', currentUser.uid),
             where('recipientUid', '==', uid),
             limit(1)
           );
-          const pitchSnap = await getDocs(pitchQ);
-          if (!pitchSnap.empty) {
-            setExistingPitch(pitchSnap.docs[0].data());
+          const existingPitchSnap = await getDocs(existingPitchQ);
+          if (!existingPitchSnap.empty) {
+            setExistingPitch(existingPitchSnap.docs[0].data());
           }
         }
       } catch (error) {
@@ -72,10 +80,21 @@ export default function InvestorPublicProfilePage() {
     loadData();
   }, [firestore, uid, currentUser?.uid]);
 
+  const isLimitReached = userPlan === 'basic' && sentPitchesCount >= BASIC_PLAN_PITCH_LIMIT;
+
   const handleSendPitch = async () => {
     if (!currentUser || !firestore || !uid) {
       toast({ title: "Login Required", variant: "destructive" });
       router.push('/login');
+      return;
+    }
+
+    if (isLimitReached) {
+      toast({ 
+        title: "Limit Reached", 
+        description: `Basic Plan is limited to ${BASIC_PLAN_PITCH_LIMIT} venture pitches.`, 
+        variant: "destructive" 
+      });
       return;
     }
 
@@ -129,7 +148,7 @@ export default function InvestorPublicProfilePage() {
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
       <main className="flex-1 container mx-auto px-4 py-12">
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div className="max-w-4xl auto space-y-8">
           <Button variant="ghost" asChild className="mb-2 -ml-4">
             <Link href="/investors" className="gap-2"><ArrowLeft className="h-4 w-4" /> Back to Directory</Link>
           </Button>
@@ -166,33 +185,53 @@ export default function InvestorPublicProfilePage() {
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="rounded-[2rem] sm:max-w-[500px]">
-                          <DialogHeader>
-                            <DialogTitle className="text-2xl font-black">Pitch to {displayName}</DialogTitle>
-                            <DialogDescription>Briefly introduce your venture and why it matches this investor's focus.</DialogDescription>
-                          </DialogHeader>
-                          <div className="py-4 space-y-4">
-                            <div className="p-4 bg-primary/5 rounded-xl border border-primary/10">
-                               <p className="text-xs font-bold text-primary uppercase tracking-widest mb-1">Pitching as:</p>
-                               <p className="font-bold text-slate-900">{startup?.name || "Register your startup first"}</p>
-                            </div>
-                            <Textarea 
-                              placeholder="Introduce your startup mission and traction..." 
-                              className="min-h-[150px] rounded-xl"
-                              value={pitchMessage}
-                              onChange={(e) => setPitchMessage(e.target.value)}
-                              disabled={!startup}
-                            />
-                            {!startup && (
-                              <p className="text-xs text-destructive font-bold">You need to list a startup in your dashboard before pitching.</p>
-                            )}
-                          </div>
-                          <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="rounded-xl">Cancel</Button>
-                            <Button onClick={handleSendPitch} disabled={isSendingPitch || !startup} className="rounded-xl font-bold">
-                              {isSendingPitch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                              Send Official Pitch
-                            </Button>
-                          </DialogFooter>
+                          {isLimitReached ? (
+                             <div className="py-12 text-center space-y-6">
+                                <div className="p-4 bg-primary/10 rounded-full w-fit mx-auto">
+                                  <Zap className="h-12 w-12 text-primary" />
+                                </div>
+                                <div className="space-y-2">
+                                  <h3 className="text-2xl font-black text-slate-900">Pitch Limit Reached</h3>
+                                  <p className="text-slate-500 font-medium px-4">
+                                    Basic Plan is limited to {BASIC_PLAN_PITCH_LIMIT} venture pitches. 
+                                    Upgrade to Pro for high-volume fundraising tools.
+                                  </p>
+                                </div>
+                                <Button className="rounded-xl h-12 px-8 font-bold" asChild>
+                                  <Link href="/dashboard/billing">View Plans & Upgrade</Link>
+                                </Button>
+                             </div>
+                          ) : (
+                            <>
+                              <DialogHeader>
+                                <DialogTitle className="text-2xl font-black">Pitch to {displayName}</DialogTitle>
+                                <DialogDescription>Briefly introduce your venture and why it matches this investor's focus.</DialogDescription>
+                              </DialogHeader>
+                              <div className="py-4 space-y-4">
+                                <div className="p-4 bg-primary/5 rounded-xl border border-primary/10">
+                                   <p className="text-xs font-bold text-primary uppercase tracking-widest mb-1">Pitching as:</p>
+                                   <p className="font-bold text-slate-900">{startup?.name || "Register your startup first"}</p>
+                                </div>
+                                <Textarea 
+                                  placeholder="Introduce your startup mission and traction..." 
+                                  className="min-h-[150px] rounded-xl"
+                                  value={pitchMessage}
+                                  onChange={(e) => setPitchMessage(e.target.value)}
+                                  disabled={!startup}
+                                />
+                                {!startup && (
+                                  <p className="text-xs text-destructive font-bold">You need to list a startup in your dashboard before pitching.</p>
+                                )}
+                              </div>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="rounded-xl">Cancel</Button>
+                                <Button onClick={handleSendPitch} disabled={isSendingPitch || !startup} className="rounded-xl font-bold">
+                                  {isSendingPitch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                                  Send Official Pitch
+                                </Button>
+                              </DialogFooter>
+                            </>
+                          )}
                         </DialogContent>
                       </Dialog>
                     )}

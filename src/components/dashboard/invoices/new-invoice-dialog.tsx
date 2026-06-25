@@ -26,12 +26,14 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, FileText, Hash, Banknote, Trash2, Package, Smartphone, Building2, User, Gavel } from 'lucide-react';
+import { Loader2, Plus, FileText, Hash, Banknote, Trash2, Package, Smartphone, Building2, User, Gavel, Zap } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 const STATUSES = ["Draft", "Sent", "Paid", "Overdue", "Cancelled"];
 const CURRENCIES = ["USD", "BDT", "EUR", "GBP"];
+const BASIC_PLAN_INVOICE_LIMIT = 2;
 
 interface NewInvoiceDialogProps {
   editingInvoice?: any;
@@ -55,6 +57,8 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [invoicesCount, setInvoicesCount] = useState(0);
+  const [userPlan, setUserPlan] = useState('basic');
   const [startupName, setStartupName] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   
@@ -77,6 +81,7 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
   ]);
 
   const totalAmount = items.reduce((acc, item) => acc + (parseFloat(item.total) || 0), 0);
+  const isLimitReached = !editingInvoice && userPlan === 'basic' && invoicesCount >= BASIC_PLAN_INVOICE_LIMIT;
 
   useEffect(() => {
     if (!isOpen) {
@@ -138,13 +143,23 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
     async function loadWorkspaceData() {
       if (!firestore || !user?.uid || !isOpen) return;
       try {
-        const contactsQ = query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid));
-        const contactsSnap = await getDocs(contactsQ);
-        setContacts(contactsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const [contactsSnap, userSnap, invoicesSnap] = await Promise.all([
+          getDocs(query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid))),
+          getDoc(doc(firestore, 'users', user.uid)),
+          getDocs(query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid)))
+        ]);
         
-        const startupDataSnap = await getDoc(doc(firestore, 'startups', user.uid));
-        if (startupDataSnap.exists()) {
-          setStartupName(startupDataSnap.data().name);
+        setContacts(contactsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setInvoicesCount(invoicesSnap.size);
+        
+        if (userSnap.exists()) {
+          const uData = userSnap.data();
+          setUserPlan(uData.plan || 'basic');
+          
+          const startupDataSnap = await getDoc(doc(firestore, 'startups', user.uid));
+          if (startupDataSnap.exists()) {
+            setStartupName(startupDataSnap.data().name);
+          }
         }
       } catch (e) {
         console.error("Error loading workspace data for invoice:", e);
@@ -178,6 +193,11 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firestore || !user?.uid || isSaving) return;
+
+    if (isLimitReached) {
+      toast({ title: "Limit Reached", description: `Basic Plan is limited to ${BASIC_PLAN_INVOICE_LIMIT} invoices per month.`, variant: "destructive" });
+      return;
+    }
 
     setIsSaving(true);
     const selectedContact = contacts.find(c => c.id === formData.contactId);
@@ -236,246 +256,266 @@ export function NewInvoiceDialog({ editingInvoice, onSuccess, trigger, initialDa
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto rounded-[2.5rem]">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-black">
-            {editingInvoice ? 'Update Invoice' : 'Create Invoice'}
-          </DialogTitle>
-          <DialogDescription>Generate a billing document with detailed items and sender info.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6 py-4">
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Delivery Logic</Label>
-              <RadioGroup 
-                value={formData.productType} 
-                onValueChange={v => setFormData({...formData, productType: v as 'Digital' | 'Physical'})}
-                className="grid grid-cols-2 gap-4"
-              >
-                <div>
-                  <RadioGroupItem value="Digital" id="digital" className="peer sr-only" />
-                  <Label
-                    htmlFor="digital"
-                    className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20"
-                  >
-                    <Smartphone className="mb-1 h-5 w-5" />
-                    <span className="text-[10px] font-bold uppercase tracking-tight">Digital</span>
-                  </Label>
-                </div>
-                <div>
-                  <RadioGroupItem value="Physical" id="physical" className="peer sr-only" />
-                  <Label
-                    htmlFor="physical"
-                    className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20"
-                  >
-                    <Package className="mb-1 h-5 w-5" />
-                    <span className="text-[10px] font-bold uppercase tracking-tight">Physical</span>
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            <div className="space-y-4">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Bill From (Sender)</Label>
-              <RadioGroup 
-                value={formData.billFromType} 
-                onValueChange={v => setFormData({...formData, billFromType: v as 'Personal' | 'Startup'})}
-                className="grid grid-cols-2 gap-4"
-              >
-                <div>
-                  <RadioGroupItem value="Personal" id="bill-personal" className="peer sr-only" />
-                  <Label
-                    htmlFor="bill-personal"
-                    className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20"
-                  >
-                    <User className="mb-1 h-5 w-5" />
-                    <span className="text-[10px] font-bold uppercase tracking-tight">Personal</span>
-                  </Label>
-                </div>
-                <div>
-                  <RadioGroupItem 
-                    value="Startup" 
-                    id="bill-startup" 
-                    className="peer sr-only" 
-                    disabled={!startupName}
-                  />
-                  <Label
-                    htmlFor="bill-startup"
-                    className={`flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20 ${!startupName ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}
-                  >
-                    <Building2 className="mb-1 h-5 w-5" />
-                    <span className="text-[10px] font-bold uppercase tracking-tight">Startup</span>
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
-          </div>
-
-          <Separator className="bg-slate-100" />
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="contact">Client / Contact</Label>
-              <Select value={formData.contactId} onValueChange={v => setFormData({...formData, contactId: v})}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Client" />
-                </SelectTrigger>
-                <SelectContent>
-                  {contacts.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.contactName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="invNum">Invoice #</Label>
-              <div className="relative">
-                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input 
-                  id="invNum" 
-                  required 
-                  className="pl-10"
-                  value={formData.invoiceNumber}
-                  onChange={e => setFormData({...formData, invoiceNumber: e.target.value})}
-                />
+        {isLimitReached ? (
+           <div className="py-12 text-center space-y-6">
+              <div className="p-4 bg-primary/10 rounded-full w-fit mx-auto">
+                <Zap className="h-12 w-12 text-primary" />
               </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Billable Items</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addItem} className="rounded-xl h-8 gap-1.5 font-bold text-[10px]">
-                <Plus className="h-3.5 w-3.5" /> Add Item
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black text-slate-900">Billing Limit Reached</h3>
+                <p className="text-slate-500 font-medium px-4">
+                  Basic Plan is limited to {BASIC_PLAN_INVOICE_LIMIT} invoices per month. 
+                  Upgrade to Pro for unlimited billing and high-volume tools.
+                </p>
+              </div>
+              <Button className="rounded-xl h-12 px-8 font-bold" asChild>
+                <Link href="/dashboard/billing">View Plans & Upgrade</Link>
               </Button>
-            </div>
-            
-            <div className="space-y-3">
-              {items.map((item) => (
-                <div key={item.id} className="grid grid-cols-12 gap-3 items-end bg-slate-50/50 p-4 rounded-2xl border border-slate-100 ring-1 ring-slate-100">
-                  <div className="col-span-12 md:col-span-6 space-y-1.5">
-                    <Label className="text-[9px] font-bold uppercase text-slate-400">Description</Label>
+           </div>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-black">
+                {editingInvoice ? 'Update Invoice' : 'Create Invoice'}
+              </DialogTitle>
+              <DialogDescription>Generate a billing document with detailed items and sender info.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-6 py-4">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Delivery Logic</Label>
+                  <RadioGroup 
+                    value={formData.productType} 
+                    onValueChange={v => setFormData({...formData, productType: v as 'Digital' | 'Physical'})}
+                    className="grid grid-cols-2 gap-4"
+                  >
+                    <div>
+                      <RadioGroupItem value="Digital" id="digital" className="peer sr-only" />
+                      <Label
+                        htmlFor="digital"
+                        className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20"
+                      >
+                        <Smartphone className="mb-1 h-5 w-5" />
+                        <span className="text-[10px] font-bold uppercase tracking-tight">Digital</span>
+                      </Label>
+                    </div>
+                    <div>
+                      <RadioGroupItem value="Physical" id="physical" className="peer sr-only" />
+                      <Label
+                        htmlFor="physical"
+                        className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20"
+                      >
+                        <Package className="mb-1 h-5 w-5" />
+                        <span className="text-[10px] font-bold uppercase tracking-tight">Physical</span>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <div className="space-y-4">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Bill From (Sender)</Label>
+                  <RadioGroup 
+                    value={formData.billFromType} 
+                    onValueChange={v => setFormData({...formData, billFromType: v as 'Personal' | 'Startup'})}
+                    className="grid grid-cols-2 gap-4"
+                  >
+                    <div>
+                      <RadioGroupItem value="Personal" id="bill-personal" className="peer sr-only" />
+                      <Label
+                        htmlFor="bill-personal"
+                        className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20"
+                      >
+                        <User className="mb-1 h-5 w-5" />
+                        <span className="text-[10px] font-bold uppercase tracking-tight">Personal</span>
+                      </Label>
+                    </div>
+                    <div>
+                      <RadioGroupItem 
+                        value="Startup" 
+                        id="bill-startup" 
+                        className="peer sr-only" 
+                        disabled={!startupName}
+                      />
+                      <Label
+                        htmlFor="bill-startup"
+                        className={`flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-3 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all h-20 ${!startupName ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}
+                      >
+                        <Building2 className="mb-1 h-5 w-5" />
+                        <span className="text-[10px] font-bold uppercase tracking-tight">Startup</span>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              </div>
+
+              <Separator className="bg-slate-100" />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="contact">Client / Contact</Label>
+                  <Select value={formData.contactId} onValueChange={v => setFormData({...formData, contactId: v})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {contacts.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.contactName}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="invNum">Invoice #</Label>
+                  <div className="relative">
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input 
-                      placeholder="Product or service details..."
-                      required
-                      value={item.description}
-                      onChange={e => updateItem(item.id, 'description', e.target.value)}
+                      id="invNum" 
+                      required 
+                      className="pl-10"
+                      value={formData.invoiceNumber}
+                      onChange={e => setFormData({...formData, invoiceNumber: e.target.value})}
                     />
-                  </div>
-                  <div className="col-span-4 md:col-span-2 space-y-1.5">
-                    <Label className="text-[9px] font-bold uppercase text-slate-400">Qty</Label>
-                    <Input 
-                      type="number" 
-                      min="1"
-                      required
-                      value={item.quantity}
-                      onChange={e => updateItem(item.id, 'quantity', e.target.value)}
-                    />
-                  </div>
-                  <div className="col-span-4 md:col-span-2 space-y-1.5">
-                    <Label className="text-[9px] font-bold uppercase text-slate-400">Price</Label>
-                    <Input 
-                      type="number" 
-                      placeholder="0.00"
-                      required
-                      value={item.unitPrice}
-                      onChange={e => updateItem(item.id, 'unitPrice', e.target.value)}
-                    />
-                  </div>
-                  <div className="col-span-4 md:col-span-2 flex items-center justify-end">
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => removeItem(item.id)}
-                      className="text-slate-300 hover:text-destructive h-10 w-10"
-                      disabled={items.length === 1}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="issue">Issue Date</Label>
-              <Input id="issue" type="date" required value={formData.issueDate} onChange={e => setFormData({...formData, issueDate: e.target.value})} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="due">Due Date</Label>
-              <Input id="due" type="date" required value={formData.dueDate} onChange={e => setFormData({...formData, dueDate: e.target.value})} />
-            </div>
-          </div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-primary">Billable Items</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={addItem} className="rounded-xl h-8 gap-1.5 font-bold text-[10px]">
+                    <Plus className="h-3.5 w-3.5" /> Add Item
+                  </Button>
+                </div>
+                
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <div key={item.id} className="grid grid-cols-12 gap-3 items-end bg-slate-50/50 p-4 rounded-2xl border border-slate-100 ring-1 ring-slate-100">
+                      <div className="col-span-12 md:col-span-6 space-y-1.5">
+                        <Label className="text-[9px] font-bold uppercase text-slate-400">Description</Label>
+                        <Input 
+                          placeholder="Product or service details..."
+                          required
+                          value={item.description}
+                          onChange={e => updateItem(item.id, 'description', e.target.value)}
+                        />
+                      </div>
+                      <div className="col-span-4 md:col-span-2 space-y-1.5">
+                        <Label className="text-[9px] font-bold uppercase text-slate-400">Qty</Label>
+                        <Input 
+                          type="number" 
+                          min="1"
+                          required
+                          value={item.quantity}
+                          onChange={e => updateItem(item.id, 'quantity', e.target.value)}
+                        />
+                      </div>
+                      <div className="col-span-4 md:col-span-2 space-y-1.5">
+                        <Label className="text-[9px] font-bold uppercase text-slate-400">Price</Label>
+                        <Input 
+                          type="number" 
+                          placeholder="0.00"
+                          required
+                          value={item.unitPrice}
+                          onChange={e => updateItem(item.id, 'unitPrice', e.target.value)}
+                        />
+                      </div>
+                      <div className="col-span-4 md:col-span-2 flex items-center justify-end">
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => removeItem(item.id)}
+                          className="text-slate-300 hover:text-destructive h-10 w-10"
+                          disabled={items.length === 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="currency">Currency</Label>
-              <Select value={formData.currency} onValueChange={v => setFormData({...formData, currency: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="status">Current Status</Label>
-              <Select value={formData.status} onValueChange={v => setFormData({...formData, status: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="issue">Issue Date</Label>
+                  <Input id="issue" type="date" required value={formData.issueDate} onChange={e => setFormData({...formData, issueDate: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="due">Due Date</Label>
+                  <Input id="due" type="date" required value={formData.dueDate} onChange={e => setFormData({...formData, dueDate: e.target.value})} />
+                </div>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="payment-instructions" className="flex items-center gap-2">
-                <Banknote className="h-3.5 w-3.5" /> Payment Instructions
-              </Label>
-              <Textarea 
-                id="payment-instructions" 
-                placeholder="Bank details, bKash, etc..."
-                rows={3}
-                value={formData.paymentInstructions}
-                onChange={e => setFormData({...formData, paymentInstructions: e.target.value})}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="terms" className="flex items-center gap-2">
-                <Gavel className="h-3.5 w-3.5" /> Terms & Conditions
-              </Label>
-              <Textarea 
-                id="terms" 
-                placeholder="Refund policy, payment terms..."
-                rows={3}
-                value={formData.termsAndConditions}
-                onChange={e => setFormData({...formData, termsAndConditions: e.target.value})}
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="currency">Currency</Label>
+                  <Select value={formData.currency} onValueChange={v => setFormData({...formData, currency: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="status">Current Status</Label>
+                  <Select value={formData.status} onValueChange={v => setFormData({...formData, status: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-          <div className="bg-primary/5 p-6 rounded-[2rem] border border-primary/10 flex justify-between items-center">
-             <div>
-               <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Total Summary</p>
-               <h4 className="text-3xl font-black text-slate-900">{formData.currency} {totalAmount.toLocaleString()}</h4>
-             </div>
-             <div className="text-right">
-               <p className="text-[9px] font-bold text-slate-400 uppercase">Items Count</p>
-               <p className="text-lg font-black text-slate-700">{items.length}</p>
-             </div>
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="payment-instructions" className="flex items-center gap-2">
+                    <Banknote className="h-3.5 w-3.5" /> Payment Instructions
+                  </Label>
+                  <Textarea 
+                    id="payment-instructions" 
+                    placeholder="Bank details, bKash, etc..."
+                    rows={3}
+                    value={formData.paymentInstructions}
+                    onChange={e => setFormData({...formData, paymentInstructions: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="terms" className="flex items-center gap-2">
+                    <Gavel className="h-3.5 w-3.5" /> Terms & Conditions
+                  </Label>
+                  <Textarea 
+                    id="terms" 
+                    placeholder="Refund policy, payment terms..."
+                    rows={3}
+                    value={formData.termsAndConditions}
+                    onChange={e => setFormData({...formData, termsAndConditions: e.target.value})}
+                  />
+                </div>
+              </div>
 
-          <DialogFooter className="pt-4">
-            <Button type="submit" disabled={isSaving} className="w-full rounded-xl h-12 font-black">
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
-              {editingInvoice ? 'Update Invoice' : 'Generate Invoice'}
-            </Button>
-          </DialogFooter>
-        </form>
+              <div className="bg-primary/5 p-6 rounded-[2rem] border border-primary/10 flex justify-between items-center">
+                 <div>
+                   <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Total Summary</p>
+                   <h4 className="text-3xl font-black text-slate-900">{formData.currency} {totalAmount.toLocaleString()}</h4>
+                 </div>
+                 <div className="text-right">
+                   <p className="text-[9px] font-bold text-slate-400 uppercase">Items Count</p>
+                   <p className="text-lg font-black text-slate-700">{items.length}</p>
+                 </div>
+              </div>
+
+              <DialogFooter className="pt-4">
+                <Button type="submit" disabled={isSaving} className="w-full rounded-xl h-12 font-black">
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
+                  {editingInvoice ? 'Update Invoice' : 'Generate Invoice'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

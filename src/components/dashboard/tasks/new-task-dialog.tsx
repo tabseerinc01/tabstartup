@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useFirestore, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { 
   Dialog, 
   DialogContent, 
@@ -25,11 +25,13 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Calendar as CalendarIcon, User, Briefcase } from 'lucide-react';
+import { Loader2, Plus, Calendar as CalendarIcon, User, Briefcase, Zap } from 'lucide-react';
 import { createNotification } from '@/lib/notifications';
+import Link from 'next/link';
 
 const STATUSES = ["Pending", "In Progress", "Completed"];
 const PRIORITIES = ["Low", "Medium", "High"];
+const BASIC_PLAN_TASK_LIMIT = 5;
 
 interface NewTaskDialogProps {
   editingTask?: any;
@@ -48,6 +50,8 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
   const [isSaving, setIsSaving] = useState(false);
   const [deals, setDeals] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [totalTasksCount, setTotalTasksCount] = useState(0);
+  const [userPlan, setUserPlan] = useState('basic');
   const [isInitialized, setIsInitialized] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -59,6 +63,8 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
     priority: 'Medium',
     dueDate: ''
   });
+
+  const isLimitReached = !editingTask && userPlan === 'basic' && totalTasksCount >= BASIC_PLAN_TASK_LIMIT;
 
   useEffect(() => {
     if (!isOpen) {
@@ -96,13 +102,20 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
     async function loadWorkspaceData() {
       if (!firestore || !user?.uid || !isOpen) return;
       try {
-        const [dealsSnap, contactsSnap] = await Promise.all([
+        const [dealsSnap, contactsSnap, userSnap, tasksSnap] = await Promise.all([
           getDocs(query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid))),
-          getDocs(query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid)))
+          getDocs(query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid))),
+          getDoc(doc(firestore, 'users', user.uid)),
+          getDocs(query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid)))
         ]);
         
         setDeals(dealsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         setContacts(contactsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setTotalTasksCount(tasksSnap.size);
+        
+        if (userSnap.exists()) {
+          setUserPlan(userSnap.data().plan || 'basic');
+        }
       } catch (e) {
         console.error("Error loading workspace data for task:", e);
       }
@@ -121,6 +134,11 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firestore || !user?.uid || isSaving) return;
+
+    if (isLimitReached) {
+      toast({ title: "Limit Reached", description: `You have reached your Basic Plan limit of ${BASIC_PLAN_TASK_LIMIT} tasks.`, variant: "destructive" });
+      return;
+    }
 
     setIsSaving(true);
     
@@ -181,114 +199,134 @@ export function NewTaskDialog({ editingTask, onSuccess, trigger, initialDealId, 
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px] rounded-[2.5rem]">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-black">{editingTask ? 'Edit Task' : 'Add New Task'}</DialogTitle>
-          <DialogDescription>Set reminders for contacts and deals to stay on top of your workflow.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          <div className="grid gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="taskTitle">Task Title</Label>
-              <Input 
-                id="taskTitle" 
-                required 
-                placeholder="e.g. Call client for follow-up"
-                value={formData.title}
-                onChange={e => setFormData({...formData, title: e.target.value})}
-              />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="contact">Related Contact (Who is this for?)</Label>
-                <Select value={formData.contactId} onValueChange={v => setFormData({...formData, contactId: v})}>
-                  <SelectTrigger id="contact">
-                    <SelectValue placeholder="Select Contact" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unassigned</SelectItem>
-                    {contacts.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.contactName}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+        {isLimitReached ? (
+           <div className="py-12 text-center space-y-6">
+              <div className="p-4 bg-primary/10 rounded-full w-fit mx-auto">
+                <Zap className="h-12 w-12 text-primary" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="deal">Related Deal (Optional)</Label>
-                <Select value={formData.dealId} onValueChange={v => setFormData({...formData, dealId: v})}>
-                  <SelectTrigger id="deal">
-                    <SelectValue placeholder="No Deal" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Deal</SelectItem>
-                    {deals.map(d => (
-                      <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <h3 className="text-2xl font-black text-slate-900">Task Limit Reached</h3>
+                <p className="text-slate-500 font-medium px-4">
+                  You have reached your Basic Plan limit of {BASIC_PLAN_TASK_LIMIT} tasks. 
+                  Complete your current items or upgrade to Pro for unlimited workspace tasks.
+                </p>
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="dueDate">Due Date</Label>
-                <div className="relative">
-                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Button className="rounded-xl h-12 px-8 font-bold" asChild>
+                <Link href="/dashboard/billing">View Plans & Upgrade</Link>
+              </Button>
+           </div>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-black">{editingTask ? 'Edit Task' : 'Add New Task'}</DialogTitle>
+              <DialogDescription>Set reminders for contacts and deals to stay on top of your workflow.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4 py-4">
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="taskTitle">Task Title</Label>
                   <Input 
-                    id="dueDate" 
-                    type="date"
-                    className="pl-10"
-                    value={formData.dueDate}
-                    onChange={e => setFormData({...formData, dueDate: e.target.value})}
+                    id="taskTitle" 
+                    required 
+                    placeholder="e.g. Call client for follow-up"
+                    value={formData.title}
+                    onChange={e => setFormData({...formData, title: e.target.value})}
+                  />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="contact">Related Contact (Who is this for?)</Label>
+                    <Select value={formData.contactId} onValueChange={v => setFormData({...formData, contactId: v})}>
+                      <SelectTrigger id="contact">
+                        <SelectValue placeholder="Select Contact" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Unassigned</SelectItem>
+                        {contacts.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.contactName}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="deal">Related Deal (Optional)</Label>
+                    <Select value={formData.dealId} onValueChange={v => setFormData({...formData, dealId: v})}>
+                      <SelectTrigger id="deal">
+                        <SelectValue placeholder="No Deal" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Deal</SelectItem>
+                        {deals.map(d => (
+                          <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="dueDate">Due Date</Label>
+                    <div className="relative">
+                      <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                      <Input 
+                        id="dueDate" 
+                        type="date"
+                        className="pl-10"
+                        value={formData.dueDate}
+                        onChange={e => setFormData({...formData, dueDate: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="priority">Priority</Label>
+                    <Select value={formData.priority} onValueChange={v => setFormData({...formData, priority: v})}>
+                      <SelectTrigger id="priority">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORITIES.map(p => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select value={formData.status} onValueChange={v => setFormData({...formData, status: v})}>
+                      <SelectTrigger id="status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STATUSES.map(s => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="desc">Notes & Description</Label>
+                  <Textarea 
+                    id="desc" 
+                    rows={3}
+                    placeholder="What needs to be discussed or done?"
+                    value={formData.description}
+                    onChange={e => setFormData({...formData, description: e.target.value})}
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="priority">Priority</Label>
-                <Select value={formData.priority} onValueChange={v => setFormData({...formData, priority: v})}>
-                  <SelectTrigger id="priority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRIORITIES.map(p => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select value={formData.status} onValueChange={v => setFormData({...formData, status: v})}>
-                  <SelectTrigger id="status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STATUSES.map(s => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="desc">Notes & Description</Label>
-              <Textarea 
-                id="desc" 
-                rows={3}
-                placeholder="What needs to be discussed or done?"
-                value={formData.description}
-                onChange={e => setFormData({...formData, description: e.target.value})}
-              />
-            </div>
-          </div>
-          <DialogFooter className="pt-4">
-            <Button type="submit" disabled={isSaving} className="w-full rounded-xl h-12 font-black">
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {editingTask ? 'Update Task' : 'Add Task'}
-            </Button>
-          </DialogFooter>
-        </form>
+              <DialogFooter className="pt-4">
+                <Button type="submit" disabled={isSaving} className="w-full rounded-xl h-12 font-black">
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                  {editingTask ? 'Update Task' : 'Add Task'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

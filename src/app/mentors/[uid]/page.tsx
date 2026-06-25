@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -10,10 +11,13 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
-import { Loader2, ArrowLeft, MapPin, Briefcase, Linkedin, CheckCircle2, Target, MessageSquare, Award, Zap, Rocket, Clock, Check } from 'lucide-react';
+import { Loader2, ArrowLeft, MapPin, Briefcase, Linkedin, CheckCircle2, Target, MessageSquare, Award, Zap, Rocket, Clock, Check, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+
+const BASIC_PLAN_CONN_LIMIT = 5;
 
 export default function MentorPublicProfilePage() {
   const params = useParams();
@@ -27,6 +31,8 @@ export default function MentorPublicProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [existingConnection, setExistingConnection] = useState<any>(null);
   const [isSendingRequest, setIsSendingRequest] = useState(false);
+  const [userPlan, setUserPlan] = useState('basic');
+  const [sentConnectionsCount, setSentConnectionsCount] = useState(0);
 
   useEffect(() => {
     async function loadData() {
@@ -39,6 +45,14 @@ export default function MentorPublicProfilePage() {
         }
 
         if (currentUser?.uid) {
+          const [userSnap, connectionsSnap] = await Promise.all([
+            getDoc(doc(firestore, 'users', currentUser.uid)),
+            getDocs(query(collection(firestore, 'connections'), where('initiatorUid', '==', currentUser.uid)))
+          ]);
+          
+          if (userSnap.exists()) setUserPlan(userSnap.data().plan || 'basic');
+          setSentConnectionsCount(connectionsSnap.size);
+
           const connQ = query(
             collection(firestore, 'connections'),
             where('initiatorUid', '==', currentUser.uid),
@@ -59,11 +73,22 @@ export default function MentorPublicProfilePage() {
     loadData();
   }, [firestore, uid, currentUser?.uid]);
 
+  const isLimitReached = userPlan === 'basic' && sentConnectionsCount >= BASIC_PLAN_CONN_LIMIT;
+
   async function handleConnect() {
     if (!firestore || !currentUser?.uid || !uid) {
         toast({ title: "Login Required", variant: "destructive" });
         router.push('/login');
         return;
+    }
+
+    if (isLimitReached) {
+      toast({ 
+        title: "Limit Reached", 
+        description: `Basic Plan is limited to ${BASIC_PLAN_CONN_LIMIT} monthly connection requests.`, 
+        variant: "destructive" 
+      });
+      return;
     }
     
     setIsSendingRequest(true);
@@ -143,10 +168,33 @@ export default function MentorPublicProfilePage() {
                         Mentorship {existingConnection.status}
                       </Button>
                     ) : (
-                      <Button className="h-14 px-10 rounded-2xl text-base gap-2 font-bold shadow-xl" onClick={handleConnect} disabled={isSendingRequest}>
-                        {isSendingRequest ? <Loader2 className="h-5 w-5 animate-spin" /> : <Zap className="h-5 w-5" />}
-                        Request Mentorship
-                      </Button>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button className="h-14 px-10 rounded-2xl text-base gap-2 font-bold shadow-xl">
+                            <Zap className="h-5 w-5" /> Request Mentorship
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="rounded-[2rem]">
+                          {isLimitReached ? (
+                             <div className="py-8 text-center space-y-6">
+                                <Zap className="h-12 w-12 text-primary mx-auto" />
+                                <div className="space-y-2">
+                                  <h3 className="text-xl font-black">Connection Limit Reached</h3>
+                                  <p className="text-sm text-slate-500">You have reached your Basic Plan limit of {BASIC_PLAN_CONN_LIMIT} monthly requests.</p>
+                                </div>
+                                <Button className="rounded-xl" asChild><Link href="/dashboard/billing">Upgrade to Pro</Link></Button>
+                             </div>
+                          ) : (
+                            <div className="py-8 text-center space-y-6">
+                               <h3 className="text-2xl font-black">Ready to connect?</h3>
+                               <p className="text-slate-500">Mentorship requests allow you to establish a structured learning relationship.</p>
+                               <Button className="w-full h-12 rounded-xl font-bold" onClick={handleConnect} disabled={isSendingRequest}>
+                                 {isSendingRequest ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Mentorship Request"}
+                               </Button>
+                            </div>
+                          )}
+                        </DialogContent>
+                      </Dialog>
                     )}
                   </>
                 )}

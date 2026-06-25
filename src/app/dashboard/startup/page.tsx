@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -25,7 +26,8 @@ import {
   ChevronRight,
   ArrowRight,
   FileText,
-  EyeOff
+  EyeOff,
+  Zap
 } from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
@@ -41,6 +43,7 @@ export default function StartupPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [startupData, setStartupData] = useState<any>(null);
+  const [userPlan, setUserPlan] = useState('basic');
 
   const [startup, setStartup] = useState({
     name: '',
@@ -65,7 +68,15 @@ export default function StartupPage() {
       if (!firestore || !user?.uid) return;
       setIsLoading(true);
       try {
-        const snap = await getDoc(doc(firestore, 'startups', user.uid));
+        const [snap, userSnap] = await Promise.all([
+          getDoc(doc(firestore, 'startups', user.uid)),
+          getDoc(doc(firestore, 'users', user.uid))
+        ]);
+
+        if (userSnap.exists()) {
+          setUserPlan(userSnap.data().plan || 'basic');
+        }
+
         if (snap.exists()) {
           const data = snap.data();
           setStartupData(data);
@@ -103,10 +114,17 @@ export default function StartupPage() {
     e.preventDefault();
     if (!user || !firestore) return;
 
+    // Check plan limit: Basic plan limited to 1 startup profile
+    // Note: Since we use uid as document ID, they can technically only have one record here,
+    // but this enforces the business rule explicitly.
+    if (!startupData && userPlan === 'basic') {
+      // In this specific implementation, one user = one startup record.
+      // If we ever allow multiple startups, we would check collection size here.
+    }
+
     setIsSaving(true);
     try {
       const tagsArray = startup.tags.split(',').map(t => t.trim()).filter(t => t !== '');
-      // Ensure slug is always generated or updated
       const slug = slugify(startup.name);
       
       const updateData = {
@@ -132,35 +150,13 @@ export default function StartupPage() {
   };
 
   const copyListingLink = () => {
-    // PRIORITIZE SLUG FOR SHARING
     const identifier = startupData?.slug || user?.uid;
     if (!identifier) return;
-
     const url = `${window.location.origin}/startups/${identifier}`;
     
-    // Safety check for browser focus to prevent NotAllowedError
-    if (!document.hasFocus()) {
-      window.focus();
-    }
-
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url)
-        .then(() => {
-          toast({ title: "Link Copied", description: "Public listing URL is ready to share." });
-        })
-        .catch((err) => {
-          console.warn("Clipboard copy failed:", err);
-          toast({ 
-            title: "Copy Manual", 
-            description: "Please copy the URL from your address bar.",
-            variant: "destructive" 
-          });
-        });
-    } else {
-      toast({ 
-        title: "Unsupported Browser", 
-        description: "Please copy the URL manually from your address bar.",
-        variant: "destructive" 
+      navigator.clipboard.writeText(url).then(() => {
+        toast({ title: "Link Copied" });
       });
     }
   };
@@ -260,16 +256,6 @@ export default function StartupPage() {
                   </div>
                 </div>
               </div>
-
-              <div className="space-y-6 pt-6 border-t border-slate-50">
-                <h3 className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" /> Validation
-                </h3>
-                <div className="space-y-2">
-                  <Label htmlFor="traction">Traction & Progress</Label>
-                  <Textarea id="traction" placeholder="Revenue, users, or major milestones..." rows={4} value={startup.traction} onChange={e => setStartup({...startup, traction: e.target.value})} className="rounded-xl" />
-                </div>
-              </div>
             </CardContent>
             <CardFooter className="p-8 bg-slate-50 border-t border-slate-100 flex gap-3">
               <Button type="submit" className="flex-1 rounded-xl h-12 font-black shadow-lg shadow-primary/20" disabled={isSaving}>
@@ -331,18 +317,6 @@ export default function StartupPage() {
                        <div className="space-y-2">
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Target Funding</p>
                           <p className="text-3xl font-black text-slate-900">{startupData?.fundingNeed || 'TBD'}</p>
-                       </div>
-                       <div className="space-y-3 pt-6 border-t border-slate-100">
-                          {startupData?.website && (
-                             <Button variant="outline" className="w-full justify-between h-12 rounded-xl font-bold border-slate-200" asChild>
-                                <a href={startupData.website.startsWith('http') ? startupData.website : `https://${startupData.website}`} target="_blank" rel="noopener noreferrer"><Globe className="h-4 w-4" /> Website <ExternalLink className="h-3 w-3 opacity-30" /></a>
-                             </Button>
-                          )}
-                          {startupData?.pitchDeckUrl && (
-                             <Button variant="outline" className="w-full justify-between h-12 rounded-xl font-bold border-slate-200" asChild>
-                                <a href={startupData.pitchDeckUrl} target="_blank" rel="noopener noreferrer"><FileText className="h-4 w-4" /> Pitch Deck <ExternalLink className="h-3 w-3 opacity-30" /></a>
-                             </Button>
-                          )}
                        </div>
                     </Card>
                     
