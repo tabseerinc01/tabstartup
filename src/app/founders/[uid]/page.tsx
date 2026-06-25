@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -40,6 +39,7 @@ import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
 import { Progress } from '@/components/ui/progress';
 import { calculateProfileStrength, calculateTrustScore } from '@/lib/profile-utils';
+import { cn } from '@/lib/utils';
 
 const BASE_CONN_LIMIT = 5;
 
