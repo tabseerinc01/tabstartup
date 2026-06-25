@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -189,9 +188,15 @@ export default function ProfilePage() {
 
       await setDoc(doc(firestore, 'users', user.uid), updatedData, { merge: true });
 
-      // CHECK FOR QUALIFIED REFERRAL
-      // Criteria: Name, Bio, Location, and Role (implicitly roles exists)
-      if (formData.fullName && formData.bio && formData.location && userRoles.length > 0) {
+      // Improved Qualification Check
+      const isProfileComplete = !!(
+        formData.fullName.trim() && 
+        formData.bio.trim() && 
+        formData.location.trim() && 
+        userRoles.length > 0
+      );
+
+      if (isProfileComplete) {
         const refQ = query(collection(firestore, 'referrals'), where('referredUid', '==', user.uid));
         const refSnap = await getDocs(refQ);
         if (!refSnap.empty) {
@@ -231,17 +236,10 @@ export default function ProfilePage() {
 
     try {
       await setDoc(doc(firestore, 'users', user.uid), updatePayload, { merge: true });
-      
       setUserRoles(prev => [...new Set([...prev, roleId])]);
       toast({ title: "Role Activated", description: `You have successfully joined the ecosystem as a ${roleId}.` });
     } catch (error: any) {
-      console.error("Activation error:", error);
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: `users/${user.uid}`,
-        operation: 'update',
-        requestResourceData: updatePayload
-      }));
-      toast({ title: "Activation Failed", description: "Please try again later.", variant: "destructive" });
+      toast({ title: "Activation Failed", variant: "destructive" });
     } finally {
       setIsActivatingRole(null);
     }

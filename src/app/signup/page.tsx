@@ -12,7 +12,7 @@ import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useUser, useFirestore } from '@/firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, getDocs, collection, query, where, increment, updateDoc, addDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDocs, collection, query, where, addDoc } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
 
 function SignupForm() {
@@ -67,6 +67,14 @@ function SignupForm() {
         subscriptionStatus: "inactive",
         referralCode: newReferralCode,
         referralCount: 0,
+        bonusLimits: {
+          connections: 0,
+          pitches: 0,
+          contacts: 0,
+          deals: 0,
+          tasks: 0,
+          invoices: 0
+        },
         headline: "",
         bio: "",
         location: "",
@@ -82,7 +90,6 @@ function SignupForm() {
 
       await setDoc(doc(firestore, "users", newUser.uid), userData);
 
-      // Handle Referral Tracking
       if (refCode) {
         const referrersQuery = query(
           collection(firestore, "users"),
@@ -91,20 +98,14 @@ function SignupForm() {
         const referrerSnap = await getDocs(referrersQuery);
         
         if (!referrerSnap.empty) {
-          const referrerDoc = referrerSnap.docs[0];
-          const referrerUid = referrerDoc.id;
-
-          // Record the referral in the dedicated collection
-          // This is our primary source of truth for counting referrals
+          const referrerUid = referrerSnap.docs[0].id;
           await addDoc(collection(firestore, "referrals"), {
             referrerUid,
             referredUid: newUser.uid,
+            referredProfileCompleted: false,
+            rewardGranted: false,
             createdAt: serverTimestamp()
           });
-          
-          // Note: We skip updateDoc on the referrer profile here because 
-          // Firestore Security Rules prevent a new user from writing to another user's profile.
-          // The counter is calculated in real-time on the Billing page instead.
         }
       }
 
