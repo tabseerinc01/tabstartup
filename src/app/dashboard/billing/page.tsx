@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, getDoc, setDoc, query, collection, where, serverTimestamp, getDocs, writeBatch, increment, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, query, collection, where, serverTimestamp, getDocs, writeBatch, increment, updateDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -130,6 +130,33 @@ export default function BillingPage() {
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [isCopied, setIsCopied] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
+  const claimingRef = useRef(false);
+
+  // 1. Real-time Profile Listener
+  useEffect(() => {
+    if (!firestore || !user?.uid) return;
+
+    const unsubscribe = onSnapshot(doc(firestore, 'users', user.uid), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setProfile(data);
+        
+        // Auto-initialize required fields if missing (One-time check)
+        if (!data.plan || !data.referralCode || !data.bonusLimits) {
+          const updates: any = {};
+          if (!data.plan) { updates.plan = 'basic'; updates.subscriptionStatus = 'inactive'; }
+          if (!data.referralCode) { updates.referralCode = 'TAB-' + Math.random().toString(36).substring(2, 7).toUpperCase(); }
+          if (!data.bonusLimits) {
+            updates.bonusLimits = { connections: 0, pitches: 0, contacts: 0, deals: 0, tasks: 0, invoices: 0 };
+          }
+          updateDoc(snap.ref, updates).catch(e => console.error("Initial setup failed", e));
+        }
+      }
+      setIsProfileLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [firestore, user?.uid]);
 
   // Usage Queries
   const connectionsQ = useMemoFirebase(() => {
@@ -180,14 +207,13 @@ export default function BillingPage() {
   }, [firestore, user?.uid]);
   const { data: referralsData } = useCollection(referralsQ);
 
-  const generateReferralCode = () => {
-    return 'TAB-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-  };
-
-  const claimRewards = useCallback(async (currentProfile: any) => {
-    if (!firestore || !user?.uid || isClaiming) return;
+  // Stable Claim Function
+  const claimRewards = useCallback(async () => {
+    if (!firestore || !user?.uid || claimingRef.current) return;
     
+    claimingRef.current = true;
     setIsClaiming(true);
+    
     try {
       const pendingRewardsQ = query(
         collection(firestore, 'referrals'),
@@ -200,14 +226,10 @@ export default function BillingPage() {
 
       if (docsToReward.length > 0) {
         const batch = writeBatch(firestore);
-        
         let bc = 0, bp = 0, bcon = 0, bd = 0, bt = 0, bi = 0;
 
         docsToReward.forEach(d => {
-          batch.update(d.ref, { 
-            rewardGranted: true, 
-            rewardGrantedAt: serverTimestamp() 
-          });
+          batch.update(d.ref, { rewardGranted: true, rewardGrantedAt: serverTimestamp() });
           bc += 5; bp += 2; bcon += 10; bd += 2; bt += 2; bi += 1;
         });
 
@@ -224,63 +246,24 @@ export default function BillingPage() {
 
         await batch.commit();
         toast({ title: "Rewards Earned!", description: `Bonuses from ${docsToReward.length} referrals applied.` });
-        
-        // Immediate state update to reflect new numbers
-        const updatedSnap = await getDoc(userRef);
-        if (updatedSnap.exists()) setProfile(updatedSnap.data());
       }
     } catch (e) {
       console.error("Error in claimRewards:", e);
     } finally {
+      claimingRef.current = false;
       setIsClaiming(false);
     }
-  }, [firestore, user?.uid, isClaiming, toast]);
+  }, [firestore, user?.uid, toast]);
 
+  // Trigger claim when referral data changes
   useEffect(() => {
-    async function loadProfile() {
-      if (!firestore || !user?.uid) return;
-      try {
-        const snap = await getDoc(doc(firestore, 'users', user.uid));
-        if (snap.exists()) {
-          const data = snap.data();
-          let needsUpdate = false;
-          const updates: any = {};
-
-          if (!data.plan) { updates.plan = 'basic'; updates.subscriptionStatus = 'inactive'; needsUpdate = true; }
-          if (!data.referralCode) { updates.referralCode = generateReferralCode(); needsUpdate = true; }
-          if (!data.bonusLimits) {
-            updates.bonusLimits = { connections: 0, pitches: 0, contacts: 0, deals: 0, tasks: 0, invoices: 0 };
-            needsUpdate = true;
-          }
-
-          if (needsUpdate) {
-            await updateDoc(doc(firestore, 'users', user.uid), updates);
-            const freshData = { ...data, ...updates };
-            setProfile(freshData);
-            claimRewards(freshData);
-          } else {
-            setProfile(data);
-            claimRewards(data);
-          }
-        }
-      } catch (error) {
-        console.error("Error loading billing profile:", error);
-      } finally {
-        setIsProfileLoading(false);
-      }
-    }
-    loadProfile();
-  }, [firestore, user?.uid, claimRewards]);
-
-  // Also trigger claim check when referrals collection data changes
-  useEffect(() => {
-    if (referralsData && referralsData.length > 0 && profile && !isClaiming) {
+    if (referralsData && referralsData.length > 0) {
       const hasUnclaimed = referralsData.some(r => r.referredProfileCompleted && !r.rewardGranted);
       if (hasUnclaimed) {
-        claimRewards(profile);
+        claimRewards();
       }
     }
-  }, [referralsData, profile, claimRewards, isClaiming]);
+  }, [referralsData, claimRewards]);
 
   const currentPlanId = profile?.plan || 'basic';
   const currentPlan = PLANS.find(p => p.id === currentPlanId) || PLANS[0];
