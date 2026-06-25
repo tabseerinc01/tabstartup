@@ -1,12 +1,14 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, getDoc, setDoc, query, collection, where } from 'firebase/firestore';
+import { doc, getDoc, setDoc, query, collection, where, serverTimestamp } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
 import { 
   CreditCard, 
   Check, 
@@ -23,9 +25,13 @@ import {
   LayoutGrid,
   CheckSquare,
   FileText,
-  Rocket
+  Rocket,
+  Copy,
+  Share2,
+  Gift
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 const PLANS = [
   {
@@ -118,9 +124,11 @@ const PLANS = [
 export default function BillingPage() {
   const { user } = useUser();
   const firestore = useFirestore();
+  const { toast } = useToast();
   
   const [profile, setProfile] = useState<any>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [isCopied, setIsCopied] = useState(false);
 
   const connectionsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
@@ -164,6 +172,10 @@ export default function BillingPage() {
   }, [firestore, user?.uid]);
   const { data: invoices, isLoading: isInvoicesLoading } = useCollection(invoicesQ);
 
+  const generateReferralCode = () => {
+    return 'TAB-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+  };
+
   useEffect(() => {
     async function loadProfile() {
       if (!firestore || !user?.uid) return;
@@ -171,10 +183,24 @@ export default function BillingPage() {
         const snap = await getDoc(doc(firestore, 'users', user.uid));
         if (snap.exists()) {
           const data = snap.data();
+          let needsUpdate = false;
+          const updates: any = {};
+
           if (!data.plan) {
-            const defaultData = { plan: 'basic', subscriptionStatus: 'inactive' };
-            await setDoc(doc(firestore, 'users', user.uid), defaultData, { merge: true });
-            setProfile({ ...data, ...defaultData });
+            updates.plan = 'basic';
+            updates.subscriptionStatus = 'inactive';
+            needsUpdate = true;
+          }
+
+          if (!data.referralCode) {
+            updates.referralCode = generateReferralCode();
+            updates.referralCount = 0;
+            needsUpdate = true;
+          }
+
+          if (needsUpdate) {
+            await setDoc(doc(firestore, 'users', user.uid), updates, { merge: true });
+            setProfile({ ...data, ...updates });
           } else {
             setProfile(data);
           }
@@ -190,6 +216,17 @@ export default function BillingPage() {
 
   const currentPlanId = profile?.plan || 'basic';
   const currentPlan = PLANS.find(p => p.id === currentPlanId) || PLANS[0];
+
+  const referralLink = typeof window !== 'undefined' 
+    ? `${window.location.origin}/signup?ref=${profile?.referralCode || ''}` 
+    : '';
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(referralLink);
+    setIsCopied(true);
+    toast({ title: "Link Copied", description: "Share this link with your network!" });
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   const usageData = useMemo(() => {
     const activeDealsCount = (deals || []).filter(d => !['Won', 'Lost'].includes(d.stage)).length;
@@ -313,14 +350,58 @@ export default function BillingPage() {
               <p className="text-sm text-slate-500 font-medium leading-relaxed">
                 Your resource usage is synchronized in real-time with Firestore. Upgrade to Pro for unlimited workspace tools and priority matching.
               </p>
-              <div className="pt-2">
-                 <Button variant="link" className="p-0 h-auto text-primary font-bold text-xs" asChild>
-                    <a href="#plans">Compare all plans <ArrowRight className="ml-1 h-3 w-3" /></a>
-                 </Button>
-              </div>
            </div>
         </Card>
       </div>
+
+      {/* Referral Section */}
+      <Card className="border-none shadow-xl rounded-[2.5rem] bg-background ring-1 ring-slate-100 overflow-hidden group">
+        <div className="bg-primary/5 px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+             <div className="p-2 bg-primary/10 rounded-xl text-primary">
+                <Gift className="h-6 w-6" />
+             </div>
+             <div>
+                <h3 className="text-lg font-black text-slate-900">Referral Program</h3>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-tight">Invite builders, track impact</p>
+             </div>
+          </div>
+          <Badge variant="outline" className="bg-white border-primary/20 text-primary font-black text-[10px] uppercase h-7 px-3">
+            Referrals: {profile?.referralCount || 0}
+          </Badge>
+        </div>
+        <CardContent className="p-8 space-y-8">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Your Referral Code</Label>
+                    <div className="flex items-center gap-2">
+                       <code className="flex-1 p-3 rounded-xl bg-slate-50 border border-slate-100 font-mono text-lg font-bold text-slate-700 text-center tracking-widest">
+                          {profile?.referralCode}
+                       </code>
+                    </div>
+                 </div>
+                 <div className="space-y-2">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Invitation Link</Label>
+                    <div className="flex gap-2">
+                       <Input readOnly value={referralLink} className="rounded-xl h-11 bg-slate-50 border-slate-100 font-medium text-xs" />
+                       <Button onClick={handleCopyLink} size="icon" className="shrink-0 h-11 w-11 rounded-xl shadow-lg shadow-primary/20">
+                          {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                       </Button>
+                    </div>
+                 </div>
+              </div>
+              <div className="flex flex-col justify-center p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+                 <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" /> Growing the Network
+                 </h4>
+                 <p className="text-sm text-slate-500 leading-relaxed font-medium italic">
+                    Share your unique link with fellow founders and investors. Successful signups are tracked in real-time. Rewards and perks for top referrers are coming soon!
+                 </p>
+              </div>
+           </div>
+        </CardContent>
+      </Card>
 
       <div className="space-y-4">
         <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2 px-2">

@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "User": {
@@ -14,10 +15,23 @@
         "roles": { "type": "array", "items": { "type": "string" } },
         "plan": { "type": "string", "enum": ["basic", "pro", "growth"], "default": "basic" },
         "subscriptionStatus": { "type": "string", "enum": ["active", "inactive", "past_due"], "default": "inactive" },
+        "referralCode": { "type": "string", "description": "Unique referral code for the user." },
+        "referralCount": { "type": "number", "default": 0, "description": "Number of successful referrals." },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "fullName", "email", "createdAt", "updatedAt"]
+    },
+    "Referral": {
+      "title": "Referral",
+      "type": "object",
+      "description": "Records a successful sign-up through a referral link.",
+      "properties": {
+        "referrerUid": { "type": "string" },
+        "referredUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["referrerUid", "referredUid", "createdAt"]
     },
     "Startup": {
       "title": "Startup",
@@ -133,6 +147,10 @@
       {
         "path": "/users/{userId}",
         "definition": { "entityName": "User", "schema": { "$ref": "#/backend/entities/User" }, "description": "User profile data." }
+      },
+      {
+        "path": "/referrals/{referralId}",
+        "definition": { "entityName": "Referral", "schema": { "$ref": "#/backend/entities/Referral" }, "description": "Tracks signups via referral." }
       },
       {
         "path": "/startups/{startupId}",

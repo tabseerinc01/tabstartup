@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
@@ -12,7 +13,7 @@ import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useUser, useFirestore } from '@/firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDocs, collection, query, where, increment, updateDoc, addDoc } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
 
 function SignupForm() {
@@ -25,6 +26,7 @@ function SignupForm() {
   
   const roleParam = searchParams.get('role');
   const returnTo = searchParams.get('returnTo');
+  const refCode = searchParams.get('ref');
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,60 +41,95 @@ function SignupForm() {
     }
   }, [user, isUserLoading, router, returnTo]);
 
-  const handleSignup = (e: React.FormEvent) => {
+  const generateReferralCode = () => {
+    return 'TAB-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+  };
+
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    createUserWithEmailAndPassword(auth, email, password)
-      .then((userCredential) => {
-        const newUser = userCredential.user;
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const newUser = userCredential.user;
+      
+      await updateProfile(newUser, { displayName: name });
+
+      const newReferralCode = generateReferralCode();
+      
+      const userData = {
+        uid: newUser.uid,
+        fullName: name,
+        email: email,
+        role: role, 
+        primaryRole: role,
+        roles: [role],
+        plan: "basic",
+        subscriptionStatus: "inactive",
+        referralCode: newReferralCode,
+        referralCount: 0,
+        headline: "",
+        bio: "",
+        location: "",
+        stage: "",
+        skills: [],
+        lookingFor: "",
+        preferredStage: "",
+        investorNote: "",
+        isOpenToPitches: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(doc(firestore, "users", newUser.uid), userData);
+
+      // Handle Referral Tracking
+      if (refCode) {
+        const referrersQuery = query(
+          collection(firestore, "users"),
+          where("referralCode", "==", refCode)
+        );
+        const referrerSnap = await getDocs(referrersQuery);
         
-        updateProfile(newUser, { displayName: name });
+        if (!referrerSnap.empty) {
+          const referrerDoc = referrerSnap.docs[0];
+          const referrerUid = referrerDoc.id;
 
-        setDoc(doc(firestore, "users", newUser.uid), {
-          uid: newUser.uid,
-          fullName: name,
-          email: email,
-          role: role, 
-          primaryRole: role,
-          roles: [role],
-          plan: "basic",
-          subscriptionStatus: "inactive",
-          headline: "",
-          bio: "",
-          location: "",
-          stage: "",
-          skills: [],
-          lookingFor: "",
-          preferredStage: "",
-          investorNote: "",
-          isOpenToPitches: false,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+          // Record the referral
+          await addDoc(collection(firestore, "referrals"), {
+            referrerUid,
+            referredUid: newUser.uid,
+            createdAt: serverTimestamp()
+          });
 
-        toast({ 
-          title: "Account created!", 
-          description: "Welcome to the TabStartup ecosystem." 
-        });
-      })
-      .catch((error: any) => {
-        setIsSubmitting(false);
-        let message = "An error occurred during signup.";
-        if (error.code === 'auth/email-already-in-use') {
-          message = "An account already exists with this email.";
-        } else if (error.code === 'auth/weak-password') {
-          message = "Password should be at least 6 characters.";
-        } else if (error.code === 'auth/invalid-email') {
-          message = "Please enter a valid email address.";
+          // Increment referrer's count
+          await updateDoc(doc(firestore, "users", referrerUid), {
+            referralCount: increment(1)
+          });
         }
-        
-        toast({ 
-          variant: "destructive",
-          title: "Signup failed", 
-          description: message 
-        });
+      }
+
+      toast({ 
+        title: "Account created!", 
+        description: "Welcome to the TabStartup ecosystem." 
       });
+    } catch (error: any) {
+      setIsSubmitting(false);
+      let message = "An error occurred during signup.";
+      if (error.code === 'auth/email-already-in-use') {
+        message = "An account already exists with this email.";
+      } else if (error.code === 'auth/weak-password') {
+        message = "Password should be at least 6 characters.";
+      } else if (error.code === 'auth/invalid-email') {
+        message = "Please enter a valid email address.";
+      }
+      
+      toast({ 
+        variant: "destructive",
+        title: "Signup failed", 
+        description: message 
+      });
+    }
   };
 
   if (isUserLoading) {
