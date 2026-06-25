@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, getDoc, setDoc, query, collection, where, serverTimestamp, getDocs, writeBatch, increment } from 'firebase/firestore';
+import { doc, getDoc, setDoc, query, collection, where, serverTimestamp, getDocs, writeBatch, increment, updateDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -184,6 +184,58 @@ export default function BillingPage() {
     return 'TAB-' + Math.random().toString(36).substring(2, 7).toUpperCase();
   };
 
+  const claimRewards = useCallback(async (currentProfile: any) => {
+    if (!firestore || !user?.uid || isClaiming) return;
+    
+    setIsClaiming(true);
+    try {
+      const pendingRewardsQ = query(
+        collection(firestore, 'referrals'),
+        where('referrerUid', '==', user.uid),
+        where('referredProfileCompleted', '==', true)
+      );
+
+      const snap = await getDocs(pendingRewardsQ);
+      const docsToReward = snap.docs.filter(d => !d.data().rewardGranted);
+
+      if (docsToReward.length > 0) {
+        const batch = writeBatch(firestore);
+        
+        let bc = 0, bp = 0, bcon = 0, bd = 0, bt = 0, bi = 0;
+
+        docsToReward.forEach(d => {
+          batch.update(d.ref, { 
+            rewardGranted: true, 
+            rewardGrantedAt: serverTimestamp() 
+          });
+          bc += 5; bp += 2; bcon += 10; bd += 2; bt += 2; bi += 1;
+        });
+
+        const userRef = doc(firestore, 'users', user.uid);
+        batch.update(userRef, {
+          'bonusLimits.connections': increment(bc),
+          'bonusLimits.pitches': increment(bp),
+          'bonusLimits.contacts': increment(bcon),
+          'bonusLimits.deals': increment(bd),
+          'bonusLimits.tasks': increment(bt),
+          'bonusLimits.invoices': increment(bi),
+          updatedAt: serverTimestamp()
+        });
+
+        await batch.commit();
+        toast({ title: "Rewards Earned!", description: `Bonuses from ${docsToReward.length} referrals applied.` });
+        
+        // Immediate state update to reflect new numbers
+        const updatedSnap = await getDoc(userRef);
+        if (updatedSnap.exists()) setProfile(updatedSnap.data());
+      }
+    } catch (e) {
+      console.error("Error in claimRewards:", e);
+    } finally {
+      setIsClaiming(false);
+    }
+  }, [firestore, user?.uid, isClaiming, toast]);
+
   useEffect(() => {
     async function loadProfile() {
       if (!firestore || !user?.uid) return;
@@ -202,10 +254,13 @@ export default function BillingPage() {
           }
 
           if (needsUpdate) {
-            await setDoc(doc(firestore, 'users', user.uid), updates, { merge: true });
-            setProfile({ ...data, ...updates });
+            await updateDoc(doc(firestore, 'users', user.uid), updates);
+            const freshData = { ...data, ...updates };
+            setProfile(freshData);
+            claimRewards(freshData);
           } else {
             setProfile(data);
+            claimRewards(data);
           }
         }
       } catch (error) {
@@ -215,52 +270,17 @@ export default function BillingPage() {
       }
     }
     loadProfile();
-  }, [firestore, user?.uid]);
+  }, [firestore, user?.uid, claimRewards]);
 
-  // Robust Claiming Logic
+  // Also trigger claim check when referrals collection data changes
   useEffect(() => {
-    async function claimRewards() {
-      if (!firestore || !user?.uid || isClaiming || !profile) return;
-      
-      const pendingRewardsQ = query(
-        collection(firestore, 'referrals'),
-        where('referrerUid', '==', user.uid),
-        where('referredProfileCompleted', '==', true),
-        where('rewardGranted', '==', false)
-      );
-
-      const snap = await getDocs(pendingRewardsQ);
-      if (!snap.empty) {
-        setIsClaiming(true);
-        const batch = writeBatch(firestore);
-        
-        let bc = 0, bp = 0, bcon = 0, bd = 0, bt = 0, bi = 0;
-
-        snap.docs.forEach(d => {
-          batch.update(d.ref, { rewardGranted: true, rewardGrantedAt: serverTimestamp() });
-          bc += 5; bp += 2; bcon += 10; bd += 2; bt += 2; bi += 1;
-        });
-
-        batch.update(doc(firestore, 'users', user.uid), {
-          'bonusLimits.connections': increment(bc),
-          'bonusLimits.pitches': increment(bp),
-          'bonusLimits.contacts': increment(bcon),
-          'bonusLimits.deals': increment(bd),
-          'bonusLimits.tasks': increment(bt),
-          'bonusLimits.invoices': increment(bi),
-          updatedAt: serverTimestamp()
-        });
-
-        await batch.commit();
-        toast({ title: "Rewards Earned!", description: `Bonuses from ${snap.size} referrals applied.` });
-        
-        const updatedSnap = await getDoc(doc(firestore, 'users', user.uid));
-        if (updatedSnap.exists()) setProfile(updatedSnap.data());
-        setIsClaiming(false);
+    if (referralsData && referralsData.length > 0 && profile && !isClaiming) {
+      const hasUnclaimed = referralsData.some(r => r.referredProfileCompleted && !r.rewardGranted);
+      if (hasUnclaimed) {
+        claimRewards(profile);
       }
     }
-    if (!isProfileLoading) claimRewards();
-  }, [firestore, user?.uid, isClaiming, profile, isProfileLoading, toast]);
+  }, [referralsData, profile, claimRewards, isClaiming]);
 
   const currentPlanId = profile?.plan || 'basic';
   const currentPlan = PLANS.find(p => p.id === currentPlanId) || PLANS[0];
@@ -321,7 +341,10 @@ export default function BillingPage() {
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-tight">Earn bonus resources via networking</p>
              </div>
           </div>
-          <Badge variant="outline" className="bg-white border-primary/20 text-primary font-black text-[10px] uppercase h-7 px-3">Referrals: {referralsData?.length || 0}</Badge>
+          <Badge variant="outline" className="bg-white border-primary/20 text-primary font-black text-[10px] uppercase h-7 px-3">
+            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            Referrals: {referralsData?.length || 0}
+          </Badge>
         </div>
         <CardContent className="p-8 space-y-8">
            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

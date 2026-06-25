@@ -80,10 +80,6 @@ function SignupForm() {
         location: "",
         stage: "",
         skills: [],
-        lookingFor: "",
-        preferredStage: "",
-        investorNote: "",
-        isOpenToPitches: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
