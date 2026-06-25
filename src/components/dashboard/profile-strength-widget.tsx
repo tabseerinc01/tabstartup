@@ -4,6 +4,7 @@
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { CheckCircle2, Circle, ShieldCheck, Zap, ArrowRight } from 'lucide-react';
 import { 
   calculateProfileStrength, 
