@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useState, useEffect, useMemo } from 'react';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { doc, getDoc, setDoc, serverTimestamp, query, collection, where } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +33,15 @@ const PLANS = [
     name: 'Basic',
     price: '$0',
     description: 'Perfect for exploring the ecosystem.',
+    limits: {
+      connections: 5,
+      pitches: 2,
+      startups: 1,
+      contacts: 25,
+      deals: 5,
+      tasks: 5,
+      invoices: 2
+    },
     features: [
       '5 Connection Requests / month',
       '2 Venture Pitches / month',
@@ -52,6 +61,15 @@ const PLANS = [
     name: 'Pro',
     price: '$29',
     description: 'For active founders seeking growth.',
+    limits: {
+      connections: 100,
+      pitches: 50,
+      startups: 3,
+      contacts: Infinity,
+      deals: Infinity,
+      tasks: Infinity,
+      invoices: Infinity
+    },
     features: [
       '100 Connection Requests / month',
       '50 Venture Pitches / month',
@@ -72,6 +90,15 @@ const PLANS = [
     name: 'Growth',
     price: '$99',
     description: 'Scaling power for serious ventures.',
+    limits: {
+      connections: 500,
+      pitches: 200,
+      startups: Infinity,
+      contacts: Infinity,
+      deals: Infinity,
+      tasks: Infinity,
+      invoices: Infinity
+    },
     features: [
       '500 Connection Requests / month',
       '200 Venture Pitches / month',
@@ -93,7 +120,56 @@ export default function BillingPage() {
   const firestore = useFirestore();
   
   const [profile, setProfile] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+
+  // 1. Connection Requests Used (Sent)
+  const connectionsQ = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+  const { data: connections } = useCollection(connectionsQ);
+
+  // 2. Venture Pitches Used (Sent)
+  const pitchesQ = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'venturePitches'), where('senderUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+  const { data: pitches } = useCollection(pitchesQ);
+
+  // 3. Startup Profiles Used
+  const startupsQ = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'startups'), where('ownerUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+  const { data: startups } = useCollection(startupsQ);
+
+  // 4. CRM Contacts Used
+  const contactsQ = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+  const { data: contacts } = useCollection(contactsQ);
+
+  // 5. Active Deals Used
+  const dealsQ = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+  const { data: deals } = useCollection(dealsQ);
+
+  // 6. Tasks Used
+  const tasksQ = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+  const { data: tasks } = useCollection(tasksQ);
+
+  // 7. Invoices Used
+  const invoicesQ = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+  const { data: invoices } = useCollection(invoicesQ);
 
   useEffect(() => {
     async function loadProfile() {
@@ -102,7 +178,6 @@ export default function BillingPage() {
         const snap = await getDoc(doc(firestore, 'users', user.uid));
         if (snap.exists()) {
           const data = snap.data();
-          // Ensure default plan for existing users
           if (!data.plan) {
             const defaultData = { plan: 'basic', subscriptionStatus: 'inactive' };
             await setDoc(doc(firestore, 'users', user.uid), defaultData, { merge: true });
@@ -114,22 +189,78 @@ export default function BillingPage() {
       } catch (error) {
         console.error("Error loading billing profile:", error);
       } finally {
-        setIsLoading(false);
+        setIsProfileLoading(false);
       }
     }
     loadProfile();
   }, [firestore, user?.uid]);
 
-  if (isLoading) {
+  const currentPlanId = profile?.plan || 'basic';
+  const currentPlan = PLANS.find(p => p.id === currentPlanId) || PLANS[0];
+
+  const usageData = useMemo(() => {
+    const activeDealsCount = (deals || []).filter(d => !['Won', 'Lost'].includes(d.stage)).length;
+
+    return [
+      { 
+        label: 'Connection Requests', 
+        used: connections?.length || 0, 
+        limit: currentPlan.limits.connections, 
+        icon: Handshake, 
+        color: 'text-blue-500' 
+      },
+      { 
+        label: 'Venture Pitches', 
+        used: pitches?.length || 0, 
+        limit: currentPlan.limits.pitches, 
+        icon: Zap, 
+        color: 'text-amber-500' 
+      },
+      { 
+        label: 'Startup Profiles', 
+        used: startups?.length || 0, 
+        limit: currentPlan.limits.startups, 
+        icon: Rocket, 
+        color: 'text-purple-500' 
+      },
+      { 
+        label: 'CRM Contacts', 
+        used: contacts?.length || 0, 
+        limit: currentPlan.limits.contacts, 
+        icon: Users, 
+        color: 'text-emerald-500' 
+      },
+      { 
+        label: 'Active Deals', 
+        used: activeDealsCount, 
+        limit: currentPlan.limits.deals, 
+        icon: LayoutGrid, 
+        color: 'text-indigo-500' 
+      },
+      { 
+        label: 'Tasks', 
+        used: tasks?.length || 0, 
+        limit: currentPlan.limits.tasks, 
+        icon: CheckSquare, 
+        color: 'text-rose-500' 
+      },
+      { 
+        label: 'Invoices', 
+        used: invoices?.length || 0, 
+        limit: currentPlan.limits.invoices, 
+        icon: FileText, 
+        color: 'text-sky-500' 
+      },
+    ];
+  }, [connections, pitches, startups, contacts, deals, tasks, invoices, currentPlan]);
+
+  if (isProfileLoading) {
     return (
       <div className="flex h-full min-h-[60vh] items-center justify-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
       </div>
     );
   }
-
-  const currentPlanId = profile?.plan || 'basic';
-  const currentPlan = PLANS.find(p => p.id === currentPlanId) || PLANS[0];
 
   return (
     <div className="max-w-6xl mx-auto w-full space-y-8 animate-in fade-in duration-700 pb-20">
@@ -139,7 +270,7 @@ export default function BillingPage() {
            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Subscription Engine</span>
         </div>
         <h1 className="text-4xl font-black tracking-tight text-slate-900">Billing & Plans</h1>
-        <p className="text-slate-500 font-medium">Manage your subscription and track ecosystem usage.</p>
+        <p className="text-slate-500 font-medium">Manage your subscription and track real-time ecosystem usage.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -157,11 +288,11 @@ export default function BillingPage() {
               </div>
               <div className="flex flex-col items-center md:items-end gap-3">
                  <div className="text-right">
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Next Billing Date</p>
-                    <p className="text-xl font-bold">N/A</p>
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Account Renewal</p>
+                    <p className="text-xl font-bold">Monthly Refresh</p>
                  </div>
                  <Button className="rounded-xl h-11 px-8 font-bold gap-2 shadow-lg shadow-primary/20" variant="secondary" disabled>
-                   <CreditCard className="h-4 w-4" /> Manage Payments
+                   <CreditCard className="h-4 w-4" /> Payment Locked
                  </Button>
               </div>
             </div>
@@ -176,7 +307,7 @@ export default function BillingPage() {
                  <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Usage Insight</h3>
               </div>
               <p className="text-sm text-slate-500 font-medium leading-relaxed">
-                Your monthly usage resets on the 1st of every month. Upgrade to Pro for unlimited workspace tools.
+                Your resource usage is synchronized in real-time with Firestore. Upgrade to Pro for unlimited workspace tools.
               </p>
               <div className="pt-2">
                  <Button variant="link" className="p-0 h-auto text-primary font-bold text-xs" asChild>
@@ -190,19 +321,14 @@ export default function BillingPage() {
       {/* Usage Summary Section */}
       <div className="space-y-4">
         <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2 px-2">
-           <TrendingUp className="h-6 w-6 text-primary" /> Monthly Usage Summary
+           <TrendingUp className="h-6 w-6 text-primary" /> Real-time Usage Summary
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[
-            { label: 'Connection Requests', used: 2, limit: 5, icon: Handshake, color: 'text-blue-500' },
-            { label: 'Venture Pitches', used: 0, limit: 2, icon: Zap, color: 'text-amber-500' },
-            { label: 'Startup Profiles', used: 1, limit: 1, icon: Rocket, color: 'text-purple-500' },
-            { label: 'CRM Contacts', used: 12, limit: 25, icon: Users, color: 'text-emerald-500' },
-            { label: 'Active Deals', used: 3, limit: 5, icon: LayoutGrid, color: 'text-indigo-500' },
-            { label: 'Tasks', used: 4, limit: 5, icon: CheckSquare, color: 'text-rose-500' },
-            { label: 'Invoices', used: 1, limit: 2, icon: FileText, color: 'text-sky-500' },
-          ].map((item, i) => {
-            const percentage = (item.used / item.limit) * 100;
+          {usageData.map((item, i) => {
+            const limitVal = item.limit === Infinity ? 1000 : item.limit;
+            const displayLimit = item.limit === Infinity ? '∞' : item.limit;
+            const percentage = Math.min((item.used / limitVal) * 100, 100);
+            
             return (
               <Card key={i} className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 overflow-hidden group hover:shadow-md transition-shadow">
                 <CardContent className="p-6 space-y-4">
@@ -213,13 +339,17 @@ export default function BillingPage() {
                       </div>
                       <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{item.label}</p>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400">{item.used} / {item.limit}</span>
+                    <span className="text-[10px] font-bold text-slate-400">{item.used} / {displayLimit}</span>
                   </div>
                   <div className="space-y-2">
                     <Progress value={percentage} className="h-1.5 bg-slate-100" />
                     <div className="flex justify-between items-center">
-                       <p className="text-[9px] font-bold text-slate-400 uppercase">{Math.round(percentage)}% Capacity</p>
-                       {percentage >= 80 && <Badge className="h-4 px-1.5 text-[8px] bg-red-50 text-red-600 border-none">Limit Near</Badge>}
+                       <p className="text-[9px] font-bold text-slate-400 uppercase">
+                         {item.limit === Infinity ? 'Unlimited' : `${Math.round(percentage)}% Capacity`}
+                       </p>
+                       {item.limit !== Infinity && percentage >= 80 && (
+                         <Badge className="h-4 px-1.5 text-[8px] bg-red-50 text-red-600 border-none">Limit Near</Badge>
+                       )}
                     </div>
                   </div>
                 </CardContent>
