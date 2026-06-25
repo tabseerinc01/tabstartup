@@ -1,4 +1,3 @@
-
 {
   "entities": {
     "User": {
@@ -13,6 +12,8 @@
         "role": { "type": "string" },
         "primaryRole": { "type": "string" },
         "roles": { "type": "array", "items": { "type": "string" } },
+        "plan": { "type": "string", "enum": ["basic", "pro", "growth"], "default": "basic" },
+        "subscriptionStatus": { "type": "string", "enum": ["active", "inactive", "past_due"], "default": "inactive" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },

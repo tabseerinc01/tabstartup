@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -23,7 +22,8 @@ import {
   LayoutGrid,
   CheckSquare,
   FileText,
-  Zap
+  Zap,
+  CreditCard
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -132,7 +132,6 @@ export function DashboardSidebar({ className }: { className?: string }) {
 
   const roles = profile?.roles || (profile?.role ? [profile.role] : []) || [];
   const isFounder = roles.includes('founder');
-  const isInvestor = roles.includes('investor');
 
   const groups: SidebarGroup[] = [
     {
@@ -191,6 +190,7 @@ export function DashboardSidebar({ className }: { className?: string }) {
       label: 'Account',
       items: [
         { href: '/dashboard/profile', label: 'My Profile', icon: User },
+        { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
         { href: '#', label: 'Settings', icon: Settings, disabled: true },
       ]
     }

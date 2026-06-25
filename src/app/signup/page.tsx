@@ -34,7 +34,6 @@ function SignupForm() {
 
   useEffect(() => {
     if (user && !isUserLoading) {
-      // Decode returnTo to handle special characters correctly
       const redirectUrl = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
       router.push(redirectUrl);
     }
@@ -57,6 +56,8 @@ function SignupForm() {
           role: role, 
           primaryRole: role,
           roles: [role],
+          plan: "basic",
+          subscriptionStatus: "inactive",
           headline: "",
           bio: "",
           location: "",
@@ -104,6 +105,7 @@ function SignupForm() {
 
   return (
     <div className="flex flex-col items-center justify-center p-4 w-full max-w-md animate-in fade-in duration-500">
+      <Logo className="mb-8" />
       <Card className="border-none shadow-2xl rounded-[2rem]">
         <CardHeader>
           <CardTitle className="text-2xl font-black">Join TabStartup</CardTitle>
