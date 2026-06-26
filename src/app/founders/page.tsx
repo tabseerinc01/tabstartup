@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { mockFounders } from '@/lib/mock-data';
-import { MapPin, Search, Filter, Loader2, Linkedin, MessageSquare, Calendar, CheckCircle2, Rocket, Briefcase, HandCoins, Info, LayoutGrid, Users } from 'lucide-react';
+import { MapPin, Search, Filter, Loader2, Linkedin, MessageSquare, Calendar, CheckCircle2, Rocket, Briefcase, HandCoins, Info, LayoutGrid, Users, ArrowRight, ExternalLink } from 'lucide-react';
 import Image from 'next/image';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { PublicHeader } from '@/components/public/header';
@@ -206,6 +206,7 @@ function FounderCard({ founder }: { founder: any }) {
   const imageId = founder.uid || founder.id || 'user';
   const startup = founder.startup;
   const startupIdentifier = startup?.slug || founder.uid || founder.id;
+  const linkedinUrl = founder.linkedinUrl || founder.socialLinks?.linkedin;
 
   return (
     <Card className="flex flex-col h-full hover:shadow-xl transition-all overflow-hidden group border-muted/50 bg-background">
@@ -345,9 +346,20 @@ function FounderCard({ founder }: { founder: any }) {
               </ScrollArea>
             </DialogContent>
           </Dialog>
-          <Button variant="outline" size="icon" className="rounded-xl" asChild>
-            <Link href={`/founders/${founder.uid || founder.id}`}><Linkedin className="h-4 w-4" /></Link>
-          </Button>
+          
+          {linkedinUrl ? (
+            <Button variant="outline" size="icon" className="rounded-xl" asChild title="LinkedIn Profile">
+              <a href={linkedinUrl.startsWith('http') ? linkedinUrl : `https://${linkedinUrl}`} target="_blank" rel="noopener noreferrer">
+                <Linkedin className="h-4 w-4" />
+              </a>
+            </Button>
+          ) : (
+            <Button variant="outline" size="icon" className="rounded-xl" asChild title="View Public Profile">
+              <Link href={`/founders/${founder.uid || founder.id}`}>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
