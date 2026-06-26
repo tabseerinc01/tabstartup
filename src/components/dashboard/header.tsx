@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -47,6 +46,7 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceToNow } from 'date-fns';
+import { GlobalSearch } from '@/components/search/global-search';
 
 export function DashboardHeader() {
   const { user } = useUser();
@@ -138,7 +138,7 @@ export function DashboardHeader() {
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur px-4 h-16 flex items-center justify-between">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-1">
         <Sheet>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" className="md:hidden">
@@ -154,14 +154,7 @@ export function DashboardHeader() {
           </SheetContent>
         </Sheet>
         
-        <div className="relative hidden sm:block w-64 lg:w-96">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search founders, investors..."
-            className="pl-8 bg-muted/50 border-none shadow-none focus-visible:ring-1"
-          />
-        </div>
+        <GlobalSearch />
       </div>
 
       <div className="flex items-center gap-3">
