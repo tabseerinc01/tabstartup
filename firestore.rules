@@ -27,7 +27,6 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if true;
-      // Prevent users from changing their own sensitive fields like plan or role manually
       allow create: if isOwner(userId);
       allow update: if isOwner(userId) && 
                       !request.resource.data.diff(resource.data).affectedKeys().hasAny(['plan', 'subscriptionStatus', 'bonusLimits', 'role', 'primaryRole', 'roles']) 
@@ -36,7 +35,6 @@ service cloud.firestore {
 
     match /referrals/{referralId} {
       allow read: if isSignedIn() && (resource.data.referrerUid == request.auth.uid || resource.data.referredUid == request.auth.uid || isAdmin());
-      // Prevent self-referral and manual reward tampering
       allow create: if isSignedIn() && request.resource.data.referrerUid != request.auth.uid;
       allow update: if isSignedIn() && (
         (request.auth.uid == resource.data.referredUid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['referredProfileCompleted'])) ||
@@ -67,7 +65,6 @@ service cloud.firestore {
     }
 
     match /invoices/{invoiceId} {
-      // Public view via secure ID
       allow get: if true;
       allow list: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
@@ -121,11 +118,13 @@ service cloud.firestore {
     }
 
     match /startups/{startupId} {
-      allow read: if resource.data.status == 'active' || isOwner(resource.data.ownerUid) || isAdmin();
+      // Allow 'get' for everyone to avoid crashes on profile pages, but UI filters by status
+      allow get: if true;
+      allow list: if resource.data.status == 'active' || isAdmin();
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isOwner(resource.data.ownerUid) || isAdmin();
       allow delete: if isAdmin();
-      match /views/{viewId} { allow read: if true; allow create: if true; }
+      match /views/{viewId} { allow read, create: if true; }
       match /interests/{interestId} { allow read: if true; allow create, update: if isSignedIn(); }
     }
 

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -31,7 +32,8 @@ import {
   User, 
   FileText,
   Lock,
-  AlertCircle
+  AlertCircle,
+  ArrowRight
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -67,16 +69,21 @@ export default function FounderPublicProfilePage() {
       if (!firestore || !uid) return;
       setIsLoading(true);
       try {
-        const founderSnap = await getDoc(doc(firestore, 'users', uid as string));
+        // Load Profile & Startup
+        const [founderSnap, startupSnap] = await Promise.all([
+          getDoc(doc(firestore, 'users', uid as string)),
+          getDoc(doc(firestore, 'startups', uid as string))
+        ]);
+
         if (founderSnap.exists()) {
           setFounder({ id: founderSnap.id, ...founderSnap.data() });
         }
 
-        const startupSnap = await getDoc(doc(firestore, 'startups', uid as string));
         if (startupSnap.exists()) {
           setStartup({ id: startupSnap.id, ...startupSnap.data() });
         }
 
+        // Load Contextual Auth Data
         if (user?.uid) {
           const [userSnap, connectionsSnap] = await Promise.all([
             getDoc(doc(firestore, 'users', user.uid)),
@@ -97,8 +104,14 @@ export default function FounderPublicProfilePage() {
             setExistingConnection(connSnap.docs[0].data());
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error loading founder profile:", error);
+        if (error.code === 'permission-denied') {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: `users/${uid}`,
+            operation: 'get',
+          }));
+        }
       } finally {
         setIsLoading(false);
       }
@@ -196,11 +209,9 @@ export default function FounderPublicProfilePage() {
   const isOwnProfile = user?.uid === uid;
   const displayName = founder.fullName || founder.name;
   
-  // New logic for strength and trust
   const strength = calculateProfileStrength(founder, startup);
   const trustScore = calculateTrustScore(founder, startup);
 
-  // Verification Checks
   const hasLinkedIn = !!(founder.linkedinUrl || founder.socialLinks?.linkedin);
   const hasWebsite = !!(founder.website || founder.socialLinks?.website);
   const hasStartupVerified = !!startup?.startupVerified;
@@ -237,7 +248,7 @@ export default function FounderPublicProfilePage() {
                       <p className="text-xl text-primary font-semibold">{founder.headline}</p>
                       <div className="flex flex-wrap gap-6 text-sm text-muted-foreground font-medium">
                         <span className="flex items-center gap-1.5"><MapPin className="h-5 w-5 text-primary" /> {founder.location || 'Remote'}</span>
-                        <span className="flex items-center gap-1.5"><Badge variant="secondary" className="px-3 py-1">{founder.stage} Stage</Badge></span>
+                        <span className="flex items-center gap-1.5"><Badge variant="secondary" className="px-3 py-1">{founder.stage || 'Founder'} Stage</Badge></span>
                       </div>
                     </div>
                   </div>
