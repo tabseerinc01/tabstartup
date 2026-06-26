@@ -1,6 +1,9 @@
+
 'use client';
 
 import { collection, addDoc, serverTimestamp, Firestore } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export type AdminActionType = 
   | 'suspend_user' 
@@ -16,6 +19,7 @@ export type AdminActionType =
 
 /**
  * Logs an administrative action to the auditLog collection.
+ * Follows the non-blocking mutation pattern.
  */
 export async function logAdminAction(
   db: Firestore, 
@@ -24,15 +28,25 @@ export async function logAdminAction(
   targetId: string,
   details?: string
 ) {
-  try {
-    await addDoc(collection(db, 'auditLogs'), {
-      adminUid,
-      action,
-      targetId,
-      details: details || '',
-      timestamp: serverTimestamp()
+  const logData = {
+    adminUid,
+    action,
+    targetId,
+    details: details || '',
+    timestamp: serverTimestamp()
+  };
+
+  // Initiate write without awaiting to leverage optimistic UI/caching
+  addDoc(collection(db, 'auditLogs'), logData)
+    .catch(async (serverError) => {
+      // Create rich contextual error for debugging security rules
+      const permissionError = new FirestorePermissionError({
+        path: `auditLogs`,
+        operation: 'create',
+        requestResourceData: logData,
+      });
+
+      // Emit the error through the global emitter
+      errorEmitter.emit('permission-error', permissionError);
     });
-  } catch (e) {
-    console.error("Audit log failed:", e);
-  }
 }
