@@ -19,7 +19,7 @@ export type AdminActionType =
 
 /**
  * Logs an administrative action to the auditLog collection.
- * Follows the non-blocking mutation pattern.
+ * Follows the non-blocking mutation pattern for production resilience.
  */
 export async function logAdminAction(
   db: Firestore, 
@@ -28,6 +28,8 @@ export async function logAdminAction(
   targetId: string,
   details?: string
 ) {
+  if (!db || !adminUid) return;
+
   const logData = {
     adminUid,
     action,

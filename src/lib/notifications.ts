@@ -25,9 +25,11 @@ interface CreateNotificationParams {
 
 /**
  * Reusable helper to create a notification in Firestore.
- * Follows the non-blocking write pattern.
+ * Follows the non-blocking write pattern for production stability.
  */
 export function createNotification(db: Firestore, params: CreateNotificationParams) {
+  if (!db || !params.recipientUid) return;
+
   const notificationsRef = collection(db, 'notifications');
   
   const notificationData = {
@@ -36,10 +38,10 @@ export function createNotification(db: Firestore, params: CreateNotificationPara
     createdAt: serverTimestamp(),
   };
 
-  // Initiate write without awaiting
+  // Initiate write without awaiting to leverage optimistic UI
   addDoc(notificationsRef, notificationData)
     .catch(async (serverError) => {
-      // Create contextual error for security rules debugging
+      // Create contextual error for security rules debugging in dev overlay
       const permissionError = new FirestorePermissionError({
         path: 'notifications',
         operation: 'create',
