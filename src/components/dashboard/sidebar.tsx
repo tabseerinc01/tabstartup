@@ -48,7 +48,7 @@ interface SidebarGroup {
   items: SidebarItem[];
 }
 
-export function DashboardSidebar({ className }: { className?: string }) {
+export function DashboardSidebar({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const auth = useAuth();
@@ -124,6 +124,7 @@ export function DashboardSidebar({ className }: { className?: string }) {
   const handleLogout = () => {
     initiateSignOut(auth);
     router.push('/login');
+    if (onNavigate) onNavigate();
   };
 
   const toggleGroup = (id: string) => {
@@ -199,7 +200,7 @@ export function DashboardSidebar({ className }: { className?: string }) {
   return (
     <div className={cn("flex flex-col h-full bg-background", className)}>
       <div className="p-6">
-        <Logo />
+        <Logo onClick={onNavigate} />
       </div>
       
       <nav className="flex-1 px-4 py-2 space-y-6 overflow-y-auto">
@@ -225,6 +226,9 @@ export function DashboardSidebar({ className }: { className?: string }) {
                 <Link
                   key={item.label}
                   href={item.disabled ? '#' : item.href}
+                  onClick={() => {
+                    if (!item.disabled && onNavigate) onNavigate();
+                  }}
                   className={cn(
                     "flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all group",
                     pathname === item.href 

@@ -1,13 +1,12 @@
-
 'use client';
 
 import Link from "next/link";
 import { Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function Logo({ className }: { className?: string }) {
+export function Logo({ className, onClick }: { className?: string, onClick?: () => void }) {
   return (
-    <Link href="/" className={cn("flex items-center gap-2", className)}>
+    <Link href="/" className={cn("flex items-center gap-2", className)} onClick={onClick}>
       <div className="rounded-lg bg-primary p-1.5 text-primary-foreground">
         <Rocket className="h-6 w-6" />
       </div>

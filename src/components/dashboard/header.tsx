@@ -57,6 +57,7 @@ export function DashboardHeader() {
   const [profile, setProfile] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Load profile data
   useEffect(() => {
@@ -78,7 +79,6 @@ export function DashboardHeader() {
   useEffect(() => {
     if (!firestore || !user?.uid) return;
 
-    // Simplified query for reliability
     const q = query(
       collection(firestore, 'notifications'),
       where('recipientUid', '==', user.uid)
@@ -86,7 +86,6 @@ export function DashboardHeader() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Sort client-side to avoid index requirements
       const sorted = list.sort((a: any, b: any) => {
         const tA = a.createdAt?.toMillis?.() || 0;
         const tB = b.createdAt?.toMillis?.() || 0;
@@ -139,7 +138,7 @@ export function DashboardHeader() {
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur px-4 h-16 flex items-center justify-between">
       <div className="flex items-center gap-4 flex-1">
-        <Sheet>
+        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" className="md:hidden">
               <Menu className="h-5 w-5" />
@@ -150,7 +149,7 @@ export function DashboardHeader() {
               <SheetTitle>Navigation Menu</SheetTitle>
               <SheetDescription>Access dashboard sections and tools</SheetDescription>
             </SheetHeader>
-            <DashboardSidebar />
+            <DashboardSidebar onNavigate={() => setIsMobileMenuOpen(false)} />
           </SheetContent>
         </Sheet>
         
