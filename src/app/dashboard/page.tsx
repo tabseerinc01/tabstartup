@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -39,7 +40,12 @@ import {
    Search,
    Plus,
    AlertTriangle,
-   Info
+   Info,
+   Lightbulb,
+   Briefcase,
+   Smartphone,
+   CircleHelp,
+   Compass
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -93,7 +99,7 @@ export default function DashboardOverviewPage() {
     return query(
       collection(firestore, 'notifications'),
       where('recipientUid', '==', user.uid),
-      limit(10)
+      limit(15)
     );
   }, [firestore, user?.uid]);
   const { data: recentNotifications } = useCollection(notificationsQ);
@@ -192,20 +198,40 @@ export default function DashboardOverviewPage() {
     loadIdentity();
   }, [firestore, user?.uid]);
 
-  // Unified Timeline Data
+  // Unified Categorized Timeline Data
   const timelineEvents = useMemo(() => {
     const events: any[] = [];
     
     recentNotifications?.forEach(n => {
+      let category = 'Ecosystem';
+      let icon = Globe;
+      let color = 'text-primary';
+      let bg = 'bg-primary/10';
+
+      if (['connection', 'investor_interest', 'cofounder_interest'].includes(n.type)) {
+        category = 'Networking';
+        icon = Users;
+        color = 'text-blue-600';
+        bg = 'bg-blue-50';
+      } else if (['venture_pitch', 'pitch'].includes(n.type)) {
+        category = 'Funding';
+        icon = Zap;
+        color = 'text-amber-600';
+        bg = 'bg-amber-50';
+      } else if (n.type === 'message') {
+        category = 'Networking';
+        icon = MessageSquare;
+      }
+
       events.push({
         id: n.id,
-        type: 'ecosystem',
+        category,
         title: n.title,
         description: n.message,
         timestamp: n.createdAt?.toDate() || new Date(),
-        icon: Globe,
-        color: 'text-primary',
-        bg: 'bg-primary/10'
+        icon,
+        color,
+        bg
       });
     });
 
@@ -213,7 +239,7 @@ export default function DashboardOverviewPage() {
       if (t.status === 'Completed') {
         events.push({
           id: t.id,
-          type: 'task',
+          category: 'Workspace',
           title: 'Task Completed',
           description: t.title,
           timestamp: t.updatedAt?.toDate() || new Date(),
@@ -227,7 +253,7 @@ export default function DashboardOverviewPage() {
     recentInvoices?.forEach(i => {
       events.push({
         id: i.id,
-        type: 'billing',
+        category: 'Billing',
         title: `Invoice ${i.status}`,
         description: `Client: ${i.contactName} - ${i.currency} ${i.amount}`,
         timestamp: i.updatedAt?.toDate() || new Date(),
@@ -237,28 +263,21 @@ export default function DashboardOverviewPage() {
       });
     });
 
-    return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 10);
+    return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [recentNotifications, recentTasks, recentInvoices]);
 
-  // Incomplete Startup Profile Check
-  const incompleteItems = useMemo(() => {
-    if (!startup) return ['No Startup Profile Found'];
+  // Founder Growth Insights
+  const recommendations = useMemo(() => {
+    if (!profile) return [];
     const items = [];
-    if (!startup.fundingNeed) items.push('Set Funding Goal');
-    if (!startup.website) items.push('Add Startup Website');
-    if (!profile?.linkedinUrl) items.push('Verify LinkedIn');
-    if (!startup.imageUrl && !profile?.imageUrl) items.push('Upload Logo/Photo');
-    if (!startup.shortDescription) items.push('Complete Startup Description');
+    if (startup && !startup.website) items.push({ id: 'web', label: 'Complete Startup Website', href: '/dashboard/startup' });
+    if (!user?.emailVerified) items.push({ id: 'email', label: 'Verify Primary Email', href: '/dashboard/profile' });
+    if (startup && !startup.imageUrl) items.push({ id: 'logo', label: 'Upload Startup Logo', href: '/dashboard/startup' });
+    if (startup && (!startup.shortDescription || startup.shortDescription.length < 20)) items.push({ id: 'desc', label: 'Improve Startup Description', href: '/dashboard/startup' });
+    if (stats.connectedInvestors < 3) items.push({ id: 'pitch', label: 'Reach out to more Investors', href: '/investors' });
+    if (profile && calculateProfileStrength(profile) < 100) items.push({ id: 'prof', label: 'Complete Founder Profile', href: '/dashboard/profile' });
     return items;
-  }, [startup, profile]);
-
-  if (isUserLoading) {
-    return (
-      <div className="flex h-full min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
-      </div>
-    );
-  }
+  }, [profile, startup, user, stats]);
 
   const strength = profile ? calculateProfileStrength(profile, startup) : 0;
   const trust = profile ? calculateTrustScore(profile, startup) : 0;
@@ -272,7 +291,7 @@ export default function DashboardOverviewPage() {
       <section className="relative overflow-hidden rounded-[3rem] bg-slate-900 text-white p-8 md:p-12 shadow-2xl">
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           <div className="lg:col-span-7 space-y-6">
-            <div className="space-y-2">
+            <div className="space-y-2 text-center md:text-left">
               <Badge className="bg-primary/20 text-primary border-none font-black text-[10px] uppercase tracking-widest px-3">
                 {role} • {profile?.plan || 'Basic'} Plan
               </Badge>
@@ -280,16 +299,16 @@ export default function DashboardOverviewPage() {
                 Welcome back, <span className="text-primary">{displayName}</span>
               </h1>
               <p className="text-slate-400 font-medium text-lg">
-                Your ecosystem presence is growing. Here's what needs your attention today.
+                Your ecosystem presence is growing. Here's your mission for today.
               </p>
             </div>
             
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap justify-center md:justify-start gap-3">
               <Button size="lg" className="rounded-xl font-bold h-12 gap-2" asChild>
-                <Link href="/dashboard/startup"><Rocket className="h-4 w-4" /> Edit Startup</Link>
+                <Link href="/dashboard/startup"><Rocket className="h-4 w-4" /> Edit My Startup</Link>
               </Button>
               <Button size="lg" variant="outline" className="rounded-xl font-bold h-12 gap-2 bg-white/5 border-white/10" asChild>
-                <Link href={`/startups/${startup?.slug || user?.uid}`}><Eye className="h-4 w-4" /> View Public Profile</Link>
+                <Link href={`/startups/${startup?.slug || user?.uid}`}><Eye className="h-4 w-4" /> View Public Listing</Link>
               </Button>
             </div>
           </div>
@@ -297,7 +316,7 @@ export default function DashboardOverviewPage() {
           <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Card className="bg-white/5 border-white/10 rounded-3xl p-6 flex flex-col justify-between group hover:bg-white/10 transition-colors">
               <div className="flex justify-between items-center mb-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Profile Strength</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Profile Integrity</p>
                 <Zap className="h-4 w-4 text-primary" />
               </div>
               <div className="space-y-3">
@@ -307,12 +326,12 @@ export default function DashboardOverviewPage() {
             </Card>
             <Card className="bg-white/5 border-white/10 rounded-3xl p-6 flex flex-col justify-between group hover:bg-white/10 transition-colors">
               <div className="flex justify-between items-center mb-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Trust Score</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Network Trust</p>
                 <ShieldCheck className="h-4 w-4 text-primary" />
               </div>
               <div className="space-y-1">
                  <p className="text-4xl font-black">{trust}/100</p>
-                 <p className="text-[10px] font-bold text-slate-500 uppercase">Verified Ecosystem Identity</p>
+                 <p className="text-[10px] font-bold text-slate-500 uppercase">Verification Level</p>
               </div>
             </Card>
           </div>
@@ -320,182 +339,246 @@ export default function DashboardOverviewPage() {
         <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none" />
       </section>
 
-      {/* Attention Card (Conditional) */}
-      {incompleteItems.length > 0 && (
-        <Card className="border-none shadow-xl rounded-[2rem] bg-amber-50 border-amber-100 p-6 flex items-start gap-4">
-           <AlertTriangle className="h-6 w-6 text-amber-600 shrink-0" />
-           <div className="flex-1 space-y-3">
-              <h3 className="font-black text-amber-900 text-sm uppercase tracking-widest">Complete Your Ecosystem Profile</h3>
-              <div className="flex flex-wrap gap-2">
-                 {incompleteItems.map((item, i) => (
-                    <Badge key={i} variant="outline" className="bg-white/50 border-amber-200 text-amber-700 font-bold text-[10px]">
-                       {item}
-                    </Badge>
-                 ))}
-              </div>
-              <Button size="sm" variant="link" className="p-0 text-amber-700 font-black h-auto gap-1" asChild>
-                 <Link href="/dashboard/startup">Finalize Now <ArrowRight className="h-3 w-3" /></Link>
-              </Button>
-           </div>
-        </Card>
-      )}
-
-      {/* Startup Overview Card */}
-      <Card className="border-none shadow-xl rounded-[3rem] bg-white ring-1 ring-slate-100 overflow-hidden">
-        <CardHeader className="bg-slate-50/50 px-8 py-6 border-b border-slate-100">
-           <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-xl"><Rocket className="h-5 w-5 text-primary" /></div>
-              <CardTitle className="text-xl font-black">Startup Overview</CardTitle>
-           </div>
-        </CardHeader>
-        <CardContent className="p-8">
-           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
-              {[
-                { label: 'Startup Name', value: startup?.name || 'Not Set' },
-                { label: 'Current Stage', value: startup?.stage || 'Not Set' },
-                { label: 'Verification', value: startup?.startupVerified ? 'Verified' : 'Pending', isBadge: true, success: startup?.startupVerified },
-                { label: 'Visibility', value: startup?.status === 'active' ? 'Public' : 'Private', isBadge: true, primary: startup?.status === 'active' },
-                { label: 'Profile Views', value: startupViews },
-                { label: 'Funding Goal', value: startup?.fundingNeed || 'Not Set' },
-              ].map((item, i) => (
-                <div key={i} className="space-y-1">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.label}</p>
-                   {item.isBadge ? (
-                     <Badge className={cn(
-                       "rounded-lg font-black text-[10px] uppercase",
-                       item.success ? "bg-green-100 text-green-700" : 
-                       item.primary ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"
-                     )}>
-                       {item.value}
-                     </Badge>
-                   ) : (
-                     <p className="text-lg font-black text-slate-900">{item.value}</p>
-                   )}
-                </div>
-              ))}
-           </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      {/* Primary Layout Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
-        {/* Left Column (8 units) */}
-        <div className="lg:col-span-8 space-y-12">
+        {/* Left Column: Intelligence & Actions */}
+        <div className="lg:col-span-8 space-y-8">
           
-          {/* Funding & Investors Overview */}
-          <section className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-100 rounded-xl"><HandCoins className="h-5 w-5 text-amber-600" /></div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Funding & Investors</h2>
-              </div>
-              <Button variant="ghost" size="sm" className="font-bold text-primary" asChild>
-                <Link href="/dashboard/pitches">Venture Pipeline <ChevronRight className="h-4 w-4" /></Link>
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-               {[
-                 { label: 'Interested Investors', value: stats.investorInterests, icon: Heart, color: 'text-rose-500', bg: 'bg-rose-50' },
-                 { label: 'Connected Partners', value: stats.connectedInvestors, icon: ShieldCheck, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                 { label: 'Pending Conversations', value: stats.pendingInvestorConvs, icon: MessageSquare, color: 'text-blue-500', bg: 'bg-blue-50' },
-                 { label: 'Mentor Matches', value: stats.mentorMatches, icon: GraduationCap, color: 'text-purple-500', bg: 'bg-purple-50' },
-                 { label: 'Active Pitches', value: stats.activeVenturePitches, icon: Zap, color: 'text-primary', bg: 'bg-primary/10' },
-               ].map((stat, i) => (
-                 <Card key={i} className="border-none shadow-sm p-4 text-center space-y-2 bg-white ring-1 ring-slate-100 hover:shadow-md transition-shadow">
-                    <div className={cn("p-2 w-fit mx-auto rounded-xl", stat.bg)}>
-                      <stat.icon className={cn("h-4 w-4", stat.color)} />
-                    </div>
-                    <p className="text-xl font-black text-slate-900">{stat.value || 0}</p>
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</p>
-                 </Card>
-               ))}
-            </div>
+          {/* Quick Actions Hub */}
+          <section className="space-y-4">
+             <div className="flex items-center gap-3 px-2">
+                <Compass className="h-5 w-5 text-primary" />
+                <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Ecosystem Quick Actions</h3>
+             </div>
+             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {[
+                  { label: 'Find Investors', icon: Users, href: '/investors', bg: 'bg-blue-50', color: 'text-blue-600' },
+                  { label: 'Browse Mentors', icon: GraduationCap, href: '/mentors', bg: 'bg-purple-50', color: 'text-purple-600' },
+                  { label: 'New Pitch', icon: Zap, href: '/investors', bg: 'bg-amber-50', color: 'text-amber-600' },
+                  { label: 'CRM Leads', icon: UserPlus, href: '/dashboard/contacts', bg: 'bg-emerald-50', color: 'text-emerald-600' },
+                  { label: 'Post Update', icon: MessageSquare, href: '/community', bg: 'bg-rose-50', color: 'text-rose-600' },
+                  { label: 'Invite Peer', icon: Handshake, href: '/dashboard/billing', bg: 'bg-indigo-50', color: 'text-indigo-600' },
+                ].map((action, i) => (
+                  <Link key={i} href={action.href}>
+                    <Card className="border-none shadow-sm hover:shadow-md hover:ring-1 hover:ring-primary/20 transition-all rounded-2xl bg-white p-4 h-full group">
+                       <div className={cn("p-2 rounded-lg w-fit mb-3 group-hover:scale-110 transition-transform", action.bg, action.color)}>
+                          <action.icon className="h-5 w-5" />
+                       </div>
+                       <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{action.label}</p>
+                    </Card>
+                  </Link>
+                ))}
+             </div>
           </section>
 
-          {/* Business Workspace */}
-          <section className="space-y-6 pt-6 border-t border-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-slate-100 rounded-xl"><LayoutGrid className="h-5 w-5 text-slate-600" /></div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Business Workspace</h2>
+          {/* Growth Recommendations */}
+          {recommendations.length > 0 && (
+            <Card className="border-none shadow-xl rounded-[2rem] bg-background ring-1 ring-primary/10 overflow-hidden">
+               <CardHeader className="bg-primary/5 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-lg"><Lightbulb className="h-5 w-5 text-primary" /></div>
+                    <CardTitle className="text-lg font-black">Founder Growth Insights</CardTitle>
+                  </div>
+               </CardHeader>
+               <CardContent className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                     {recommendations.map((rec) => (
+                       <Link key={rec.id} href={rec.href}>
+                         <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white hover:shadow-sm transition-all group">
+                            <CircleHelp className="h-4 w-4 text-slate-400 group-hover:text-primary" />
+                            <span className="text-xs font-bold text-slate-600 group-hover:text-slate-900">{rec.label}</span>
+                            <ArrowRight className="h-3 w-3 ml-auto text-slate-300 opacity-0 group-hover:opacity-100 transition-all" />
+                         </div>
+                       </Link>
+                     ))}
+                  </div>
+               </CardContent>
+            </Card>
+          )}
+
+          {/* Startup Health Snapshot */}
+          <Card className="border-none shadow-xl rounded-[2.5rem] bg-white ring-1 ring-slate-100 overflow-hidden">
+            <CardHeader className="bg-slate-50/50 px-8 py-6 border-b border-slate-100">
+               <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-xl"><Rocket className="h-5 w-5 text-primary" /></div>
+                    <CardTitle className="text-xl font-black">Venture Overview</CardTitle>
+                  </div>
+                  {startup && (
+                    <Badge variant="outline" className="rounded-xl px-4 py-1 font-bold bg-white text-primary border-primary/20">
+                      {startup.stage} Stage
+                    </Badge>
+                  )}
+               </div>
+            </CardHeader>
+            <CardContent className="p-8">
+               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-8">
+                  {[
+                    { label: 'Startup Name', value: startup?.name || 'Not Set', icon: Briefcase },
+                    { label: 'Ecosystem Status', value: startup?.startupVerified ? 'Verified' : 'Pending', isBadge: true, success: startup?.startupVerified },
+                    { label: 'Active Views', value: startupViews, icon: Eye },
+                    { label: 'Funding Required', value: startup?.fundingNeed || 'Not Set', icon: HandCoins },
+                    { label: 'Venture Pitches', value: stats.activeVenturePitches, icon: Zap },
+                    { label: 'Connected Partners', value: stats.connectedInvestors, icon: ShieldCheck },
+                  ].map((item, i) => (
+                    <div key={i} className="space-y-2">
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.label}</p>
+                       {item.isBadge ? (
+                         <Badge className={cn(
+                           "rounded-lg font-black text-[10px] uppercase h-7",
+                           item.success ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                         )}>
+                           {item.value}
+                         </Badge>
+                       ) : (
+                         <div className="flex items-center gap-2">
+                           {item.icon && <item.icon className="h-4 w-4 text-slate-300" />}
+                           <p className="text-lg font-black text-slate-900">{item.value}</p>
+                         </div>
+                       )}
+                    </div>
+                  ))}
+               </div>
+            </CardContent>
+            {!startup && (
+              <CardFooter className="bg-slate-50 p-6 flex flex-col items-center justify-center text-center">
+                 <Rocket className="h-10 w-10 text-slate-200 mb-2" />
+                 <p className="text-sm font-bold text-slate-400">No startup data detected.</p>
+                 <Button variant="link" className="text-primary font-black" asChild>
+                   <Link href="/dashboard/startup">Create Your Venture Profile</Link>
+                 </Button>
+              </CardFooter>
+            )}
+          </Card>
+
+          {/* Core Business Workspace */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-3 px-2">
+              <LayoutGrid className="h-5 w-5 text-primary" />
+              <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Growth Workspace</h3>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                {[
-                 { label: 'CRM Contacts', value: stats.totalContacts, icon: Contact2, href: '/dashboard/contacts' },
-                 { label: 'Investor Pipeline', value: stats.activeDeals, icon: LayoutGrid, href: '/dashboard/pipeline' },
-                 { label: 'Startup Tasks', value: stats.pendingTasks, icon: CheckSquare, href: '/dashboard/tasks' },
-                 { label: 'Billing', value: stats.totalInvoices, icon: FileText, href: '/dashboard/invoices' },
+                 { label: 'CRM Contacts', value: stats.totalContacts, icon: Contact2, href: '/dashboard/contacts', desc: 'Private network' },
+                 { label: 'Sales Pipeline', value: stats.activeDeals, icon: LayoutGrid, href: '/dashboard/pipeline', desc: 'Active deal flow' },
+                 { label: 'Action Items', value: stats.pendingTasks, icon: CheckSquare, href: '/dashboard/tasks', desc: 'Workspace tasks' },
+                 { label: 'Billing', value: stats.totalInvoices, icon: FileText, href: '/dashboard/invoices', desc: 'Financial ledger' },
                ].map((item, i) => (
                  <Link key={i} href={item.href}>
-                   <Card className="border-none shadow-sm p-5 bg-white ring-1 ring-slate-100 hover:ring-primary/20 transition-all group">
-                      <div className="flex items-center justify-between mb-3">
+                   <Card className="border-none shadow-sm p-5 bg-white ring-1 ring-slate-100 hover:ring-primary/40 hover:shadow-lg transition-all group h-full">
+                      <div className="flex items-center justify-between mb-4">
                          <div className="p-2 bg-slate-50 rounded-lg group-hover:bg-primary/5 transition-colors">
-                            <item.icon className="h-4 w-4 text-slate-400 group-hover:text-primary transition-colors" />
+                            <item.icon className="h-5 w-5 text-slate-400 group-hover:text-primary transition-colors" />
                          </div>
-                         <ArrowUpRight className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-all" />
+                         <ArrowRight className="h-3 w-3 text-slate-200 group-hover:text-primary transition-all opacity-0 group-hover:opacity-100" />
                       </div>
-                      <p className="text-2xl font-black text-slate-900">{item.value}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">{item.label}</p>
+                      <p className="text-3xl font-black text-slate-900">{item.value}</p>
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-tight mt-1">{item.label}</p>
+                      <p className="text-[9px] font-medium text-slate-400 mt-0.5">{item.desc}</p>
                    </Card>
                  </Link>
                ))}
             </div>
           </section>
-
         </div>
 
-        {/* Right Column (4 units) */}
-        <div className="lg:col-span-4 space-y-12">
+        {/* Right Column: Feed & Identity */}
+        <div className="lg:col-span-4 space-y-8">
           
-          {/* Account Status */}
-          <section className="space-y-6">
-             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 px-2">Account Hub</h3>
-             <Card className="border-none shadow-sm rounded-[2.5rem] bg-white ring-1 ring-slate-100 p-8 space-y-6">
-                <div className="flex items-center gap-4">
-                   <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                      <ShieldCheck className="h-6 w-6" />
+          {/* Account Tier Card */}
+          <section className="space-y-4">
+             <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden relative group">
+                <CardContent className="p-8 space-y-6">
+                   <div className="flex items-center gap-4">
+                      <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+                         <ShieldCheck className="h-7 w-7" />
+                      </div>
+                      <div>
+                         <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-0.5">Membership</p>
+                         <p className="text-2xl font-black text-white">{profile?.plan || 'Basic'} Tier</p>
+                      </div>
                    </div>
-                   <div>
-                      <p className="text-lg font-black text-slate-900">{profile?.plan || 'Basic'} Plan</p>
-                      <p className="text-xs font-medium text-slate-500">Active Membership</p>
+                   <div className="space-y-3">
+                      <Progress value={userPlan === 'basic' ? 30 : 100} className="h-1.5 bg-white/10" />
+                      <p className="text-[10px] font-bold text-slate-400">Expand your ecosystem capacity.</p>
                    </div>
-                </div>
-                <Button className="w-full rounded-xl font-bold h-11" asChild>
-                   <Link href="/dashboard/billing">View Rewards & Upgrade</Link>
-                </Button>
+                   <Button className="w-full rounded-xl font-bold h-11 shadow-lg shadow-primary/20" asChild>
+                      <Link href="/dashboard/billing">Manage Rewards & Plan</Link>
+                   </Button>
+                </CardContent>
+                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-125 transition-transform duration-700" />
              </Card>
           </section>
 
-          {/* Integrated Ecosystem Feed */}
-          <section className="space-y-6">
+          {/* Categorized Ecosystem Feed */}
+          <section className="space-y-4">
              <div className="flex items-center justify-between px-2">
-                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Ecosystem Feed</h3>
-                <Link href="/dashboard/notifications" className="text-[10px] font-bold text-primary hover:underline">View All</Link>
+                <div className="flex items-center gap-3">
+                   <Activity className="h-5 w-5 text-primary" />
+                   <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Ecosystem Activity</h3>
+                </div>
+                <Link href="/dashboard/notifications" className="text-[10px] font-black text-primary hover:underline uppercase tracking-tight">Expand View</Link>
              </div>
-             <div className="space-y-4">
-                {timelineEvents.length > 0 ? (
-                  timelineEvents.map((event, i) => (
-                    <div key={i} className="flex items-start gap-4 p-4 rounded-2xl bg-white border border-slate-50 shadow-sm transition-all hover:border-primary/20 group">
-                       <div className={cn("mt-1 p-2 rounded-lg shrink-0", event.bg, event.color)}>
-                          <event.icon className="h-3 w-3" />
+             
+             <Card className="border-none shadow-xl rounded-[2.5rem] bg-white ring-1 ring-slate-100 overflow-hidden">
+                <div className="p-4 space-y-4">
+                  {timelineEvents.length > 0 ? (
+                    timelineEvents.map((event, i) => (
+                      <div key={i} className="flex items-start gap-4 p-4 rounded-2xl bg-slate-50/50 border border-transparent hover:bg-white hover:border-slate-100 hover:shadow-sm transition-all group">
+                         <div className={cn("mt-1 p-2 rounded-xl shrink-0 transition-transform group-hover:scale-110", event.bg, event.color)}>
+                            <event.icon className="h-4 w-4" />
+                         </div>
+                         <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2 mb-0.5">
+                               <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">{event.category}</span>
+                               <span className="text-[8px] font-bold text-slate-300 whitespace-nowrap">
+                                  {formatDistanceToNow(event.timestamp, { addSuffix: true })}
+                               </span>
+                            </div>
+                            <p className="text-xs font-bold text-slate-900 group-hover:text-primary transition-colors truncate">{event.title}</p>
+                            <p className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">{event.description}</p>
+                         </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-12 text-center space-y-4">
+                       <div className="p-4 bg-slate-50 rounded-full w-fit mx-auto">
+                          <Info className="h-8 w-8 text-slate-200" />
                        </div>
-                       <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-slate-900 group-hover:text-primary transition-colors">{event.title}</p>
-                          <p className="text-[10px] text-slate-500 line-clamp-1">{event.description}</p>
-                          <div className="flex items-center gap-1.5 mt-1 text-[9px] font-black text-slate-300 uppercase tracking-tight">
-                             <Clock className="h-2 w-2" />
-                             {formatDistanceToNow(event.timestamp, { addSuffix: true })}
-                          </div>
+                       <div>
+                          <p className="text-sm font-bold text-slate-900">No activity recorded</p>
+                          <p className="text-xs text-slate-400 mt-1">Start by networking with the ecosystem.</p>
                        </div>
+                       <Button variant="outline" size="sm" className="rounded-xl font-bold h-9" asChild>
+                          <Link href="/investors">Find Investors</Link>
+                       </Button>
                     </div>
-                  ))
-                ) : (
-                  <div className="p-8 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
-                     <Info className="h-6 w-6 text-slate-300 mx-auto mb-2" />
-                     <p className="text-[10px] font-bold text-slate-400 uppercase">No recent activity detected</p>
-                  </div>
+                  )}
+                </div>
+                {timelineEvents.length > 0 && (
+                   <div className="p-4 bg-slate-50/50 border-t border-slate-100 text-center">
+                      <Button variant="ghost" size="sm" className="text-[10px] font-black uppercase tracking-widest text-slate-400" asChild>
+                         <Link href="/dashboard/notifications">View Comprehensive History</Link>
+                      </Button>
+                   </div>
                 )}
-             </div>
+             </Card>
           </section>
+
+          {/* Quick Access to Support */}
+          <Card className="border-none shadow-md rounded-3xl bg-primary/5 p-6 border border-primary/10">
+             <div className="flex items-center gap-3 mb-3">
+                <Users className="h-5 w-5 text-primary" />
+                <h4 className="text-sm font-black text-primary uppercase tracking-widest">Founder Support</h4>
+             </div>
+             <p className="text-xs font-medium text-slate-600 leading-relaxed mb-6">
+                Connect with our concierge team for personalized investor matching or fundraising advice.
+             </p>
+             <Button className="w-full rounded-xl h-10 font-bold bg-white text-primary border-none shadow-sm hover:bg-slate-50" variant="outline">
+                Contact Concierge
+             </Button>
+          </Card>
 
         </div>
       </div>
@@ -503,7 +586,7 @@ export default function DashboardOverviewPage() {
   );
 }
 
-function ArrowUpRight(props: any) {
+function ArrowRight(props: any) {
   return (
     <svg
       {...props}
@@ -517,13 +600,13 @@ function ArrowUpRight(props: any) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path d="M7 7h10v10" />
-      <path d="M7 17 17 7" />
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
     </svg>
   )
 }
 
-function GraduationCap(props: any) {
+function Activity(props: any) {
   return (
     <svg
       {...props}
@@ -537,8 +620,7 @@ function GraduationCap(props: any) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-      <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5" />
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
     </svg>
   )
 }

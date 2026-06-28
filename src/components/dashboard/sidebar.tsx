@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -63,9 +64,11 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
     pitches: 0
   });
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-    workspace: true,
-    discovery: true,
+    dashboard: true,
+    startup: true,
     network: true,
+    community: true,
+    workspace: true,
     account: true
   });
 
@@ -136,63 +139,55 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
 
   const groups: SidebarGroup[] = [
     {
-      id: 'workspace',
-      label: 'Workspace',
+      id: 'dashboard',
+      label: 'Main',
       items: [
         { href: '/dashboard', label: 'Overview', icon: Home, showDot: unreadCounts.notifications > 0 },
-        { href: '/dashboard/contacts', label: 'Contacts', icon: Contact2 },
-        { href: '/dashboard/pipeline', label: 'Pipeline', icon: LayoutGrid },
-        { href: '/dashboard/tasks', label: 'Tasks', icon: CheckSquare },
-        { href: '/dashboard/invoices', label: 'Invoices', icon: FileText },
-        { 
-          href: '/dashboard/pitches', 
-          label: 'Venture Pitches', 
-          icon: Zap,
-          badgeCount: unreadCounts.pitches
-        },
-        ...(isFounder ? [
-          { href: '/dashboard/startup', label: 'My Startup', icon: Rocket },
-          { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins }
-        ] : []),
       ]
     },
     {
-      id: 'discovery',
-      label: 'Discovery',
+      id: 'startup',
+      label: 'Startup',
       items: [
-        { href: '/founders', label: 'Startups', icon: Rocket },
-        { href: '/cofounders', label: 'Co-founders', icon: Users },
-        { href: '/investors', label: 'Investors', icon: ShieldAlert },
-        { href: '/mentors', label: 'Mentors', icon: GraduationCap },
-        { href: '/services', label: 'Services', icon: Wrench },
+        { href: '/dashboard/startup', label: 'My Venture', icon: Rocket },
+        { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins },
       ]
     },
     {
       id: 'network',
       label: 'Network',
       items: [
-        { href: '/community', label: 'Community', icon: Globe },
-        { 
-          href: '/dashboard/messages', 
-          label: 'Messages', 
-          icon: MessageSquare,
-          badgeCount: unreadCounts.messages
-        },
-        { 
-          href: '/dashboard/connections', 
-          label: 'Connections', 
-          icon: Users,
-          badgeCount: unreadCounts.connections
-        },
+        { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare, badgeCount: unreadCounts.messages },
+        { href: '/dashboard/connections', label: 'Connections', icon: Users, badgeCount: unreadCounts.connections },
+        { href: '/dashboard/pitches', label: 'Venture Pitches', icon: Zap, badgeCount: unreadCounts.pitches },
+      ]
+    },
+    {
+      id: 'community',
+      label: 'Community',
+      items: [
+        { href: '/community', label: 'Ecosystem Feed', icon: Globe },
+        { href: '/founders', label: 'Founders', icon: Rocket },
+        { href: '/investors', label: 'Investors', icon: ShieldAlert },
+        { href: '/mentors', label: 'Mentors', icon: GraduationCap },
+      ]
+    },
+    {
+      id: 'workspace',
+      label: 'Workspace',
+      items: [
+        { href: '/dashboard/contacts', label: 'CRM Contacts', icon: Contact2 },
+        { href: '/dashboard/pipeline', label: 'Sales Pipeline', icon: LayoutGrid },
+        { href: '/dashboard/tasks', label: 'Task List', icon: CheckSquare },
+        { href: '/dashboard/invoices', label: 'Billing Ledger', icon: FileText },
       ]
     },
     {
       id: 'account',
       label: 'Account',
       items: [
-        { href: '/dashboard/profile', label: 'My Profile', icon: User },
-        { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
-        { href: '#', label: 'Settings', icon: Settings, disabled: true },
+        { href: '/dashboard/profile', label: 'Settings', icon: Settings },
+        { href: '/dashboard/billing', label: 'Subscription', icon: CreditCard },
       ]
     }
   ];
@@ -253,9 +248,6 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
                       <Badge variant="destructive" className="h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] font-black rounded-full border-none shadow-sm shadow-destructive/20">
                         {item.badgeCount}
                       </Badge>
-                    )}
-                    {item.disabled && (
-                      <span className="text-[8px] font-black uppercase bg-muted px-1.5 py-0.5 rounded text-muted-foreground">Soon</span>
                     )}
                   </div>
                 </Link>
