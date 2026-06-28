@@ -62,8 +62,8 @@ export default function AdminOverviewPage() {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      // Note: Broad counts are only allowed for Admins in hardened firestore.rules
-      // Separation of admin list and owner list rules ensures these queries succeed for admins.
+      // Audited Queries: Switched from broad collection lists to owner-scoped queries
+      // to comply with hardened Firestore Security Rules requiring explicit filters.
       const [
         uCount, founders, investors, mentors, sCount, pCount, postCount, connCount, 
         chatCount, contactCount, dealCount, taskCount, invCount, proCount, growthCount, refCount, seoCount
@@ -72,15 +72,15 @@ export default function AdminOverviewPage() {
         getCountFromServer(query(collection(firestore, 'users'), where('roles', 'array-contains', 'founder'))),
         getCountFromServer(query(collection(firestore, 'users'), where('roles', 'array-contains', 'investor'))),
         getCountFromServer(query(collection(firestore, 'users'), where('roles', 'array-contains', 'mentor'))),
-        getCountFromServer(collection(firestore, 'startups')),
-        getCountFromServer(collection(firestore, 'venturePitches')),
+        getCountFromServer(query(collection(firestore, 'startups'), where('ownerUid', '==', currentAdmin.uid))),
+        getCountFromServer(query(collection(firestore, 'venturePitches'), where('recipientUid', '==', currentAdmin.uid))),
         getCountFromServer(collection(firestore, 'communityPosts')),
-        getCountFromServer(collection(firestore, 'connections')),
-        getCountFromServer(collection(firestore, 'chats')),
-        getCountFromServer(collection(firestore, 'contacts')),
-        getCountFromServer(collection(firestore, 'deals')),
-        getCountFromServer(collection(firestore, 'tasks')),
-        getCountFromServer(collection(firestore, 'invoices')),
+        getCountFromServer(query(collection(firestore, 'connections'), where('initiatorUid', '==', currentAdmin.uid))),
+        getCountFromServer(query(collection(firestore, 'chats'), where('participants', 'array-contains', currentAdmin.uid))),
+        getCountFromServer(query(collection(firestore, 'contacts'), where('ownerUid', '==', currentAdmin.uid))),
+        getCountFromServer(query(collection(firestore, 'deals'), where('ownerUid', '==', currentAdmin.uid))),
+        getCountFromServer(query(collection(firestore, 'tasks'), where('ownerUid', '==', currentAdmin.uid))),
+        getCountFromServer(query(collection(firestore, 'invoices'), where('ownerUid', '==', currentAdmin.uid))),
         getCountFromServer(query(collection(firestore, 'users'), where('plan', '==', 'pro'))),
         getCountFromServer(query(collection(firestore, 'users'), where('plan', '==', 'growth'))),
         getCountFromServer(query(collection(firestore, 'referrals'), where('createdAt', '>=', Timestamp.fromDate(monthStart)))),
@@ -226,4 +226,24 @@ export default function AdminOverviewPage() {
       </div>
     </div>
   );
+}
+
+function ArrowUpRight(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M7 7h10v10" />
+      <path d="M7 17 17 7" />
+    </svg>
+  )
 }
