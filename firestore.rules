@@ -14,7 +14,7 @@ service cloud.firestore {
         request.auth.token.email == 'shahmubaruk05@gmail.com' ||
         request.auth.uid == 'T2JnkPYdsoZGO8krUqcP3T5bvg62' ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') in ['admin', 'super_admin'] ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super_admin'] ||
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('roles', []).hasAny(['admin', 'super_admin'])
         ))
       );
@@ -35,7 +35,6 @@ service cloud.firestore {
     }
 
     match /referrals/{referralId} {
-      // Split list logic to satisfy Firestore query optimizer
       allow list: if isAdmin();
       allow list: if isSignedIn() && (resource.data.referrerUid == request.auth.uid || resource.data.referredUid == request.auth.uid);
       
@@ -79,7 +78,7 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
       
-      allow get: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid) || true; // Public view allowed by ID for sharing
+      allow get: if true; // Public access by ID for sharing
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
     }
