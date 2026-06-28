@@ -15,7 +15,8 @@ import {
   CreditCard,
   Gift,
   ShieldCheck,
-  Globe
+  Globe,
+  TrendingUp
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -49,8 +50,6 @@ export default function AdminOverviewPage() {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      // Audited: Standardizing all admin broad queries to use filters where possible
-      // to satisfy the "Rules are not filters" constraint in hardened security models.
       const [
         uCount, founders, investors, mentors, sCount, postCount, proCount, growthCount, refCount, seoCount
       ] = await Promise.all([
@@ -77,7 +76,6 @@ export default function AdminOverviewPage() {
         growthUsers: growthCount.data().count,
         monthlyReferrals: refCount.data().count,
         seoPages: seoCount.data().count,
-        // Private metrics are not queried globally
         pitches: 0,
         connections: 0,
         messages: 0,
@@ -88,7 +86,7 @@ export default function AdminOverviewPage() {
       });
     } catch (error) {
       console.error("Admin stats fetch failed:", error);
-      toast({ title: "Fetch Failed", description: "Global metrics restricted.", variant: "destructive" });
+      toast({ title: "Fetch Restricted", description: "Broad system scans require elevated and optimized rules.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }

@@ -137,8 +137,6 @@ export default function DashboardOverviewPage() {
       if (!firestore || !user?.uid) return;
       
       try {
-        // Architectural Fix: Every summary count query must include the ownerUid filter 
-        // to satisfy the "Rules are not filters" constraint in the hardened security model.
         const [pSnap, aSnap, pitchSnap, intSnap, contactSnap, dealSnap, taskSnap, invSnap] = await Promise.all([
           getCountFromServer(query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid), where('status', '==', 'pending'))),
           getCountFromServer(query(collection(firestore, 'connections'), where('status', '==', 'accepted'), where('initiatorUid', '==', user.uid))),
@@ -177,7 +175,6 @@ export default function DashboardOverviewPage() {
         if (profileSnap.exists()) setProfile(profileSnap.data());
         if (startupSnap.exists()) {
           setStartup(startupSnap.data());
-          // Scoped sub-collection read
           const viewsSnap = await getCountFromServer(collection(firestore, 'startups', user.uid, 'views'));
           setStartupViews(viewsSnap.data().count);
         }
