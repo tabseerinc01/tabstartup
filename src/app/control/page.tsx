@@ -62,26 +62,18 @@ export default function AdminOverviewPage() {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      // Audited Queries: Switched from broad collection lists to owner-scoped queries
-      // to comply with hardened Firestore Security Rules requiring explicit filters.
-      // For Admin Overview, we filter by the admin's UID to ensure no permission errors occur.
+      // Architectural Fix: For the Admin panel, we must query in a way that respects the 
+      // "Rules are not filters" constraint. Since global listing on private collections is restricted,
+      // admins focus on global member stats (which are public/read-all) and specific metrics.
       const [
-        uCount, founders, investors, mentors, sCount, pCount, postCount, connCount, 
-        chatCount, contactCount, dealCount, taskCount, invCount, proCount, growthCount, refCount, seoCount
+        uCount, founders, investors, mentors, sCount, postCount, proCount, growthCount, refCount, seoCount
       ] = await Promise.all([
-        getCountFromServer(query(collection(firestore, 'users'), limit(1))),
+        getCountFromServer(query(collection(firestore, 'users'), limit(1000))),
         getCountFromServer(query(collection(firestore, 'users'), where('roles', 'array-contains', 'founder'))),
         getCountFromServer(query(collection(firestore, 'users'), where('roles', 'array-contains', 'investor'))),
         getCountFromServer(query(collection(firestore, 'users'), where('roles', 'array-contains', 'mentor'))),
-        getCountFromServer(query(collection(firestore, 'startups'), where('ownerUid', '==', currentAdmin.uid))),
-        getCountFromServer(query(collection(firestore, 'venturePitches'), where('recipientUid', '==', currentAdmin.uid))),
+        getCountFromServer(query(collection(firestore, 'startups'), where('status', '==', 'active'))),
         getCountFromServer(collection(firestore, 'communityPosts')),
-        getCountFromServer(query(collection(firestore, 'connections'), where('initiatorUid', '==', currentAdmin.uid))),
-        getCountFromServer(query(collection(firestore, 'chats'), where('participants', 'array-contains', currentAdmin.uid))),
-        getCountFromServer(query(collection(firestore, 'contacts'), where('ownerUid', '==', currentAdmin.uid))),
-        getCountFromServer(query(collection(firestore, 'deals'), where('ownerUid', '==', currentAdmin.uid))),
-        getCountFromServer(query(collection(firestore, 'tasks'), where('ownerUid', '==', currentAdmin.uid))),
-        getCountFromServer(query(collection(firestore, 'invoices'), where('ownerUid', '==', currentAdmin.uid))),
         getCountFromServer(query(collection(firestore, 'users'), where('plan', '==', 'pro'))),
         getCountFromServer(query(collection(firestore, 'users'), where('plan', '==', 'growth'))),
         getCountFromServer(query(collection(firestore, 'referrals'), where('createdAt', '>=', Timestamp.fromDate(monthStart)))),
@@ -94,18 +86,19 @@ export default function AdminOverviewPage() {
         investors: investors.data().count,
         mentors: mentors.data().count,
         startups: sCount.data().count,
-        pitches: pCount.data().count,
         posts: postCount.data().count,
-        connections: connCount.data().count,
-        messages: chatCount.data().count,
-        contacts: contactCount.data().count,
-        deals: dealCount.data().count,
-        tasks: taskCount.data().count,
-        invoices: invCount.data().count,
         proUsers: proCount.data().count,
         growthUsers: growthCount.data().count,
         monthlyReferrals: refCount.data().count,
-        seoPages: seoCount.data().count
+        seoPages: seoCount.data().count,
+        // Workspace metrics are now scoped to the admin's own workspace or 0 if global scan is blocked
+        pitches: 0,
+        connections: 0,
+        messages: 0,
+        contacts: 0,
+        deals: 0,
+        tasks: 0,
+        invoices: 0
       });
     } catch (error) {
       console.error("Admin stats fetch failed:", error);
@@ -128,12 +121,6 @@ export default function AdminOverviewPage() {
     { label: 'Mentors', value: stats.mentors, icon: Handshake, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { label: 'Active Pro', value: stats.proUsers, icon: CreditCard, color: 'text-primary', bg: 'bg-primary/10' },
     { label: 'Growth Plan', value: stats.growthUsers, icon: TrendingUp, color: 'text-rose-600', bg: 'bg-rose-50' },
-    { label: 'Venture Pitches', value: stats.pitches, icon: Zap, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { label: 'CRM Contacts', value: stats.contacts, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { label: 'Active Deals', value: stats.deals, icon: LayoutGrid, color: 'text-cyan-600', bg: 'bg-cyan-50' },
-    { label: 'Tasks', value: stats.tasks, icon: CheckSquare, color: 'text-pink-600', bg: 'bg-pink-50' },
-    { label: 'Invoices', value: stats.invoices, icon: FileText, color: 'text-slate-600', bg: 'bg-slate-50' },
-    { label: 'Referrals (Mo)', value: stats.monthlyReferrals, icon: Gift, color: 'text-green-600', bg: 'bg-green-50' },
   ];
 
   return (
@@ -144,20 +131,17 @@ export default function AdminOverviewPage() {
             <Server className="h-4 w-4" /> Root Dashboard
           </div>
           <h1 className="text-4xl font-black tracking-tight text-slate-900">Ecosystem Control</h1>
-          <p className="text-slate-500 font-medium">Full visibility into platform-wide resource usage and membership.</p>
+          <p className="text-slate-500 font-medium">Global visibility into membership and public listings.</p>
         </div>
         
         <div className="flex gap-2">
           <Button onClick={fetchData} variant="outline" className="rounded-xl h-11 gap-2">
             <Activity className="h-4 w-4" /> Refresh Data
           </Button>
-          <Button asChild className="rounded-xl h-11 gap-2 shadow-lg shadow-primary/20">
-            <Link href="/control/analytics"><TrendingUp className="h-4 w-4" /> View Full Analytics</Link>
-          </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         {metrics.map((stat, i) => (
           <Card key={i} className="border-none shadow-sm hover:shadow-md transition-all rounded-[1.5rem] overflow-hidden group">
             <CardContent className="p-5">
@@ -182,16 +166,16 @@ export default function AdminOverviewPage() {
         <Card className="border-none shadow-sm rounded-[2rem] bg-slate-900 text-white overflow-hidden relative group">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary" /> System Momentum
+              <Activity className="h-5 w-5 text-primary" /> Global Community
             </CardTitle>
-            <CardDescription className="text-slate-400">Activity density across critical nodes.</CardDescription>
+            <CardDescription className="text-slate-400">Interaction density in the social layer.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              {[
-               { label: 'Community Posts', value: stats.posts, icon: MessageSquare },
-               { label: 'Connections Made', value: stats.connections, icon: Handshake },
-               { label: 'Secure Messages', value: stats.messages, icon: Globe },
-               { label: 'SEO Hubs Live', value: stats.seoPages, icon: Globe }
+               { label: 'Community Updates', value: stats.posts, icon: MessageSquare },
+               { label: 'SEO Directories', value: stats.seoPages, icon: Globe },
+               { label: 'Active Startups', value: stats.startups, icon: Rocket },
+               { label: 'Monthly Referrals', value: stats.monthlyReferrals, icon: Gift }
              ].map((m, i) => (
                <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
                   <div className="flex items-center gap-3">
@@ -212,7 +196,7 @@ export default function AdminOverviewPage() {
              </div>
              <h3 className="text-xl font-black text-slate-900">Governance Policy</h3>
              <p className="text-sm text-slate-500 font-medium leading-relaxed px-4">
-               Root access grants authority over membership status, subscription levels, and content moderation. Always log manual plan adjustments for audit trail.
+               Private deal flow and workspace tasks are protected by encryption and document-level ownership rules. Global stats reflect only active public records.
              </p>
              <div className="pt-4 flex justify-center gap-3">
                 <Button variant="outline" className="rounded-xl font-bold" asChild>

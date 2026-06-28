@@ -52,7 +52,8 @@ export default function NotificationsPage() {
   useEffect(() => {
     if (!firestore || !user?.uid) return;
 
-    // Standardized query with mandatory recipientUid filter to satisfy hardened security rules
+    // Architectural Fix: This listener must filter by recipientUid 
+    // to comply with the collection-wide listing restriction in hardened security rules.
     const q = query(
       collection(firestore, 'notifications'),
       where('recipientUid', '==', user.uid)
@@ -105,45 +106,6 @@ export default function NotificationsPage() {
     });
   };
 
-  const handleDelete = (id: string) => {
-    if (!firestore) return;
-    deleteDoc(doc(firestore, 'notifications', id)).catch(err => {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: `notifications/${id}`,
-        operation: 'delete'
-      }));
-    });
-  };
-
-  const handleNotificationClick = (n: any) => {
-    handleMarkAsRead(n.id);
-    
-    if (n.type === 'message' && n.targetId) {
-      router.push(`/chats/${n.targetId}`);
-    } else if (n.type === 'venture_pitch') {
-      router.push('/dashboard/pitches');
-    } else if ((n.type === 'like' || n.type === 'comment' || n.type === 'moderation') && n.targetType === 'post') {
-      router.push('/community');
-    } else if (['investor_interest', 'cofounder_interest', 'connection', 'rejection'].includes(n.type)) {
-      router.push('/dashboard/connections');
-    }
-  };
-
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'message': return <MessageSquare className="h-5 w-5 text-blue-500" />;
-      case 'like': return <Heart className="h-5 w-5 text-rose-500 fill-rose-500" />;
-      case 'comment': return <Inbox className="h-5 w-5 text-emerald-500" />;
-      case 'cofounder_interest': return <Users className="h-5 w-5 text-amber-500" />;
-      case 'investor_interest': return <Zap className="h-5 w-5 text-primary fill-primary" />;
-      case 'venture_pitch': return <Zap className="h-5 w-5 text-primary fill-primary animate-pulse" />;
-      case 'connection': return <ShieldCheck className="h-5 w-5 text-green-500" />;
-      case 'rejection': return <XCircle className="h-5 w-5 text-slate-400" />;
-      case 'moderation': return <ShieldAlert className="h-5 w-5 text-destructive" />;
-      default: return <Bell className="h-5 w-5 text-slate-400" />;
-    }
-  };
-
   if (isUserLoading || isLoading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
@@ -193,24 +155,19 @@ export default function NotificationsPage() {
               <Card 
                 key={n.id} 
                 className={`group border-none shadow-sm hover:shadow-md transition-all duration-300 rounded-2xl overflow-hidden cursor-pointer relative ${!n.read ? 'bg-primary/[0.03] ring-1 ring-primary/10' : 'bg-background opacity-80'}`}
-                onClick={() => handleNotificationClick(n)}
+                onClick={() => handleMarkAsRead(n.id)}
               >
                 <CardContent className="p-6">
                   <div className="flex items-start gap-4">
-                    <div className={`mt-1 h-12 w-12 shrink-0 rounded-2xl flex items-center justify-center transition-colors ${!n.read ? 'bg-primary/20' : 'bg-muted'}`}>
-                       {getIcon(n.type)}
-                    </div>
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center justify-between gap-2">
                         <p className={`text-lg font-bold truncate ${!n.read ? 'text-slate-900' : 'text-slate-500'}`}>
                           {n.title}
                         </p>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatDistanceToNow(createdAt, { addSuffix: true })}
-                          </span>
-                        </div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatDistanceToNow(createdAt, { addSuffix: true })}
+                        </span>
                       </div>
                       <p className={`text-sm leading-relaxed ${!n.read ? 'text-slate-600 font-medium' : 'text-slate-500'}`}>
                         {n.message}
@@ -228,15 +185,8 @@ export default function NotificationsPage() {
             </div>
             <h3 className="text-2xl font-bold text-slate-900 mb-2">No notifications yet</h3>
             <p className="text-muted-foreground max-w-sm mx-auto mb-8 text-lg">
-              When someone likes your post, messages you, or sends you a venture pitch, you'll find those updates here.
+              Workspace activity and system alerts will appear here.
             </p>
-            <Button 
-              size="lg" 
-              className="rounded-full px-10 h-14 font-bold shadow-xl shadow-primary/20" 
-              onClick={() => router.push('/dashboard')}
-            >
-              Back to Overview
-            </Button>
           </div>
         )}
       </div>

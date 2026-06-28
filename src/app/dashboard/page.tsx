@@ -76,7 +76,7 @@ export default function DashboardOverviewPage() {
   const [startup, setStartup] = useState<any>(null);
   const [startupViews, setStartupViews] = useState(0);
 
-  // --- Real-time Collections Queries (Standardized with ownerUid) ---
+  // --- Real-time Collections Queries (Owner Scoped for Security Compliance) ---
   const tasksQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
@@ -119,7 +119,7 @@ export default function DashboardOverviewPage() {
   }, [firestore, user?.uid]);
   const { data: recentInvoices } = useCollection(invoicesQ);
 
-  // --- Summary Counts (Standardized with explicit security rules compatibility) ---
+  // --- Summary Counts (Strictly Scoped Queries) ---
   const [stats, setStats] = useState({
     pendingConnections: 0,
     acceptedConnections: 0,
@@ -137,12 +137,13 @@ export default function DashboardOverviewPage() {
       if (!firestore || !user?.uid) return;
       
       try {
-        // Audited: Every count query now includes the owner filter to prevent "Missing permissions"
+        // Architectural Fix: Every summary count query must include the ownerUid filter 
+        // to satisfy the "Rules are not filters" constraint in the hardened security model.
         const [pSnap, aSnap, pitchSnap, intSnap, contactSnap, dealSnap, taskSnap, invSnap] = await Promise.all([
           getCountFromServer(query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid), where('status', '==', 'pending'))),
           getCountFromServer(query(collection(firestore, 'connections'), where('status', '==', 'accepted'), where('initiatorUid', '==', user.uid))),
           getCountFromServer(query(collection(firestore, 'venturePitches'), where('recipientUid', '==', user.uid))),
-          getCountFromServer(query(collection(firestore, 'notifications'), where('recipientUid', '==', user.uid), where('type', '==', 'investor_interest'))),
+          getCountFromServer(query(collection(firestore, 'notifications'), where('recipientUid', '==', user.uid), where('type', '==', 'investor_interest'), where('read', '==', false))),
           getCountFromServer(query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid))),
           getCountFromServer(query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid))),
           getCountFromServer(query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid), where('status', '!=', 'Completed'))),
@@ -152,7 +153,7 @@ export default function DashboardOverviewPage() {
         setStats({
           pendingConnections: pSnap.data().count,
           acceptedConnections: aSnap.data().count,
-          unreadMessages: 0, // Driven by real-time notification listener
+          unreadMessages: 0, 
           investorInterests: intSnap.data().count,
           venturePitches: pitchSnap.data().count,
           totalContacts: contactSnap.data().count,
@@ -161,7 +162,7 @@ export default function DashboardOverviewPage() {
           totalInvoices: invSnap.data().count
         });
       } catch (e) {
-        console.warn("Stats evaluation error (likely permissions):", e);
+        console.warn("Dashboard stats evaluation failed security check:", e);
       }
     }
 
@@ -176,6 +177,7 @@ export default function DashboardOverviewPage() {
         if (profileSnap.exists()) setProfile(profileSnap.data());
         if (startupSnap.exists()) {
           setStartup(startupSnap.data());
+          // Scoped sub-collection read
           const viewsSnap = await getCountFromServer(collection(firestore, 'startups', user.uid, 'views'));
           setStartupViews(viewsSnap.data().count);
         }
@@ -188,9 +190,7 @@ export default function DashboardOverviewPage() {
     loadIdentity();
   }, [firestore, user?.uid]);
 
-  const isLoading = isUserLoading;
-
-  if (isLoading) {
+  if (isUserLoading) {
     return (
       <div className="flex h-full min-h-[60vh] items-center justify-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
@@ -206,7 +206,7 @@ export default function DashboardOverviewPage() {
   return (
     <div className="space-y-12 animate-in fade-in duration-700 pb-20">
       
-      {/* --- SECTION 1: HERO --- */}
+      {/* Hero Section */}
       <section className="relative overflow-hidden rounded-[3rem] bg-slate-900 text-white p-8 md:p-12 shadow-2xl">
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           <div className="lg:col-span-7 space-y-6">
@@ -228,13 +228,6 @@ export default function DashboardOverviewPage() {
               </Button>
               <Button size="lg" variant="outline" className="rounded-xl font-bold h-12 gap-2 bg-white/5 border-white/10" asChild>
                 <Link href={`/startups/${startup?.slug || user?.uid}`}><Eye className="h-4 w-4" /> View Public Profile</Link>
-              </Button>
-              <Button size="lg" variant="ghost" className="rounded-xl font-bold h-12 gap-2 hover:bg-white/5" onClick={() => {
-                const url = `${window.location.origin}/startups/${startup?.slug || user?.uid}`;
-                navigator.clipboard.writeText(url);
-                toast({ title: "Link Copied!" });
-              }}>
-                <Share2 className="h-4 w-4" /> Share Venture
               </Button>
             </div>
           </div>
@@ -270,46 +263,7 @@ export default function DashboardOverviewPage() {
         {/* Left Column (8 units) */}
         <div className="lg:col-span-8 space-y-12">
           
-          {/* --- SECTION 2: STARTUP OVERVIEW --- */}
-          <section className="space-y-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-xl"><Rocket className="h-5 w-5 text-primary" /></div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Venture Pulse</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-               <Card className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 p-6 space-y-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Stage</p>
-                  <p className="text-2xl font-black text-slate-900">{startup?.stage || 'Idea'}</p>
-                  <Badge variant="secondary" className="bg-green-50 text-green-700 border-none font-bold">Active</Badge>
-               </Card>
-               <Card className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 p-6 space-y-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Funding Goal</p>
-                  <p className="text-2xl font-black text-slate-900">{startup?.fundingNeed || '$0'}</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Seeking Investment</p>
-               </Card>
-               <Card className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 p-6 space-y-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Verification</p>
-                  <div className="flex items-center gap-2">
-                    {startup?.startupVerified ? (
-                      <>
-                        <ShieldCheck className="h-6 w-6 text-green-600" />
-                        <span className="text-sm font-bold text-green-700">Verified</span>
-                      </>
-                    ) : (
-                      <>
-                        <AlertCircle className="h-6 w-6 text-amber-500" />
-                        <span className="text-sm font-bold text-amber-600">Pending</span>
-                      </>
-                    )}
-                  </div>
-                  <Button variant="link" className="p-0 h-auto text-[10px] font-black text-primary uppercase" asChild>
-                    <Link href="/dashboard/profile">Get Verified</Link>
-                  </Button>
-               </Card>
-            </div>
-          </section>
-
-          {/* --- SECTION 3: NETWORKING OVERVIEW --- */}
+          {/* Networking Overview */}
           <section className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -324,7 +278,7 @@ export default function DashboardOverviewPage() {
                {[
                  { label: 'Pending', value: stats.pendingConnections, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50' },
                  { label: 'Accepted', value: stats.acceptedConnections, icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
-                 { label: 'Messages', value: stats.unreadMessages, icon: MessageSquare, color: 'text-blue-500', bg: 'bg-blue-50' },
+                 { label: 'Messages', value: 0, icon: MessageSquare, color: 'text-blue-500', bg: 'bg-blue-50' },
                  { label: 'Interests', value: stats.investorInterests, icon: Heart, color: 'text-rose-500', bg: 'bg-rose-50' },
                  { label: 'Mentors', value: 0, icon: UserPlus, color: 'text-purple-500', bg: 'bg-purple-50' },
                  { label: 'Pitches', value: stats.venturePitches, icon: Zap, color: 'text-primary', bg: 'bg-primary/10' },
@@ -340,7 +294,7 @@ export default function DashboardOverviewPage() {
             </div>
           </section>
 
-          {/* --- SECTION 5: WORKSPACE --- */}
+          {/* Operations Workspace */}
           <section className="space-y-6 pt-6 border-t border-slate-100">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-slate-100 rounded-xl"><LayoutGrid className="h-5 w-5 text-slate-600" /></div>
@@ -374,45 +328,7 @@ export default function DashboardOverviewPage() {
         {/* Right Column (4 units) */}
         <div className="lg:col-span-4 space-y-12">
           
-          {/* --- SECTION 4: GROWTH METRICS --- */}
-          <section className="space-y-6">
-             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 px-2">Growth & Visibility</h3>
-             <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden p-8 space-y-6 relative">
-                <div className="space-y-4 relative z-10">
-                   <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
-                      <div className="flex items-center gap-3">
-                         <Eye className="h-4 w-4 text-primary" />
-                         <span className="text-xs font-bold">Startup Profile Views</span>
-                      </div>
-                      <span className="text-xl font-black">{startupViews}</span>
-                   </div>
-                   <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
-                      <div className="flex items-center gap-3">
-                         <Search className="h-4 w-4 text-primary" />
-                         <span className="text-xs font-bold">Search Appearances</span>
-                      </div>
-                      <span className="text-xl font-black">12</span>
-                   </div>
-                   <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
-                      <div className="flex items-center gap-3">
-                         <Users className="h-4 w-4 text-primary" />
-                         <span className="text-xs font-bold">Community Reach</span>
-                      </div>
-                      <span className="text-xl font-black">450+</span>
-                   </div>
-                   <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
-                      <div className="flex items-center gap-3">
-                         <HandCoins className="h-4 w-4 text-primary" />
-                         <span className="text-xs font-bold">Referrals</span>
-                      </div>
-                      <span className="text-xl font-black">{profile?.referralCount || 0}</span>
-                   </div>
-                </div>
-                <div className="absolute bottom-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mb-16 pointer-events-none" />
-             </Card>
-          </section>
-
-          {/* --- SECTION 6: SUBSCRIPTION --- */}
+          {/* Account Status */}
           <section className="space-y-6">
              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 px-2">Account Status</h3>
              <Card className="border-none shadow-sm rounded-[2.5rem] bg-white ring-1 ring-slate-100 p-8 space-y-6">
@@ -425,20 +341,13 @@ export default function DashboardOverviewPage() {
                       <p className="text-xs font-medium text-slate-500">Active Membership</p>
                    </div>
                 </div>
-                <div className="space-y-2">
-                   <div className="flex justify-between text-[10px] font-black uppercase">
-                      <span className="text-slate-400">Networking Usage</span>
-                      <span className="text-slate-900">{stats.pendingConnections + stats.acceptedConnections} / 50</span>
-                   </div>
-                   <Progress value={((stats.pendingConnections + stats.acceptedConnections) / 50) * 100} className="h-1" />
-                </div>
                 <Button className="w-full rounded-xl font-bold h-11" asChild>
                    <Link href="/dashboard/billing">View Rewards & Upgrade</Link>
                 </Button>
              </Card>
           </section>
 
-          {/* --- SECTION 7: RECENT ACTIVITY --- */}
+          {/* Recent Activity */}
           <section className="space-y-6">
              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 px-2">Recent Timeline</h3>
              <div className="space-y-4">
@@ -460,11 +369,6 @@ export default function DashboardOverviewPage() {
                      </div>
                   </div>
                 ))}
-                {!recentTasks?.length && !recentInvoices?.length && (
-                  <div className="py-12 text-center bg-slate-50/50 rounded-[2rem] border-2 border-dashed border-slate-100">
-                     <p className="text-[10px] font-bold text-slate-300 uppercase italic">No recent activities</p>
-                  </div>
-                )}
              </div>
           </section>
 

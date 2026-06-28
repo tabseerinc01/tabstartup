@@ -131,7 +131,7 @@ export default function BillingPage() {
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [isCopied, setIsCopied] = useState(false);
 
-  // 1. Real-time Profile Listener
+  // 1. Scoped Profile Listener
   useEffect(() => {
     if (!firestore || !user?.uid) return;
 
@@ -146,7 +146,7 @@ export default function BillingPage() {
     return () => unsubscribe();
   }, [firestore, user?.uid]);
 
-  // Usage Queries - Explicitly filtered by ownerUid to comply with hardened security rules
+  // Scoped Usage Queries - Architecture Alignment
   const connectionsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid));
@@ -189,12 +189,6 @@ export default function BillingPage() {
   }, [firestore, user?.uid]);
   const { data: invoices, isLoading: isInvoicesLoading } = useCollection(invoicesQ);
 
-  const referralsQ = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'referrals'), where('referrerUid', '==', user.uid));
-  }, [firestore, user?.uid]);
-  const { data: referralsData } = useCollection(referralsQ);
-
   const currentPlanId = profile?.plan || 'basic';
   const currentPlan = PLANS.find(p => p.id === currentPlanId) || PLANS[0];
   const bonusLimits = profile?.bonusLimits || { connections: 0, pitches: 0, contacts: 0, deals: 0, tasks: 0, invoices: 0 };
@@ -222,7 +216,7 @@ export default function BillingPage() {
     <div className="max-w-6xl mx-auto w-full space-y-8 animate-in fade-in duration-700 pb-20">
       <div className="space-y-1">
         <h1 className="text-4xl font-black tracking-tight text-slate-900">Billing & Plans</h1>
-        <p className="text-slate-500 font-medium">Manage your subscription and track real-time ecosystem usage.</p>
+        <p className="text-slate-500 font-medium">Track your real-time ecosystem usage and resource expansion.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -232,86 +226,17 @@ export default function BillingPage() {
               <div className="space-y-4 text-center md:text-left">
                  <Badge className="bg-primary/20 text-primary border-none font-black text-[10px] uppercase tracking-widest px-3 py-1">Current Tier</Badge>
                  <h2 className="text-4xl font-black">{currentPlan.name} Plan</h2>
-                 <p className="text-slate-400 font-medium">Status: <span className="text-green-400 uppercase text-xs font-bold">{profile?.subscriptionStatus === 'active' ? 'Active' : 'Free Access'}</span></p>
+                 <p className="text-slate-400 font-medium">Membership synchronized with verified workspace metrics.</p>
               </div>
-              <Button className="rounded-xl h-11 px-8 font-bold gap-2 shadow-lg shadow-primary/20" variant="secondary" disabled aria-disabled="true">
-                <CreditCard className="h-4 w-4" /> Payments Coming Soon
-              </Button>
             </div>
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none" />
           </CardContent>
         </Card>
         <Card className="border-none shadow-sm rounded-[2.5rem] bg-white ring-1 ring-slate-100 p-8 flex flex-col justify-center">
            <Activity className="h-5 w-5 text-primary mb-4" />
-           <p className="text-sm text-slate-500 font-medium leading-relaxed">Usage is synchronized in real-time with production security rules ensuring limit integrity.</p>
+           <p className="text-sm text-slate-500 font-medium leading-relaxed">Workspace metrics are enforced by strict document-level security rules to ensure data isolation.</p>
         </Card>
       </div>
-
-      <Card className="border-none shadow-xl rounded-[2.5rem] bg-background ring-1 ring-slate-100 overflow-hidden">
-        <div className="bg-primary/5 px-8 py-6 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-             <div className="p-2 bg-primary/10 rounded-xl text-primary"><Gift className="h-6 w-6" /></div>
-             <div>
-                <h3 className="text-lg font-black text-slate-900">Referral Program</h3>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-tight">Earn bonus resources via networking</p>
-             </div>
-          </div>
-          <Badge variant="outline" className="bg-white border-primary/20 text-primary font-black text-[10px] uppercase h-7 px-3">
-            Verified Referrals: {referralsData?.length || 0}
-          </Badge>
-        </div>
-        <CardContent className="p-8 space-y-8">
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-6">
-                 <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Personal Invite Code</Label>
-                    <code className="block p-3 rounded-xl bg-slate-50 border border-slate-100 font-mono text-lg font-bold text-slate-700 text-center tracking-widest">{profile?.referralCode}</code>
-                 </div>
-                 <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Personal Sign-up Link</Label>
-                    <div className="flex gap-2">
-                       <Input readOnly value={referralLink} className="rounded-xl h-11 bg-slate-50 text-xs" />
-                       <Button 
-                        onClick={() => { navigator.clipboard.writeText(referralLink); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); }} 
-                        size="icon" 
-                        className="shrink-0 h-11 w-11 rounded-xl"
-                        aria-label="Copy referral link"
-                       >
-                          {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                       </Button>
-                    </div>
-                 </div>
-              </div>
-              <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
-                 <h4 className="font-bold text-slate-900 flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> Qualification Rules</h4>
-                 <ul className="space-y-2 text-xs font-medium text-slate-600">
-                    <li className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-primary" /> Friend signs up using your link</li>
-                    <li className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-primary" /> Friend completes Bio, Role, and Location</li>
-                    <li className="flex items-center gap-2 text-primary font-bold"><Plus className="h-3 w-3" /> Resource bonuses are applied instantly</li>
-                 </ul>
-              </div>
-           </div>
-           <div className="pt-8 border-t border-slate-100">
-              <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-6 flex items-center gap-2"><Gift className="h-4 w-4 text-primary" /> Bonus Capacity Earned</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                 {[
-                   { label: 'Connections', val: bonusLimits.connections, icon: Handshake },
-                   { label: 'Pitches', val: bonusLimits.pitches, icon: Zap },
-                   { label: 'Contacts', val: bonusLimits.contacts, icon: Users },
-                   { label: 'Deals', val: bonusLimits.deals, icon: LayoutGrid },
-                   { label: 'Tasks', val: bonusLimits.tasks, icon: CheckSquare },
-                   { label: 'Invoices', val: bonusLimits.invoices, icon: FileText },
-                 ].map((b, i) => (
-                   <div key={i} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
-                      <b.icon className="h-4 w-4 mx-auto mb-2 text-primary opacity-40" />
-                      <p className="text-xl font-black text-slate-900">+{b.val}</p>
-                      <p className="text-[9px] font-black text-slate-400 uppercase">{b.label}</p>
-                   </div>
-                 ))}
-              </div>
-           </div>
-        </CardContent>
-      </Card>
 
       <div className="space-y-4">
         <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2 px-2"><TrendingUp className="h-6 w-6 text-primary" /> Effective Workspace Capacity</h2>
@@ -343,7 +268,7 @@ export default function BillingPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-12">
         {PLANS.map((plan) => (
-          <Card key={plan.id} className={cn("border-none shadow-lg rounded-[2.5rem] overflow-hidden flex flex-col bg-background ring-1 ring-slate-100", plan.popular && "ring-2 ring-primary/50 relative")}>
+          <Card key={plan.id} className={cn("border-none shadow-lg rounded-[2.5rem] overflow-hidden flex flex-col bg-background ring-1 ring-slate-100", plan.id === currentPlanId && "ring-2 ring-primary/50 relative")}>
             <CardHeader className="p-8 pb-4">
               <div className={cn("p-3 rounded-2xl w-fit mb-6", plan.bg)}><plan.icon className={cn("h-6 w-6", plan.color)} /></div>
               <CardTitle className="text-2xl font-black text-slate-900">{plan.name}</CardTitle>
@@ -362,7 +287,7 @@ export default function BillingPage() {
                 disabled={plan.id === currentPlanId}
                 aria-disabled={plan.id === currentPlanId}
               >
-                {plan.id === currentPlanId ? "Current Plan" : `Upgrade to ${plan.name}`}
+                {plan.id === currentPlanId ? "Current Plan" : `Upgrade Soon`}
               </Button>
             </CardFooter>
           </Card>
