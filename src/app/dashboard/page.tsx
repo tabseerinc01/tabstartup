@@ -344,7 +344,7 @@ export default function DashboardOverviewPage() {
              </Card>
           </section>
 
-          {/* Recent Activity */}
+          {/* Recent Activity Timeline */}
           <section className="space-y-6">
              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 px-2">Recent Timeline</h3>
              <div className="space-y-4">

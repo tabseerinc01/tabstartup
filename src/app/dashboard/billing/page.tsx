@@ -1,15 +1,13 @@
 
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, onSnapshot, query, collection, where, serverTimestamp, getDocs, writeBatch, increment, updateDoc } from 'firebase/firestore';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { doc, onSnapshot, query, collection, where } from 'firebase/firestore';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { 
   CreditCard, 
   Check, 
@@ -17,8 +15,6 @@ import {
   ShieldCheck, 
   TrendingUp, 
   Loader2, 
-  ArrowRight,
-  Sparkles,
   Crown,
   Activity,
   Users,
@@ -26,13 +22,9 @@ import {
   LayoutGrid,
   CheckSquare,
   FileText,
-  Rocket,
-  Copy,
-  Gift,
-  Plus
+  Rocket
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
 
 const PLANS = [
   {
@@ -125,11 +117,9 @@ const PLANS = [
 export default function BillingPage() {
   const { user } = useUser();
   const firestore = useFirestore();
-  const { toast } = useToast();
   
   const [profile, setProfile] = useState<any>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
-  const [isCopied, setIsCopied] = useState(false);
 
   // 1. Scoped Profile Listener
   useEffect(() => {
@@ -146,7 +136,7 @@ export default function BillingPage() {
     return () => unsubscribe();
   }, [firestore, user?.uid]);
 
-  // Scoped Usage Queries - Architecture Alignment
+  // Scoped Usage Queries - Reinforced with ownership filters
   const connectionsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid));
@@ -192,10 +182,6 @@ export default function BillingPage() {
   const currentPlanId = profile?.plan || 'basic';
   const currentPlan = PLANS.find(p => p.id === currentPlanId) || PLANS[0];
   const bonusLimits = profile?.bonusLimits || { connections: 0, pitches: 0, contacts: 0, deals: 0, tasks: 0, invoices: 0 };
-
-  const referralLink = typeof window !== 'undefined' 
-    ? `${window.location.origin}/signup?ref=${profile?.referralCode || ''}` 
-    : '';
 
   const usageData = useMemo(() => {
     const activeDealsCount = (deals || []).filter(d => !['Won', 'Lost'].includes(d.stage)).length;
