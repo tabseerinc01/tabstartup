@@ -76,32 +76,50 @@ export default function DashboardOverviewPage() {
   const [startup, setStartup] = useState<any>(null);
   const [startupViews, setStartupViews] = useState(0);
 
-  // --- Real-time Collections Queries ---
+  // --- Real-time Collections Queries (Standardized with ownerUid) ---
   const tasksQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid), orderBy('createdAt', 'desc'), limit(3));
+    return query(
+      collection(firestore, 'tasks'), 
+      where('ownerUid', '==', user.uid), 
+      orderBy('createdAt', 'desc'), 
+      limit(3)
+    );
   }, [firestore, user?.uid]);
   const { data: recentTasks } = useCollection(tasksQ);
 
   const dealsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid), orderBy('updatedAt', 'desc'), limit(3));
+    return query(
+      collection(firestore, 'deals'), 
+      where('ownerUid', '==', user.uid), 
+      orderBy('updatedAt', 'desc'), 
+      limit(3)
+    );
   }, [firestore, user?.uid]);
   const { data: recentDeals } = useCollection(dealsQ);
 
   const contactsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid));
+    return query(
+      collection(firestore, 'contacts'), 
+      where('ownerUid', '==', user.uid)
+    );
   }, [firestore, user?.uid]);
   const { data: allContacts } = useCollection(contactsQ);
 
   const invoicesQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid), orderBy('createdAt', 'desc'), limit(3));
+    return query(
+      collection(firestore, 'invoices'), 
+      where('ownerUid', '==', user.uid), 
+      orderBy('createdAt', 'desc'), 
+      limit(3)
+    );
   }, [firestore, user?.uid]);
   const { data: recentInvoices } = useCollection(invoicesQ);
 
-  // --- Summary Counts ---
+  // --- Summary Counts (Standardized with explicit security rules compatibility) ---
   const [stats, setStats] = useState({
     pendingConnections: 0,
     acceptedConnections: 0,
@@ -142,7 +160,7 @@ export default function DashboardOverviewPage() {
           totalInvoices: invSnap.data().count
         });
       } catch (e) {
-        console.error("Stats Loading Error:", e);
+        console.warn("Stats evaluation error (likely permissions):", e);
       }
     }
 

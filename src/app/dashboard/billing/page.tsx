@@ -133,7 +133,7 @@ export default function BillingPage() {
   const [isClaiming, setIsClaiming] = useState(false);
   const claimingRef = useRef(false);
 
-  // 1. Real-time Profile Listener with Memoized Reference
+  // 1. Real-time Profile Listener
   useEffect(() => {
     if (!firestore || !user?.uid) return;
 
@@ -141,17 +141,6 @@ export default function BillingPage() {
       if (snap.exists()) {
         const data = snap.data();
         setProfile(data);
-        
-        // Auto-initialize required fields if missing (Safe one-time initialization)
-        if (!data.plan || !data.referralCode || !data.bonusLimits) {
-          const updates: any = {};
-          if (!data.plan) { updates.plan = 'basic'; updates.subscriptionStatus = 'inactive'; }
-          if (!data.referralCode) { updates.referralCode = 'TAB-' + Math.random().toString(36).substring(2, 7).toUpperCase(); }
-          if (!data.bonusLimits) {
-            updates.bonusLimits = { connections: 0, pitches: 0, contacts: 0, deals: 0, tasks: 0, invoices: 0 };
-          }
-          updateDoc(snap.ref, updates).catch(() => {}); // silent fail for auto-init
-        }
       }
       setIsProfileLoading(false);
     });
@@ -159,7 +148,7 @@ export default function BillingPage() {
     return () => unsubscribe();
   }, [firestore, user?.uid]);
 
-  // Usage Queries - All memoized to prevent re-render loops
+  // Usage Queries - Scoped by ownerUid/initiatorUid/etc. to comply with Security Rules
   const connectionsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid));
@@ -207,64 +196,6 @@ export default function BillingPage() {
     return query(collection(firestore, 'referrals'), where('referrerUid', '==', user.uid));
   }, [firestore, user?.uid]);
   const { data: referralsData } = useCollection(referralsQ);
-
-  // Stable Claim Function for Production Reliability
-  const claimRewards = useCallback(async () => {
-    if (!firestore || !user?.uid || claimingRef.current) return;
-    
-    claimingRef.current = true;
-    setIsClaiming(true);
-    
-    try {
-      const pendingRewardsQ = query(
-        collection(firestore, 'referrals'),
-        where('referrerUid', '==', user.uid),
-        where('referredProfileCompleted', '==', true)
-      );
-
-      const snap = await getDocs(pendingRewardsQ);
-      const docsToReward = snap.docs.filter(d => !d.data().rewardGranted);
-
-      if (docsToReward.length > 0) {
-        const batch = writeBatch(firestore);
-        let bc = 0, bp = 0, bcon = 0, bd = 0, bt = 0, bi = 0;
-
-        docsToReward.forEach(d => {
-          batch.update(d.ref, { rewardGranted: true, rewardGrantedAt: serverTimestamp() });
-          bc += 5; bp += 2; bcon += 10; bd += 2; bt += 2; bi += 1;
-        });
-
-        const userRef = doc(firestore, 'users', user.uid);
-        batch.update(userRef, {
-          'bonusLimits.connections': increment(bc),
-          'bonusLimits.pitches': increment(bp),
-          'bonusLimits.contacts': increment(bcon),
-          'bonusLimits.deals': increment(bd),
-          'bonusLimits.tasks': increment(bt),
-          'bonusLimits.invoices': increment(bi),
-          updatedAt: serverTimestamp()
-        });
-
-        await batch.commit();
-        toast({ title: "Rewards Earned!", description: `Bonuses from ${docsToReward.length} referrals applied.` });
-      }
-    } catch (e) {
-      console.error("Reward Processing Error:", e);
-    } finally {
-      claimingRef.current = false;
-      setIsClaiming(false);
-    }
-  }, [firestore, user?.uid, toast]);
-
-  // Observer to trigger reward collection
-  useEffect(() => {
-    if (referralsData && referralsData.length > 0) {
-      const hasUnclaimed = referralsData.some(r => r.referredProfileCompleted && !r.rewardGranted);
-      if (hasUnclaimed) {
-        claimRewards();
-      }
-    }
-  }, [referralsData, claimRewards]);
 
   const currentPlanId = profile?.plan || 'basic';
   const currentPlan = PLANS.find(p => p.id === currentPlanId) || PLANS[0];
@@ -328,7 +259,6 @@ export default function BillingPage() {
              </div>
           </div>
           <Badge variant="outline" className="bg-white border-primary/20 text-primary font-black text-[10px] uppercase h-7 px-3">
-            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
             Verified Referrals: {referralsData?.length || 0}
           </Badge>
         </div>
