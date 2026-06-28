@@ -1,23 +1,17 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { useFirestore, useUser } from '@/firebase';
-import { collection, getDocs, doc, updateDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, serverTimestamp, query, orderBy, where } from 'firebase/firestore';
 import { 
   Rocket, 
   Loader2, 
-  Eye, 
   Star, 
-  CheckCircle2, 
-  EyeOff, 
   Search,
-  Filter,
-  ArrowUpRight,
-  ShieldCheck,
-  ShieldAlert,
-  MoreHorizontal
+  ShieldCheck
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   Table, 
@@ -32,7 +26,6 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { logAdminAction } from '@/lib/audit-logs';
-import Link from 'next/link';
 
 export default function StartupOversightPage() {
   const { user: currentAdmin } = useUser();
@@ -49,11 +42,18 @@ export default function StartupOversightPage() {
     if (!firestore) return;
     setIsLoading(true);
     try {
-      const q = query(collection(firestore, 'startups'), orderBy('createdAt', 'desc'));
+      // Audited: Standardizing broad list queries for startups to include status filter
+      // to avoid permission rejections in content-protected environments.
+      const q = query(
+        collection(firestore, 'startups'), 
+        where('status', 'in', ['active', 'hidden']),
+        orderBy('createdAt', 'desc')
+      );
       const snap = await getDocs(q);
       setStartups(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) {
-      toast({ title: "Fetch Failed", variant: "destructive" });
+      console.error("Fetch Failed:", e);
+      toast({ title: "Fetch Failed", description: "Venture records restricted.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -79,7 +79,7 @@ export default function StartupOversightPage() {
         ...updates,
         updatedAt: serverTimestamp()
       });
-      await logAdminAction(firestore, currentAdmin.uid, actionName, id);
+      await logAdminAction(firestore, currentAdmin.uid, actionName as any, id);
       setStartups(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
       toast({ title: "Status Updated" });
     } catch (e) {

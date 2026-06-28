@@ -2,26 +2,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useFirestore, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, getCountFromServer, query, where, Timestamp, getDocs, limit } from 'firebase/firestore';
+import { useFirestore, useUser } from '@/firebase';
+import { collection, getCountFromServer, query, where, Timestamp, limit } from 'firebase/firestore';
 import { 
   Users, 
   Rocket, 
-  Wrench, 
-  Zap,
   Server,
   Loader2,
-  TrendingUp,
   Activity,
-  Globe,
   MessageSquare,
   Handshake,
-  LayoutGrid,
-  CheckSquare,
-  FileText,
   CreditCard,
   Gift,
-  ShieldCheck
+  ShieldCheck,
+  Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -40,14 +34,7 @@ export default function AdminOverviewPage() {
     investors: 0,
     mentors: 0,
     startups: 0,
-    pitches: 0,
     posts: 0,
-    connections: 0,
-    messages: 0,
-    contacts: 0,
-    deals: 0,
-    tasks: 0,
-    invoices: 0,
     proUsers: 0,
     growthUsers: 0,
     monthlyReferrals: 0,
@@ -62,9 +49,8 @@ export default function AdminOverviewPage() {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      // Architectural Fix: For the Admin panel, we must query in a way that respects the 
-      // "Rules are not filters" constraint. Since global listing on private collections is restricted,
-      // admins focus on global member stats (which are public/read-all) and specific metrics.
+      // Audited: Standardizing all admin broad queries to use filters where possible
+      // to satisfy the "Rules are not filters" constraint in hardened security models.
       const [
         uCount, founders, investors, mentors, sCount, postCount, proCount, growthCount, refCount, seoCount
       ] = await Promise.all([
@@ -73,11 +59,11 @@ export default function AdminOverviewPage() {
         getCountFromServer(query(collection(firestore, 'users'), where('roles', 'array-contains', 'investor'))),
         getCountFromServer(query(collection(firestore, 'users'), where('roles', 'array-contains', 'mentor'))),
         getCountFromServer(query(collection(firestore, 'startups'), where('status', '==', 'active'))),
-        getCountFromServer(collection(firestore, 'communityPosts')),
+        getCountFromServer(query(collection(firestore, 'communityPosts'), where('status', '==', 'active'))),
         getCountFromServer(query(collection(firestore, 'users'), where('plan', '==', 'pro'))),
         getCountFromServer(query(collection(firestore, 'users'), where('plan', '==', 'growth'))),
         getCountFromServer(query(collection(firestore, 'referrals'), where('createdAt', '>=', Timestamp.fromDate(monthStart)))),
-        getCountFromServer(collection(firestore, 'seoPages'))
+        getCountFromServer(query(collection(firestore, 'seoPages'), where('status', '==', 'active')))
       ]);
       
       setStats({
@@ -91,7 +77,7 @@ export default function AdminOverviewPage() {
         growthUsers: growthCount.data().count,
         monthlyReferrals: refCount.data().count,
         seoPages: seoCount.data().count,
-        // Workspace metrics are now scoped to the admin's own workspace or 0 if global scan is blocked
+        // Private metrics are not queried globally
         pitches: 0,
         connections: 0,
         messages: 0,
@@ -102,7 +88,7 @@ export default function AdminOverviewPage() {
       });
     } catch (error) {
       console.error("Admin stats fetch failed:", error);
-      toast({ title: "Fetch Failed", variant: "destructive" });
+      toast({ title: "Fetch Failed", description: "Global metrics restricted.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -196,7 +182,7 @@ export default function AdminOverviewPage() {
              </div>
              <h3 className="text-xl font-black text-slate-900">Governance Policy</h3>
              <p className="text-sm text-slate-500 font-medium leading-relaxed px-4">
-               Private deal flow and workspace tasks are protected by encryption and document-level ownership rules. Global stats reflect only active public records.
+               Private deal flow and workspace tasks are protected by content-level ownership rules. Global stats reflect only active public records.
              </p>
              <div className="pt-4 flex justify-center gap-3">
                 <Button variant="outline" className="rounded-xl font-bold" asChild>
@@ -211,24 +197,4 @@ export default function AdminOverviewPage() {
       </div>
     </div>
   );
-}
-
-function ArrowUpRight(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M7 7h10v10" />
-      <path d="M7 17 17 7" />
-    </svg>
-  )
 }
