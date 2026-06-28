@@ -51,15 +51,17 @@ service cloud.firestore {
     }
 
     match /contacts/{contactId} {
-      allow get, list: if isAdmin();
-      allow get, list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow list: if isAdmin();
+      allow get: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
     }
     
     match /deals/{dealId} {
-      allow get, list: if isAdmin();
-      allow get, list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow list: if isAdmin();
+      allow get: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
 
@@ -68,16 +70,17 @@ service cloud.firestore {
     }
 
     match /invoices/{invoiceId} {
-      allow get: if true;
       allow list: if isAdmin();
+      allow get: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
       allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
     }
 
     match /tasks/{taskId} {
-      allow get, list: if isAdmin();
-      allow get, list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow list: if isAdmin();
+      allow get: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
       match /activities/{activityId} { allow read, write: if isSignedIn(); }
@@ -124,7 +127,7 @@ service cloud.firestore {
 
     match /startups/{startupId} {
       allow get: if true;
-      allow list: if resource.data.status == 'active' || resource.data.ownerUid == request.auth.uid || isAdmin();
+      allow list: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid) || resource.data.status == 'active';
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isOwner(resource.data.ownerUid) || isAdmin();
       allow delete: if isAdmin();
