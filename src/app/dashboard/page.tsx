@@ -101,18 +101,6 @@ export default function DashboardOverviewPage() {
   }, [firestore, user?.uid]);
   const { data: recentInvoices } = useCollection(invoicesQ);
 
-  const connectionsQ = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid), where('status', '==', 'pending'), limit(5));
-  }, [firestore, user?.uid]);
-  const { data: pendingConns } = useCollection(connectionsQ);
-
-  const pitchesQ = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'venturePitches'), where('recipientUid', '==', user.uid), where('status', '==', 'pending'), limit(5));
-  }, [firestore, user?.uid]);
-  const { data: pendingPitches } = useCollection(pitchesQ);
-
   // --- Summary Counts ---
   const [stats, setStats] = useState({
     pendingConnections: 0,
@@ -130,43 +118,50 @@ export default function DashboardOverviewPage() {
     async function loadStats() {
       if (!firestore || !user?.uid) return;
       
-      const [pSnap, aSnap, pitchSnap, intSnap, contactSnap, dealSnap, taskSnap, invSnap] = await Promise.all([
-        getCountFromServer(query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid), where('status', '==', 'pending'))),
-        getCountFromServer(query(collection(firestore, 'connections'), where('status', '==', 'accepted'), where('initiatorUid', '==', user.uid))),
-        getCountFromServer(query(collection(firestore, 'venturePitches'), where('recipientUid', '==', user.uid))),
-        getCountFromServer(query(collection(firestore, 'notifications'), where('recipientUid', '==', user.uid), where('type', '==', 'investor_interest'))),
-        getCountFromServer(query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid))),
-        getCountFromServer(query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid))),
-        getCountFromServer(query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid), where('status', '!=', 'Completed'))),
-        getCountFromServer(query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid)))
-      ]);
+      try {
+        const [pSnap, aSnap, pitchSnap, intSnap, contactSnap, dealSnap, taskSnap, invSnap] = await Promise.all([
+          getCountFromServer(query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid), where('status', '==', 'pending'))),
+          getCountFromServer(query(collection(firestore, 'connections'), where('status', '==', 'accepted'), where('initiatorUid', '==', user.uid))),
+          getCountFromServer(query(collection(firestore, 'venturePitches'), where('recipientUid', '==', user.uid))),
+          getCountFromServer(query(collection(firestore, 'notifications'), where('recipientUid', '==', user.uid), where('type', '==', 'investor_interest'))),
+          getCountFromServer(query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid))),
+          getCountFromServer(query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid))),
+          getCountFromServer(query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid), where('status', '!=', 'Completed'))),
+          getCountFromServer(query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid)))
+        ]);
 
-      setStats({
-        pendingConnections: pSnap.data().count,
-        acceptedConnections: aSnap.data().count,
-        unreadMessages: 0, // Placeholder for real-time unread chat logic
-        investorInterests: intSnap.data().count,
-        venturePitches: pitchSnap.data().count,
-        totalContacts: contactSnap.data().count,
-        activeDeals: dealSnap.data().count,
-        pendingTasks: taskSnap.data().count,
-        totalInvoices: invSnap.data().count
-      });
+        setStats({
+          pendingConnections: pSnap.data().count,
+          acceptedConnections: aSnap.data().count,
+          unreadMessages: 0, 
+          investorInterests: intSnap.data().count,
+          venturePitches: pitchSnap.data().count,
+          totalContacts: contactSnap.data().count,
+          activeDeals: dealSnap.data().count,
+          pendingTasks: taskSnap.data().count,
+          totalInvoices: invSnap.data().count
+        });
+      } catch (e) {
+        console.error("Stats Loading Error:", e);
+      }
     }
 
     async function loadIdentity() {
       if (!firestore || !user?.uid) return;
-      const [profileSnap, startupSnap] = await Promise.all([
-        getDoc(doc(firestore, 'users', user.uid)),
-        getDoc(doc(firestore, 'startups', user.uid))
-      ]);
+      try {
+        const [profileSnap, startupSnap] = await Promise.all([
+          getDoc(doc(firestore, 'users', user.uid)),
+          getDoc(doc(firestore, 'startups', user.uid))
+        ]);
 
-      if (profileSnap.exists()) setProfile(profileSnap.data());
-      if (startupSnap.exists()) {
-        setStartup(startupSnap.data());
-        // Fetch startup views count
-        const viewsSnap = await getCountFromServer(collection(firestore, 'startups', user.uid, 'views'));
-        setStartupViews(viewsSnap.data().count);
+        if (profileSnap.exists()) setProfile(profileSnap.data());
+        if (startupSnap.exists()) {
+          setStartup(startupSnap.data());
+          const viewsSnap = await getCountFromServer(collection(firestore, 'startups', user.uid, 'views'));
+          setStartupViews(viewsSnap.data().count);
+        }
+      } catch (e) {
+        console.error("Identity Loading Error:", e);
       }
     }
 
@@ -326,7 +321,7 @@ export default function DashboardOverviewPage() {
             </div>
           </section>
 
-          {/* --- SECTION 5: WORKSPACE (Moved lower) --- */}
+          {/* --- SECTION 5: WORKSPACE --- */}
           <section className="space-y-6 pt-6 border-t border-slate-100">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-slate-100 rounded-xl"><LayoutGrid className="h-5 w-5 text-slate-600" /></div>
@@ -414,9 +409,9 @@ export default function DashboardOverviewPage() {
                 <div className="space-y-2">
                    <div className="flex justify-between text-[10px] font-black uppercase">
                       <span className="text-slate-400">Networking Usage</span>
-                      <span className="text-slate-900">12 / 50</span>
+                      <span className="text-slate-900">{stats.pendingConnections + stats.acceptedConnections} / 50</span>
                    </div>
-                   <Progress value={24} className="h-1" />
+                   <Progress value={((stats.pendingConnections + stats.acceptedConnections) / 50) * 100} className="h-1" />
                 </div>
                 <Button className="w-full rounded-xl font-bold h-11" asChild>
                    <Link href="/dashboard/billing">View Rewards & Upgrade</Link>

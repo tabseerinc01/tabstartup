@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -30,6 +31,7 @@ import Link from 'next/link';
 
 export default function AdminOverviewPage() {
   const firestore = useFirestore();
+  const { user: currentAdmin } = useUser();
   const { toast } = useToast();
   
   const [stats, setStats] = useState<any>({
@@ -54,12 +56,13 @@ export default function AdminOverviewPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = async () => {
-    if (!firestore) return;
+    if (!firestore || !currentAdmin) return;
     setIsLoading(true);
     try {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
+      // Note: Broad counts are allowed for Admins in firestore.rules
       const [
         uCount, founders, investors, mentors, sCount, pCount, postCount, connCount, 
         chatCount, contactCount, dealCount, taskCount, invCount, proCount, growthCount, refCount, seoCount
@@ -103,7 +106,7 @@ export default function AdminOverviewPage() {
         seoPages: seoCount.data().count
       });
     } catch (error) {
-      console.error(error);
+      console.error("Admin stats fetch failed:", error);
       toast({ title: "Fetch Failed", variant: "destructive" });
     } finally {
       setIsLoading(false);
@@ -111,8 +114,10 @@ export default function AdminOverviewPage() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, [firestore]);
+    if (currentAdmin) {
+      fetchData();
+    }
+  }, [firestore, currentAdmin]);
 
   const metrics = [
     { label: 'Total Members', value: stats.users, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
