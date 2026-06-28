@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -45,7 +44,9 @@ import {
    Briefcase,
    Smartphone,
    CircleHelp,
-   Compass
+   Compass,
+   Activity,
+   GraduationCap
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -500,7 +501,7 @@ export default function DashboardOverviewPage() {
                       </div>
                    </div>
                    <div className="space-y-3">
-                      <Progress value={userPlan === 'basic' ? 30 : 100} className="h-1.5 bg-white/10" />
+                      <Progress value={profile?.plan === 'basic' ? 30 : 100} className="h-1.5 bg-white/10" />
                       <p className="text-[10px] font-bold text-slate-400">Expand your ecosystem capacity.</p>
                    </div>
                    <Button className="w-full rounded-xl font-bold h-11 shadow-lg shadow-primary/20" asChild>
@@ -584,43 +585,4 @@ export default function DashboardOverviewPage() {
       </div>
     </div>
   );
-}
-
-function ArrowRight(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M5 12h14" />
-      <path d="m12 5 7 7-7 7" />
-    </svg>
-  )
-}
-
-function Activity(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-    </svg>
-  )
 }
