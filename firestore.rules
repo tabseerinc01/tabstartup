@@ -118,9 +118,8 @@ service cloud.firestore {
     }
 
     match /startups/{startupId} {
-      // Allow 'get' for everyone to avoid crashes on profile pages, but UI filters by status
       allow get: if true;
-      allow list: if resource.data.status == 'active' || isAdmin();
+      allow list: if resource.data.status == 'active' || resource.data.ownerUid == request.auth.uid || isAdmin();
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isOwner(resource.data.ownerUid) || isAdmin();
       allow delete: if isAdmin();

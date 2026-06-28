@@ -35,7 +35,8 @@ import {
   MoreVertical,
   ChevronRight,
   FileText,
-  Zap
+  Zap,
+  ArrowUpRight
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -83,11 +84,15 @@ export default function DealDetailsPage() {
   }, [firestore, dealId]);
   const { data: activities } = useCollection(activitiesQuery);
 
-  // 4. Fetch Linked Tasks
+  // 4. Fetch Linked Tasks - Added ownerUid filter to satisfy security rules
   const tasksQuery = useMemoFirebase(() => {
-    if (!firestore || !dealId) return null;
-    return query(collection(firestore, 'tasks'), where('dealId', '==', dealId));
-  }, [firestore, dealId]);
+    if (!firestore || !dealId || !user?.uid) return null;
+    return query(
+      collection(firestore, 'tasks'), 
+      where('ownerUid', '==', user.uid),
+      where('dealId', '==', dealId)
+    );
+  }, [firestore, dealId, user?.uid]);
   const { data: linkedTasks } = useCollection(tasksQuery);
 
   const logActivity = (type: string, details: string) => {
@@ -177,7 +182,7 @@ export default function DealDetailsPage() {
       <div className="flex flex-col items-center justify-center p-20 text-center">
         <XCircle className="h-12 w-12 text-destructive mb-4" />
         <h2 className="text-2xl font-black">Access Restricted</h2>
-        <p className="text-slate-500 mb-6">This deal is private to its owner.</p>
+        <p className="text-slate-500 mb-6">This document is private to its owner.</p>
         <Button onClick={() => router.push('/dashboard/pipeline')}>Back to Pipeline</Button>
       </div>
     );
@@ -474,7 +479,7 @@ export default function DealDetailsPage() {
                        <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary ring-4 ring-background z-10 ml-[13px]" />
                        <div className="flex-1 min-w-0">
                           <p className="text-xs font-bold text-slate-800 leading-tight">{activity.details}</p>
-                          <p className="text-[9px] font-black text-slate-400 uppercase mt-1">
+                          <p className="text-[10px] font-black text-slate-400 uppercase mt-1">
                              {activity.createdAt?.toDate ? format(activity.createdAt.toDate(), 'MMM d, p') : 'Just now'}
                           </p>
                        </div>
