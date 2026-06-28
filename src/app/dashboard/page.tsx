@@ -46,7 +46,8 @@ import {
    CircleHelp,
    Compass,
    Activity,
-   GraduationCap
+   GraduationCap,
+   Handshake
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -284,6 +285,14 @@ export default function DashboardOverviewPage() {
   const trust = profile ? calculateTrustScore(profile, startup) : 0;
   const displayName = profile?.fullName || user?.displayName || user?.email?.split('@')[0];
   const role = profile?.primaryRole || profile?.role || 'Founder';
+
+  if (isUserLoading) {
+    return (
+      <div className="flex h-full items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary opacity-20" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-20">
