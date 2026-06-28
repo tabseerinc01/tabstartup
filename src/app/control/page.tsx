@@ -62,7 +62,8 @@ export default function AdminOverviewPage() {
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      // Note: Broad counts are allowed for Admins in firestore.rules
+      // Note: Broad counts are only allowed for Admins in hardened firestore.rules
+      // Separation of admin list and owner list rules ensures these queries succeed for admins.
       const [
         uCount, founders, investors, mentors, sCount, pCount, postCount, connCount, 
         chatCount, contactCount, dealCount, taskCount, invCount, proCount, growthCount, refCount, seoCount

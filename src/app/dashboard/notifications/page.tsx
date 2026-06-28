@@ -52,7 +52,7 @@ export default function NotificationsPage() {
   useEffect(() => {
     if (!firestore || !user?.uid) return;
 
-    // Simplified query for max reliability without composite indexing
+    // Standardized query with mandatory recipientUid filter to satisfy hardened security rules
     const q = query(
       collection(firestore, 'notifications'),
       where('recipientUid', '==', user.uid)
@@ -60,7 +60,7 @@ export default function NotificationsPage() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Client-side sort to avoid index requirements
+      // Client-side sort to avoid complex index requirements while maintaining strict security
       const sorted = list.sort((a: any, b: any) => {
         const tA = a.createdAt?.toMillis?.() || 0;
         const tB = b.createdAt?.toMillis?.() || 0;
@@ -118,7 +118,6 @@ export default function NotificationsPage() {
   const handleNotificationClick = (n: any) => {
     handleMarkAsRead(n.id);
     
-    // Logic for routing based on notification target
     if (n.type === 'message' && n.targetId) {
       router.push(`/chats/${n.targetId}`);
     } else if (n.type === 'venture_pitch') {
@@ -216,28 +215,8 @@ export default function NotificationsPage() {
                       <p className={`text-sm leading-relaxed ${!n.read ? 'text-slate-600 font-medium' : 'text-slate-500'}`}>
                         {n.message}
                       </p>
-                      
-                      <div className="pt-2 flex items-center justify-between">
-                         <div className="flex items-center gap-1 text-[10px] font-black text-primary uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity">
-                            View details <ChevronRight className="h-3 w-3" />
-                         </div>
-                         <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 rounded-lg text-slate-300 hover:text-destructive hover:bg-destructive/5 opacity-0 group-hover:opacity-100 transition-all"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(n.id);
-                          }}
-                         >
-                           <Trash2 className="h-4 w-4" />
-                         </Button>
-                      </div>
                     </div>
                   </div>
-                  {!n.read && (
-                    <div className="absolute top-0 right-0 w-12 h-12 bg-primary/5 rounded-bl-full pointer-events-none" />
-                  )}
                 </CardContent>
               </Card>
             );

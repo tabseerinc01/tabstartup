@@ -130,8 +130,6 @@ export default function BillingPage() {
   const [profile, setProfile] = useState<any>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [isCopied, setIsCopied] = useState(false);
-  const [isClaiming, setIsClaiming] = useState(false);
-  const claimingRef = useRef(false);
 
   // 1. Real-time Profile Listener
   useEffect(() => {
@@ -148,7 +146,7 @@ export default function BillingPage() {
     return () => unsubscribe();
   }, [firestore, user?.uid]);
 
-  // Usage Queries - Scoped by ownerUid/initiatorUid/etc. to comply with Security Rules
+  // Usage Queries - Explicitly filtered by ownerUid to comply with hardened security rules
   const connectionsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid));
