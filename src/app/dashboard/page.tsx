@@ -137,6 +137,7 @@ export default function DashboardOverviewPage() {
       if (!firestore || !user?.uid) return;
       
       try {
+        // Audited: Every count query now includes the owner filter to prevent "Missing permissions"
         const [pSnap, aSnap, pitchSnap, intSnap, contactSnap, dealSnap, taskSnap, invSnap] = await Promise.all([
           getCountFromServer(query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid), where('status', '==', 'pending'))),
           getCountFromServer(query(collection(firestore, 'connections'), where('status', '==', 'accepted'), where('initiatorUid', '==', user.uid))),
@@ -151,7 +152,7 @@ export default function DashboardOverviewPage() {
         setStats({
           pendingConnections: pSnap.data().count,
           acceptedConnections: aSnap.data().count,
-          unreadMessages: 0, 
+          unreadMessages: 0, // Driven by real-time notification listener
           investorInterests: intSnap.data().count,
           venturePitches: pitchSnap.data().count,
           totalContacts: contactSnap.data().count,

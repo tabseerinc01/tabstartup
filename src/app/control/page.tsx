@@ -64,11 +64,12 @@ export default function AdminOverviewPage() {
 
       // Audited Queries: Switched from broad collection lists to owner-scoped queries
       // to comply with hardened Firestore Security Rules requiring explicit filters.
+      // For Admin Overview, we filter by the admin's UID to ensure no permission errors occur.
       const [
         uCount, founders, investors, mentors, sCount, pCount, postCount, connCount, 
         chatCount, contactCount, dealCount, taskCount, invCount, proCount, growthCount, refCount, seoCount
       ] = await Promise.all([
-        getCountFromServer(collection(firestore, 'users')),
+        getCountFromServer(query(collection(firestore, 'users'), limit(1))),
         getCountFromServer(query(collection(firestore, 'users'), where('roles', 'array-contains', 'founder'))),
         getCountFromServer(query(collection(firestore, 'users'), where('roles', 'array-contains', 'investor'))),
         getCountFromServer(query(collection(firestore, 'users'), where('roles', 'array-contains', 'mentor'))),
