@@ -82,8 +82,7 @@ export default function DashboardOverviewPage() {
     return query(
       collection(firestore, 'tasks'), 
       where('ownerUid', '==', user.uid), 
-      orderBy('createdAt', 'desc'), 
-      limit(3)
+      limit(5)
     );
   }, [firestore, user?.uid]);
   const { data: recentTasks } = useCollection(tasksQ);
@@ -93,8 +92,7 @@ export default function DashboardOverviewPage() {
     return query(
       collection(firestore, 'deals'), 
       where('ownerUid', '==', user.uid), 
-      orderBy('updatedAt', 'desc'), 
-      limit(3)
+      limit(5)
     );
   }, [firestore, user?.uid]);
   const { data: recentDeals } = useCollection(dealsQ);
@@ -103,7 +101,8 @@ export default function DashboardOverviewPage() {
     if (!firestore || !user?.uid) return null;
     return query(
       collection(firestore, 'contacts'), 
-      where('ownerUid', '==', user.uid)
+      where('ownerUid', '==', user.uid),
+      limit(10)
     );
   }, [firestore, user?.uid]);
   const { data: allContacts } = useCollection(contactsQ);
@@ -113,8 +112,7 @@ export default function DashboardOverviewPage() {
     return query(
       collection(firestore, 'invoices'), 
       where('ownerUid', '==', user.uid), 
-      orderBy('createdAt', 'desc'), 
-      limit(3)
+      limit(5)
     );
   }, [firestore, user?.uid]);
   const { data: recentInvoices } = useCollection(invoicesQ);
