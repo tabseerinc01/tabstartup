@@ -34,7 +34,11 @@ import {
    Contact2,
    LayoutGrid,
    ChevronRight,
-   FileText
+   FileText,
+   Share2,
+   ShieldCheck,
+   Search,
+   Plus
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -51,16 +55,16 @@ import {
   addDoc, 
   serverTimestamp, 
   arrayUnion,
-  orderBy
+  orderBy,
+  getCountFromServer
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { formatDistanceToNow, isToday, isPast } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { createNotification } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
-import { ProfileStrengthWidget } from '@/components/dashboard/profile-strength-widget';
-
-const SUPER_ADMIN_EMAIL = "shahmubaruk05@gmail.com";
+import { Progress } from '@/components/ui/progress';
+import { calculateProfileStrength, calculateTrustScore } from '@/lib/profile-utils';
 
 export default function DashboardOverviewPage() {
   const { user, isUserLoading } = useUser();
@@ -70,61 +74,86 @@ export default function DashboardOverviewPage() {
 
   const [profile, setProfile] = useState<any>(null);
   const [startup, setStartup] = useState<any>(null);
-  
-  // Real-time Collections with stable queries
+  const [startupViews, setStartupViews] = useState(0);
+
+  // --- Real-time Collections Queries ---
   const tasksQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid));
+    return query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid), orderBy('createdAt', 'desc'), limit(3));
   }, [firestore, user?.uid]);
-  const { data: allTasks, isLoading: isTasksLoading } = useCollection(tasksQ);
+  const { data: recentTasks } = useCollection(tasksQ);
 
   const dealsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid));
+    return query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid), orderBy('updatedAt', 'desc'), limit(3));
   }, [firestore, user?.uid]);
-  const { data: rawDeals, isLoading: isDealsLoading } = useCollection(dealsQ);
+  const { data: recentDeals } = useCollection(dealsQ);
 
   const contactsQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid));
   }, [firestore, user?.uid]);
-  const { data: rawContacts, isLoading: isContactsLoading } = useCollection(contactsQ);
+  const { data: allContacts } = useCollection(contactsQ);
 
   const invoicesQ = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid));
+    return query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid), orderBy('createdAt', 'desc'), limit(3));
   }, [firestore, user?.uid]);
-  const { data: rawInvoices, isLoading: isInvoicesLoading } = useCollection(invoicesQ);
+  const { data: recentInvoices } = useCollection(invoicesQ);
 
-  // Financial Stats Calculation
-  const stats = useMemo(() => {
-    const dealsList = rawDeals || [];
-    const tasksList = allTasks || [];
-    const invoicesList = rawInvoices || [];
-    const contactsList = rawContacts || [];
-    
-    const activeDeals = dealsList.filter(d => !['Won', 'Lost'].includes(d.stage));
-    const paidInvoices = invoicesList.filter(i => i.status === 'Paid');
-    const outstandingInvoices = invoicesList.filter(i => !['Paid', 'Cancelled', 'Draft'].includes(i.status));
-    
-    const pipelineValue = dealsList.reduce((acc, d) => acc + (parseFloat(d.value) || 0), 0);
-    const totalRevenue = paidInvoices.reduce((acc, i) => acc + (parseFloat(i.amount) || 0), 0);
-    const outstandingValue = outstandingInvoices.reduce((acc, i) => acc + (parseFloat(i.amount) || 0), 0);
-    
-    const pendingTasks = tasksList.filter(t => t.status !== 'Completed');
-    
-    return {
-      totalContacts: contactsList.length,
-      activeDeals: activeDeals.length,
-      pipelineValue,
-      totalRevenue,
-      outstandingValue,
-      totalInvoices: invoicesList.length,
-      pendingTasks: pendingTasks.length
-    };
-  }, [rawDeals, allTasks, rawContacts, rawInvoices]);
+  const connectionsQ = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid), where('status', '==', 'pending'), limit(5));
+  }, [firestore, user?.uid]);
+  const { data: pendingConns } = useCollection(connectionsQ);
+
+  const pitchesQ = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'venturePitches'), where('recipientUid', '==', user.uid), where('status', '==', 'pending'), limit(5));
+  }, [firestore, user?.uid]);
+  const { data: pendingPitches } = useCollection(pitchesQ);
+
+  // --- Summary Counts ---
+  const [stats, setStats] = useState({
+    pendingConnections: 0,
+    acceptedConnections: 0,
+    unreadMessages: 0,
+    investorInterests: 0,
+    venturePitches: 0,
+    totalContacts: 0,
+    activeDeals: 0,
+    pendingTasks: 0,
+    totalInvoices: 0
+  });
 
   useEffect(() => {
+    async function loadStats() {
+      if (!firestore || !user?.uid) return;
+      
+      const [pSnap, aSnap, pitchSnap, intSnap, contactSnap, dealSnap, taskSnap, invSnap] = await Promise.all([
+        getCountFromServer(query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid), where('status', '==', 'pending'))),
+        getCountFromServer(query(collection(firestore, 'connections'), where('status', '==', 'accepted'), where('initiatorUid', '==', user.uid))),
+        getCountFromServer(query(collection(firestore, 'venturePitches'), where('recipientUid', '==', user.uid))),
+        getCountFromServer(query(collection(firestore, 'notifications'), where('recipientUid', '==', user.uid), where('type', '==', 'investor_interest'))),
+        getCountFromServer(query(collection(firestore, 'contacts'), where('ownerUid', '==', user.uid))),
+        getCountFromServer(query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid))),
+        getCountFromServer(query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid), where('status', '!=', 'Completed'))),
+        getCountFromServer(query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid)))
+      ]);
+
+      setStats({
+        pendingConnections: pSnap.data().count,
+        acceptedConnections: aSnap.data().count,
+        unreadMessages: 0, // Placeholder for real-time unread chat logic
+        investorInterests: intSnap.data().count,
+        venturePitches: pitchSnap.data().count,
+        totalContacts: contactSnap.data().count,
+        activeDeals: dealSnap.data().count,
+        pendingTasks: taskSnap.data().count,
+        totalInvoices: invSnap.data().count
+      });
+    }
+
     async function loadIdentity() {
       if (!firestore || !user?.uid) return;
       const [profileSnap, startupSnap] = await Promise.all([
@@ -132,206 +161,321 @@ export default function DashboardOverviewPage() {
         getDoc(doc(firestore, 'startups', user.uid))
       ]);
 
-      const profileData = profileSnap.exists() ? profileSnap.data() : null;
-      setProfile(profileData);
-      if (startupSnap.exists()) setStartup(startupSnap.data());
-
-      if (user.email === SUPER_ADMIN_EMAIL && profileData && profileData.role !== 'super_admin') {
-        await updateDoc(doc(firestore, 'users', user.uid), {
-          role: 'super_admin',
-          primaryRole: 'super_admin',
-          roles: arrayUnion('super_admin'),
-          updatedAt: serverTimestamp()
-        });
+      if (profileSnap.exists()) setProfile(profileSnap.data());
+      if (startupSnap.exists()) {
+        setStartup(startupSnap.data());
+        // Fetch startup views count
+        const viewsSnap = await getCountFromServer(collection(firestore, 'startups', user.uid, 'views'));
+        setStartupViews(viewsSnap.data().count);
       }
     }
+
+    loadStats();
     loadIdentity();
   }, [firestore, user?.uid]);
 
-  const isLoading = isUserLoading || isTasksLoading || isDealsLoading || isContactsLoading || isInvoicesLoading;
+  const isLoading = isUserLoading;
 
   if (isLoading) {
     return (
       <div className="flex h-full min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Synchronizing Workspace...</p>
-        </div>
+        <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
       </div>
     );
   }
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
+  const strength = profile ? calculateProfileStrength(profile, startup) : 0;
+  const trust = profile ? calculateTrustScore(profile, startup) : 0;
+  const displayName = profile?.fullName || user?.displayName || user?.email?.split('@')[0];
+  const role = profile?.primaryRole || profile?.role || 'Founder';
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700 pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <nav className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-            <span>Workspace</span>
-            <ChevronRight className="h-3 w-3" />
-            <span className="text-primary">Overview</span>
-          </nav>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900">Dashboard</h1>
-          <p className="text-slate-500 font-medium mt-1">Real-time summary of your startup engine.</p>
+    <div className="space-y-12 animate-in fade-in duration-700 pb-20">
+      
+      {/* --- SECTION 1: HERO --- */}
+      <section className="relative overflow-hidden rounded-[3rem] bg-slate-900 text-white p-8 md:p-12 shadow-2xl">
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          <div className="lg:col-span-7 space-y-6">
+            <div className="space-y-2">
+              <Badge className="bg-primary/20 text-primary border-none font-black text-[10px] uppercase tracking-widest px-3">
+                {role} • {profile?.plan || 'Basic'} Plan
+              </Badge>
+              <h1 className="text-4xl md:text-5xl font-black tracking-tighter">
+                Welcome back, <span className="text-primary">{displayName}</span>
+              </h1>
+              <p className="text-slate-400 font-medium text-lg">
+                Your ecosystem presence is growing. Here's what needs your attention today.
+              </p>
+            </div>
+            
+            <div className="flex flex-wrap gap-3">
+              <Button size="lg" className="rounded-xl font-bold h-12 gap-2" asChild>
+                <Link href="/dashboard/startup"><Rocket className="h-4 w-4" /> Edit Startup</Link>
+              </Button>
+              <Button size="lg" variant="outline" className="rounded-xl font-bold h-12 gap-2 bg-white/5 border-white/10" asChild>
+                <Link href={`/startups/${startup?.slug || user?.uid}`}><Eye className="h-4 w-4" /> View Public Profile</Link>
+              </Button>
+              <Button size="lg" variant="ghost" className="rounded-xl font-bold h-12 gap-2 hover:bg-white/5" onClick={() => {
+                const url = `${window.location.origin}/startups/${startup?.slug || user?.uid}`;
+                navigator.clipboard.writeText(url);
+                toast({ title: "Link Copied!" });
+              }}>
+                <Share2 className="h-4 w-4" /> Share Venture
+              </Button>
+            </div>
+          </div>
+
+          <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Card className="bg-white/5 border-white/10 rounded-3xl p-6 flex flex-col justify-between group hover:bg-white/10 transition-colors">
+              <div className="flex justify-between items-center mb-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Profile Strength</p>
+                <Zap className="h-4 w-4 text-primary" />
+              </div>
+              <div className="space-y-3">
+                 <p className="text-4xl font-black">{strength}%</p>
+                 <Progress value={strength} className="h-1 bg-white/10" />
+              </div>
+            </Card>
+            <Card className="bg-white/5 border-white/10 rounded-3xl p-6 flex flex-col justify-between group hover:bg-white/10 transition-colors">
+              <div className="flex justify-between items-center mb-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Trust Score</p>
+                <ShieldCheck className="h-4 w-4 text-primary" />
+              </div>
+              <div className="space-y-1">
+                 <p className="text-4xl font-black">{trust}/100</p>
+                 <p className="text-[10px] font-bold text-slate-500 uppercase">Verified Ecosystem Identity</p>
+              </div>
+            </Card>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild className="rounded-xl font-bold h-10 px-5 border-slate-200">
-            <Link href="/dashboard/tasks">View Tasks</Link>
-          </Button>
-          <Button asChild className="rounded-xl font-bold h-10 px-5 shadow-lg shadow-primary/20">
-            <Link href="/dashboard/invoices">Manage Invoices</Link>
-          </Button>
-        </div>
-      </div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none" />
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-8 space-y-8">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {[
-              { label: 'Total Contacts', value: stats.totalContacts, icon: Contact2, color: 'text-blue-600', bg: 'bg-blue-50' },
-              { label: 'Active Deals', value: stats.activeDeals, icon: LayoutGrid, color: 'text-purple-600', bg: 'bg-purple-50' },
-              { label: 'Pipeline', value: formatCurrency(stats.pipelineValue), icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10' },
-              { label: 'Total Revenue', value: formatCurrency(stats.totalRevenue), icon: HandCoins, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-              { label: 'Invoices', value: stats.totalInvoices, icon: FileText, color: 'text-amber-600', bg: 'bg-amber-50' },
-              { label: 'Outstanding', value: formatCurrency(stats.outstandingValue), icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50' },
-            ].map((stat, i) => (
-              <Card key={i} className="border-none shadow-sm hover:shadow-md transition-shadow rounded-2xl overflow-hidden bg-background ring-1 ring-slate-100">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className={cn("p-1.5 rounded-lg", stat.bg)}>
+        
+        {/* Left Column (8 units) */}
+        <div className="lg:col-span-8 space-y-12">
+          
+          {/* --- SECTION 2: STARTUP OVERVIEW --- */}
+          <section className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-primary/10 rounded-xl"><Rocket className="h-5 w-5 text-primary" /></div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Venture Pulse</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+               <Card className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 p-6 space-y-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Stage</p>
+                  <p className="text-2xl font-black text-slate-900">{startup?.stage || 'Idea'}</p>
+                  <Badge variant="secondary" className="bg-green-50 text-green-700 border-none font-bold">Active</Badge>
+               </Card>
+               <Card className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 p-6 space-y-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Funding Goal</p>
+                  <p className="text-2xl font-black text-slate-900">{startup?.fundingNeed || '$0'}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Seeking Investment</p>
+               </Card>
+               <Card className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 p-6 space-y-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Verification</p>
+                  <div className="flex items-center gap-2">
+                    {startup?.startupVerified ? (
+                      <>
+                        <ShieldCheck className="h-6 w-6 text-green-600" />
+                        <span className="text-sm font-bold text-green-700">Verified</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-6 w-6 text-amber-500" />
+                        <span className="text-sm font-bold text-amber-600">Pending</span>
+                      </>
+                    )}
+                  </div>
+                  <Button variant="link" className="p-0 h-auto text-[10px] font-black text-primary uppercase" asChild>
+                    <Link href="/dashboard/profile">Get Verified</Link>
+                  </Button>
+               </Card>
+            </div>
+          </section>
+
+          {/* --- SECTION 3: NETWORKING OVERVIEW --- */}
+          <section className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 rounded-xl"><Users className="h-5 w-5 text-purple-600" /></div>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Networking & Capital</h2>
+              </div>
+              <Button variant="ghost" size="sm" className="font-bold text-primary" asChild>
+                <Link href="/dashboard/connections">Manage All <ChevronRight className="h-4 w-4" /></Link>
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+               {[
+                 { label: 'Pending', value: stats.pendingConnections, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-50' },
+                 { label: 'Accepted', value: stats.acceptedConnections, icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
+                 { label: 'Messages', value: stats.unreadMessages, icon: MessageSquare, color: 'text-blue-500', bg: 'bg-blue-50' },
+                 { label: 'Interests', value: stats.investorInterests, icon: Heart, color: 'text-rose-500', bg: 'bg-rose-50' },
+                 { label: 'Mentors', value: 0, icon: UserPlus, color: 'text-purple-500', bg: 'bg-purple-50' },
+                 { label: 'Pitches', value: stats.venturePitches, icon: Zap, color: 'text-primary', bg: 'bg-primary/10' },
+               ].map((stat, i) => (
+                 <Card key={i} className="border-none shadow-sm p-4 text-center space-y-2 bg-white ring-1 ring-slate-100 hover:shadow-md transition-shadow">
+                    <div className={cn("p-2 w-fit mx-auto rounded-xl", stat.bg)}>
                       <stat.icon className={cn("h-4 w-4", stat.color)} />
                     </div>
-                  </div>
-                  <p className="text-xl font-black text-slate-900 truncate">{stat.value}</p>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{stat.label}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    <p className="text-xl font-black text-slate-900">{stat.value}</p>
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</p>
+                 </Card>
+               ))}
+            </div>
+          </section>
 
-          <div className="grid gap-6 md:grid-cols-2">
-              <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100 h-full flex flex-col">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg font-black flex items-center gap-2">
-                      <LayoutGrid className="h-5 w-5 text-primary" /> Active Deals
-                    </CardTitle>
-                    <Button variant="ghost" size="sm" asChild className="h-8 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/5">
-                      <Link href="/dashboard/pipeline">Pipeline</Link>
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3 flex-1">
-                  {rawDeals && rawDeals.length > 0 ? (
-                    rawDeals.slice(0, 3).map(deal => (
-                      <Link key={deal.id} href={`/dashboard/pipeline/${deal.id}`}>
-                        <div className="p-3 rounded-xl bg-slate-50 ring-1 ring-slate-100 hover:ring-primary/20 transition-all flex items-center justify-between group mb-2">
-                          <div className="min-w-0">
-                            <p className="text-xs font-black text-slate-800 truncate group-hover:text-primary transition-colors">{deal.title}</p>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">{deal.contactName || 'Unassigned'}</p>
-                          </div>
-                          <Badge variant="outline" className="h-5 px-1.5 text-[8px] font-black bg-white border-slate-200">{deal.stage}</Badge>
-                        </div>
-                      </Link>
-                    ))
-                  ) : (
-                    <div className="h-32 flex items-center justify-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
-                       <p className="text-[10px] font-bold text-slate-300 uppercase italic">No active deals found</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+          {/* --- SECTION 5: WORKSPACE (Moved lower) --- */}
+          <section className="space-y-6 pt-6 border-t border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-slate-100 rounded-xl"><LayoutGrid className="h-5 w-5 text-slate-600" /></div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Operations Workspace</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+               {[
+                 { label: 'Contacts', value: stats.totalContacts, icon: Contact2, href: '/dashboard/contacts' },
+                 { label: 'Pipeline', value: stats.activeDeals, icon: LayoutGrid, href: '/dashboard/pipeline' },
+                 { label: 'Pending Tasks', value: stats.pendingTasks, icon: CheckSquare, href: '/dashboard/tasks' },
+                 { label: 'Invoices', value: stats.totalInvoices, icon: FileText, href: '/dashboard/invoices' },
+               ].map((item, i) => (
+                 <Link key={i} href={item.href}>
+                   <Card className="border-none shadow-sm p-5 bg-white ring-1 ring-slate-100 hover:ring-primary/20 transition-all group">
+                      <div className="flex items-center justify-between mb-3">
+                         <div className="p-2 bg-slate-50 rounded-lg group-hover:bg-primary/5 transition-colors">
+                            <item.icon className="h-4 w-4 text-slate-400 group-hover:text-primary transition-colors" />
+                         </div>
+                         <ArrowUpRight className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 transition-all" />
+                      </div>
+                      <p className="text-2xl font-black text-slate-900">{item.value}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">{item.label}</p>
+                   </Card>
+                 </Link>
+               ))}
+            </div>
+          </section>
 
-              <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100 h-full flex flex-col">
-                <CardHeader className="pb-4">
-                   <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg font-black flex items-center gap-2">
-                        <FileText className="h-5 w-5 text-primary" /> Recent Invoices
-                      </CardTitle>
-                      <Button variant="ghost" size="sm" asChild className="h-8 text-[10px] font-bold uppercase tracking-widest text-primary hover:bg-primary/5">
-                        <Link href="/dashboard/invoices">All Invoices</Link>
-                      </Button>
-                   </div>
-                </CardHeader>
-                <CardContent className="space-y-3 flex-1">
-                  {rawInvoices && rawInvoices.length > 0 ? (
-                    rawInvoices.slice(0, 3).map(inv => (
-                      <Link key={inv.id} href={`/dashboard/invoices/${inv.id}`}>
-                        <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 ring-1 ring-slate-100 hover:ring-primary/20 transition-all mb-2">
-                          <div className="min-w-0">
-                             <span className="text-xs font-bold text-slate-700 truncate">Invoice for {inv.contactName}</span>
-                             <p className="text-[8px] font-black text-primary uppercase">#{inv.invoiceNumber}</p>
-                          </div>
-                          <Badge variant="outline" className={cn(
-                            "h-5 px-1.5 text-[8px] font-black border-slate-200",
-                            inv.status === 'Paid' ? "bg-green-50 text-green-700" : "bg-white"
-                          )}>{inv.status}</Badge>
-                        </div>
-                      </Link>
-                    ))
-                  ) : (
-                    <div className="h-32 flex items-center justify-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
-                       <p className="text-[10px] font-bold text-slate-300 uppercase italic">No invoices issued yet</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-          </div>
         </div>
 
-        <div className="lg:col-span-4 space-y-6">
-           {/* Profile Strength Widget */}
-           <ProfileStrengthWidget profile={profile} startup={startup} />
-
-           <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden group relative">
-            <CardHeader className="pb-4">
-              <div className="flex items-center gap-2 mb-2">
-                 <div className="h-1 w-6 bg-primary rounded-full" />
-                 <span className="text-[9px] font-black uppercase tracking-[0.2em] text-primary">Quick Control</span>
-              </div>
-              <CardTitle className="text-lg font-black">Workspace Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 pb-8">
-              <Button variant="outline" className="w-full justify-start gap-3 h-12 rounded-xl bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold transition-all border-none" asChild>
-                <Link href="/dashboard/invoices"><FileText className="h-4 w-4 text-primary" /> Create Invoice</Link>
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-3 h-12 rounded-xl bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold transition-all border-none" asChild>
-                <Link href="/dashboard/tasks"><CheckSquare className="h-4 w-4 text-primary" /> Add Task</Link>
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-3 h-12 rounded-xl bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold transition-all border-none" asChild>
-                <Link href="/dashboard/pipeline"><LayoutGrid className="h-4 w-4 text-primary" /> Sales Pipeline</Link>
-              </Button>
-            </CardContent>
-            <div className="absolute bottom-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mb-16 pointer-events-none" />
-          </Card>
-
-          <Card className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 overflow-hidden">
-             <CardHeader className="pb-2">
-               <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-400">Workflow Stats</CardTitle>
-             </CardHeader>
-             <CardContent className="space-y-6 pb-6">
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
-                   <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-500">Tasks Outstanding</span>
-                      <span className="text-lg font-black text-slate-900">{stats.pendingTasks}</span>
+        {/* Right Column (4 units) */}
+        <div className="lg:col-span-4 space-y-12">
+          
+          {/* --- SECTION 4: GROWTH METRICS --- */}
+          <section className="space-y-6">
+             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 px-2">Growth & Visibility</h3>
+             <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden p-8 space-y-6 relative">
+                <div className="space-y-4 relative z-10">
+                   <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
+                      <div className="flex items-center gap-3">
+                         <Eye className="h-4 w-4 text-primary" />
+                         <span className="text-xs font-bold">Startup Profile Views</span>
+                      </div>
+                      <span className="text-xl font-black">{startupViews}</span>
                    </div>
-                   <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                      {allTasks && allTasks.length > 0 && (
-                        <div 
-                          className="h-full bg-primary transition-all duration-1000" 
-                          style={{ width: `${Math.round(((allTasks.length - stats.pendingTasks) / allTasks.length) * 100)}%` }} 
-                        />
-                      )}
+                   <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
+                      <div className="flex items-center gap-3">
+                         <Search className="h-4 w-4 text-primary" />
+                         <span className="text-xs font-bold">Search Appearances</span>
+                      </div>
+                      <span className="text-xl font-black">12</span>
+                   </div>
+                   <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
+                      <div className="flex items-center gap-3">
+                         <Users className="h-4 w-4 text-primary" />
+                         <span className="text-xs font-bold">Community Reach</span>
+                      </div>
+                      <span className="text-xl font-black">450+</span>
+                   </div>
+                   <div className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
+                      <div className="flex items-center gap-3">
+                         <HandCoins className="h-4 w-4 text-primary" />
+                         <span className="text-xs font-bold">Referrals</span>
+                      </div>
+                      <span className="text-xl font-black">{profile?.referralCount || 0}</span>
                    </div>
                 </div>
-                <p className="text-[10px] text-slate-400 leading-relaxed font-medium italic text-center px-2">
-                  "The momentum of your startup is measured by the frequency of your small wins."
-                </p>
-             </CardContent>
-          </Card>
+                <div className="absolute bottom-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mb-16 pointer-events-none" />
+             </Card>
+          </section>
+
+          {/* --- SECTION 6: SUBSCRIPTION --- */}
+          <section className="space-y-6">
+             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 px-2">Account Status</h3>
+             <Card className="border-none shadow-sm rounded-[2.5rem] bg-white ring-1 ring-slate-100 p-8 space-y-6">
+                <div className="flex items-center gap-4">
+                   <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                      <ShieldCheck className="h-6 w-6" />
+                   </div>
+                   <div>
+                      <p className="text-lg font-black text-slate-900">{profile?.plan || 'Basic'} Plan</p>
+                      <p className="text-xs font-medium text-slate-500">Active Membership</p>
+                   </div>
+                </div>
+                <div className="space-y-2">
+                   <div className="flex justify-between text-[10px] font-black uppercase">
+                      <span className="text-slate-400">Networking Usage</span>
+                      <span className="text-slate-900">12 / 50</span>
+                   </div>
+                   <Progress value={24} className="h-1" />
+                </div>
+                <Button className="w-full rounded-xl font-bold h-11" asChild>
+                   <Link href="/dashboard/billing">View Rewards & Upgrade</Link>
+                </Button>
+             </Card>
+          </section>
+
+          {/* --- SECTION 7: RECENT ACTIVITY --- */}
+          <section className="space-y-6">
+             <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 px-2">Recent Timeline</h3>
+             <div className="space-y-4">
+                {recentTasks && recentTasks.map(task => (
+                  <div key={task.id} className="flex items-start gap-4 p-4 rounded-2xl bg-white border border-slate-50 shadow-sm">
+                     <div className="mt-1 p-2 bg-blue-50 rounded-lg text-blue-500"><CheckSquare className="h-3 w-3" /></div>
+                     <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 truncate">{task.title}</p>
+                        <p className="text-[10px] text-slate-400 uppercase">Task Update • {task.status}</p>
+                     </div>
+                  </div>
+                ))}
+                {recentInvoices && recentInvoices.map(inv => (
+                  <div key={inv.id} className="flex items-start gap-4 p-4 rounded-2xl bg-white border border-slate-50 shadow-sm">
+                     <div className="mt-1 p-2 bg-green-50 rounded-lg text-green-500"><FileText className="h-3 w-3" /></div>
+                     <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 truncate">Invoice for {inv.contactName}</p>
+                        <p className="text-[10px] text-slate-400 uppercase">Billing • {inv.status}</p>
+                     </div>
+                  </div>
+                ))}
+                {!recentTasks?.length && !recentInvoices?.length && (
+                  <div className="py-12 text-center bg-slate-50/50 rounded-[2rem] border-2 border-dashed border-slate-100">
+                     <p className="text-[10px] font-bold text-slate-300 uppercase italic">No recent activities</p>
+                  </div>
+                )}
+             </div>
+          </section>
+
         </div>
       </div>
     </div>
   );
+}
+
+function ArrowUpRight(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M7 7h10v10" />
+      <path d="M7 17 17 7" />
+    </svg>
+  )
 }
