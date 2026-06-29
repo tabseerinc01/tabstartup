@@ -1,9 +1,9 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, query, where, addDoc, serverTimestamp, getDocs, doc, getDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Calendar, Plus, Clock, CheckCircle2, User, MoreVertical } from 'lucide-react';
@@ -32,16 +32,26 @@ export default function MentorshipSessionsPage() {
   });
 
   // Scoped query for security rule compliance
+  // Temporarily removing orderBy to avoid index-related permission issues during prototyping
   const sessionsQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
       collection(firestore, 'mentorshipSessions'),
-      where('mentorUid', '==', user.uid),
-      orderBy('scheduledAt', 'desc')
+      where('mentorUid', '==', user.uid)
     );
   }, [firestore, user?.uid]);
 
-  const { data: sessions, isLoading } = useCollection(sessionsQuery);
+  const { data: rawSessions, isLoading } = useCollection(sessionsQuery);
+
+  // Client-side sorting
+  const sessions = useMemo(() => {
+    if (!rawSessions) return [];
+    return [...rawSessions].sort((a, b) => {
+      const dateA = a.scheduledAt ? new Date(a.scheduledAt).getTime() : 0;
+      const dateB = b.scheduledAt ? new Date(b.scheduledAt).getTime() : 0;
+      return dateB - dateA;
+    });
+  }, [rawSessions]);
 
   // Load active founders for selection
   useEffect(() => {
@@ -56,8 +66,6 @@ export default function MentorshipSessionsPage() {
           where('status', '==', 'accepted')
         );
         const snap = await getDocs(q);
-        // In a real app we'd fetch full user profiles here, but connection data usually has some basic info
-        // or we'd have it in cache. For now, we use existing connection data.
         setActiveFounders(snap.docs.map(d => ({ id: d.data().initiatorUid, ...d.data() })));
       } catch (e) {
         console.error("Founders fetch failed:", e);
@@ -187,7 +195,7 @@ export default function MentorshipSessionsPage() {
       </div>
 
       <div className="space-y-4">
-        {sessions && sessions.length > 0 ? (
+        {sessions.length > 0 ? (
           sessions.map((session) => (
             <Card key={session.id} className="border-none shadow-sm hover:shadow-md transition-all rounded-3xl bg-background ring-1 ring-slate-100 overflow-hidden">
               <CardContent className="p-6">
