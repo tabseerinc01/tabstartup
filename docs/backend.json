@@ -15,8 +15,8 @@
         "roles": { "type": "array", "items": { "type": "string" } },
         "plan": { "type": "string", "enum": ["basic", "pro", "growth"], "default": "basic" },
         "subscriptionStatus": { "type": "string", "enum": ["active", "inactive", "past_due"], "default": "inactive" },
-        "referralCode": { "type": "string", "description": "Unique referral code for the user." },
-        "referralCount": { "type": "number", "default": 0, "description": "Number of successful referrals." },
+        "referralCode": { "type": "string" },
+        "referralCount": { "type": "number", "default": 0 },
         "imageUrl": { "type": "string" },
         "coverImageUrl": { "type": "string" },
         "headline": { "type": "string" },
@@ -30,59 +30,70 @@
       },
       "required": ["uid", "fullName", "email", "createdAt", "updatedAt"]
     },
+    "SavedStartup": {
+      "title": "SavedStartup",
+      "type": "object",
+      "description": "A startup bookmarked by an investor.",
+      "properties": {
+        "investorUid": { "type": "string" },
+        "startupId": { "type": "string" },
+        "startupName": { "type": "string" },
+        "isWatchlist": { "type": "boolean", "default": false },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["investorUid", "startupId", "createdAt"]
+    },
+    "MentorshipSession": {
+      "title": "MentorshipSession",
+      "type": "object",
+      "description": "A scheduled guidance session between a mentor and founder.",
+      "properties": {
+        "mentorUid": { "type": "string" },
+        "founderUid": { "type": "string" },
+        "founderName": { "type": "string" },
+        "scheduledAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["scheduled", "completed", "cancelled"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["mentorUid", "founderUid", "status", "scheduledAt"]
+    },
     "Referral": {
       "title": "Referral",
       "type": "object",
-      "description": "Records a successful sign-up through a referral link.",
       "properties": {
         "referrerUid": { "type": "string" },
         "referredUid": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["referrerUid", "referredUid", "createdAt"]
+      }
     },
     "Startup": {
       "title": "Startup",
       "type": "object",
-      "description": "A venture profile listed on the platform.",
       "properties": {
         "ownerUid": { "type": "string" },
         "name": { "type": "string" },
-        "slug": { "type": "string", "description": "SEO friendly URL identifier." },
-        "shortDescription": { "type": "string" },
-        "industry": { "type": "string" },
-        "stage": { "type": "string" },
+        "slug": { "type": "string" },
         "status": { "type": "string", "enum": ["active", "hidden"] },
-        "featured": { "type": "boolean" },
-        "startupVerified": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["ownerUid", "name", "slug", "status"]
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
     },
     "VenturePitch": {
       "title": "VenturePitch",
       "type": "object",
-      "description": "A startup opportunity submission from a founder to an investor.",
       "properties": {
         "senderUid": { "type": "string" },
-        "senderName": { "type": "string" },
         "recipientUid": { "type": "string" },
-        "startupId": { "type": "string" },
-        "startupName": { "type": "string" },
-        "pitchMessage": { "type": "string" },
         "status": { "type": "string", "enum": ["pending", "reviewed", "accepted", "rejected"] },
         "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["senderUid", "recipientUid", "status", "createdAt"]
+      }
     },
     "Contact": {
       "title": "Contact",
       "type": "object",
       "properties": {
         "ownerUid": { "type": "string" },
-        "contactName": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "contactName": { "type": "string" }
       }
     },
     "Deal": {
@@ -90,8 +101,7 @@
       "type": "object",
       "properties": {
         "ownerUid": { "type": "string" },
-        "title": { "type": "string" },
-        "stage": { "type": "string" }
+        "title": { "type": "string" }
       }
     },
     "Invoice": {
@@ -107,8 +117,7 @@
       "type": "object",
       "properties": {
         "ownerUid": { "type": "string" },
-        "title": { "type": "string" },
-        "status": { "type": "string" }
+        "title": { "type": "string" }
       }
     }
   },
@@ -122,8 +131,16 @@
         "definition": { "entityName": "User", "schema": { "$ref": "#/backend/entities/User" }, "description": "User profile data." }
       },
       {
+        "path": "/savedStartups/{saveId}",
+        "definition": { "entityName": "SavedStartup", "schema": { "$ref": "#/backend/entities/SavedStartup" }, "description": "Startups saved by investors." }
+      },
+      {
+        "path": "/mentorshipSessions/{sessionId}",
+        "definition": { "entityName": "MentorshipSession", "schema": { "$ref": "#/backend/entities/MentorshipSession" }, "description": "Mentorship logs." }
+      },
+      {
         "path": "/referrals/{referralId}",
-        "definition": { "entityName": "Referral", "schema": { "$ref": "#/backend/entities/Referral" }, "description": "Tracks signups via referral." }
+        "definition": { "entityName": "Referral", "schema": { "$ref": "#/backend/entities/Referral" }, "description": "Tracks referrals." }
       },
       {
         "path": "/startups/{startupId}",
@@ -131,23 +148,7 @@
       },
       {
         "path": "/venturePitches/{pitchId}",
-        "definition": { "entityName": "VenturePitch", "schema": { "$ref": "#/backend/entities/VenturePitch" }, "description": "Startup pitches to investors." }
-      },
-      {
-        "path": "/contacts/{contactId}",
-        "definition": { "entityName": "Contact", "schema": { "$ref": "#/backend/entities/Contact" }, "description": "Private contact records." }
-      },
-      {
-        "path": "/deals/{dealId}",
-        "definition": { "entityName": "Deal", "schema": { "$ref": "#/backend/entities/Deal" }, "description": "Private pipeline deals." }
-      },
-      {
-        "path": "/invoices/{invoiceId}",
-        "definition": { "entityName": "Invoice", "schema": { "$ref": "#/backend/entities/Invoice" }, "description": "Private billing invoices." }
-      },
-      {
-        "path": "/tasks/{taskId}",
-        "definition": { "entityName": "Task", "schema": { "$ref": "#/backend/entities/Task" }, "description": "Private workspace tasks." }
+        "definition": { "entityName": "VenturePitch", "schema": { "$ref": "#/backend/entities/VenturePitch" }, "description": "Investment pitches." }
       }
     ]
   }

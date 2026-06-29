@@ -79,7 +79,6 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
     account: true
   });
 
-  // Load profile data
   useEffect(() => {
     async function loadProfile() {
       if (!firestore || !user?.uid) return;
@@ -95,7 +94,6 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
     loadProfile();
   }, [firestore, user?.uid]);
 
-  // Unified listener for unread notifications to drive sidebar badges
   useEffect(() => {
     if (!firestore || !user?.uid) return;
 
@@ -117,7 +115,7 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
         const data = doc.data();
         if (data.type === 'message') {
           counts.messages++;
-        } else if (['connection', 'investor_interest', 'cofounder_interest'].includes(data.type)) {
+        } else if (['connection', 'investor_interest', 'cofounder_interest', 'mentorship_request'].includes(data.type)) {
           counts.connections++;
         } else if (data.type === 'venture_pitch') {
           counts.pitches++;
@@ -146,7 +144,6 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
   const isInvestor = roles.includes('investor');
   const isMentor = roles.includes('mentor');
 
-  // Build groups dynamically based on roles
   const groups: SidebarGroup[] = [
     {
       id: 'dashboard',
@@ -174,8 +171,8 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
       label: 'Investor',
       items: [
         { href: '/dashboard/pitches', label: 'Interests Sent', icon: Send },
-        { href: '#', label: 'Saved Startups', icon: Star, disabled: true, comingSoon: true },
-        { href: '#', label: 'Watchlist', icon: Eye, disabled: true, comingSoon: true },
+        { href: '/dashboard/investor/saved', label: 'Saved Startups', icon: Star },
+        { href: '/dashboard/investor/watchlist', label: 'Watchlist', icon: Eye },
       ]
     });
   }
@@ -186,8 +183,8 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
       label: 'Mentorship',
       items: [
         { href: '/dashboard/connections', label: 'Mentorship Requests', icon: GraduationCap, badgeCount: unreadCounts.connections },
-        { href: '#', label: 'Active Founders', icon: Users, disabled: true, comingSoon: true },
-        { href: '#', label: 'Sessions', icon: Calendar, disabled: true, comingSoon: true },
+        { href: '/dashboard/mentor/founders', label: 'Active Founders', icon: Users },
+        { href: '/dashboard/mentor/sessions', label: 'Sessions', icon: Calendar },
       ]
     });
   }
@@ -284,9 +281,6 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
                   </div>
                   
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {item.comingSoon && (
-                      <span className="text-[8px] font-black uppercase tracking-tighter text-slate-300 group-hover:text-slate-400">Coming Soon</span>
-                    )}
                     {item.badgeCount !== undefined && item.badgeCount > 0 && (
                       <Badge variant="destructive" className="h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] font-black rounded-full border-none shadow-sm shadow-destructive/20">
                         {item.badgeCount}

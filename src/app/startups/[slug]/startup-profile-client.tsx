@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -13,7 +14,8 @@ import {
   where,
   limit,
   serverTimestamp,
-  setDoc
+  setDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
@@ -38,7 +40,8 @@ import {
   FileText,
   AlertCircle,
   EyeOff,
-  Check
+  Check,
+  Star
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
@@ -54,13 +57,15 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   const [founder, setFounder] = useState<any>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [existingInterest, setExistingInterest] = useState<any>(null);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savedDocId, setSavedDocId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingInterest, setIsSubmittingInterest] = useState(false);
+  const [isSavingStartup, setIsSavingStartup] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   
   const hasAttemptedAutoSubmit = useRef(false);
 
-  // Load Startup and Founder Data
   useEffect(() => {
     async function loadData() {
       if (!firestore || !slugOrId) return;
@@ -68,7 +73,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       try {
         let startupDoc: any = null;
 
-        // 1. Try finding by SLUG field
         const slugQuery = query(
           collection(firestore, 'startups'),
           where('slug', '==', slugOrId),
@@ -79,12 +83,9 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         if (!slugSnap.empty) {
           startupDoc = { id: slugSnap.docs[0].id, ...slugSnap.docs[0].data() };
         } else {
-          // 2. Fallback to direct ID lookup (for legacy links)
           const idSnap = await getDoc(doc(firestore, 'startups', slugOrId));
           if (idSnap.exists()) {
             startupDoc = { id: idSnap.id, ...idSnap.data() };
-            
-            // AUTOMATIC REDIRECT: If found by ID and it has a slug, update URL
             if (startupDoc.slug && startupDoc.slug !== slugOrId) {
               router.replace(`/startups/${startupDoc.slug}`);
             }
@@ -99,20 +100,17 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         const ownerUid = startupDoc.ownerUid;
         setStartup(startupDoc);
 
-        // Load Founder Profile
         const founderSnap = await getDoc(doc(firestore, 'users', ownerUid));
         if (founderSnap.exists()) {
           setFounder(founderSnap.data());
         }
 
-        // Load Current User Status
         if (user?.uid) {
           const profileSnap = await getDoc(doc(firestore, 'users', user.uid));
           if (profileSnap.exists()) {
             const profileData = profileSnap.data();
             setCurrentUserProfile(profileData);
             
-            // Check visibility permissions
             const role = profileData.role || profileData.primaryRole;
             const isAdmin = role === 'admin' || role === 'super_admin';
             if (startupDoc.status === 'hidden' && user.uid !== ownerUid && !isAdmin) {
@@ -124,6 +122,18 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           if (interestSnap.exists()) {
             setExistingInterest(interestSnap.data());
           }
+
+          const savedQ = query(
+            collection(firestore, 'savedStartups'),
+            where('investorUid', '==', user.uid),
+            where('startupId', '==', ownerUid),
+            limit(1)
+          );
+          const savedSnap = await getDocs(savedQ);
+          if (!savedSnap.empty) {
+            setIsSaved(true);
+            setSavedDocId(savedSnap.docs[0].id);
+          }
         }
       } catch (error) {
         console.error("Startup Loading Error:", error);
@@ -134,6 +144,37 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
 
     loadData();
   }, [firestore, slugOrId, user?.uid, router]);
+
+  const handleSaveToggle = async () => {
+    if (!user || !firestore || !startup) {
+      toast({ title: "Login Required" });
+      return;
+    }
+    setIsSavingStartup(true);
+    try {
+      if (isSaved && savedDocId) {
+        await deleteDoc(doc(firestore, 'savedStartups', savedDocId));
+        setIsSaved(false);
+        setSavedDocId(null);
+        toast({ title: "Removed from Saved" });
+      } else {
+        const docRef = await addDoc(collection(firestore, 'savedStartups'), {
+          investorUid: user.uid,
+          startupId: startup.ownerUid,
+          startupName: startup.name,
+          isWatchlist: false,
+          createdAt: serverTimestamp()
+        });
+        setIsSaved(true);
+        setSavedDocId(docRef.id);
+        toast({ title: "Startup Saved" });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSavingStartup(false);
+    }
+  };
 
   const handleExpressInterest = useCallback(async () => {
     if (!firestore || !startup || isSubmittingInterest || existingInterest) return;
@@ -200,7 +241,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         setExistingInterest(basePayload);
         toast({ title: "Interest Shared", description: "The founder has been notified." });
         
-        // Create Connection Request
         const connectionData = {
           initiatorUid: user.uid,
           recipientUid: ownerUid,
@@ -212,7 +252,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         };
         addDoc(collection(firestore!, 'connections'), connectionData).catch(() => {});
 
-        // Send Notification to founder
         createNotification(firestore!, {
           recipientUid: ownerUid,
           actorUid: user.uid,
@@ -330,6 +369,17 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                   <div className="flex flex-wrap gap-3 w-full md:w-auto">
                     {!isOwnStartup && (
                       <>
+                        <Button 
+                          variant="outline" 
+                          size="icon" 
+                          onClick={handleSaveToggle} 
+                          className={cn(
+                            "rounded-2xl h-14 w-14 backdrop-blur-md transition-all",
+                            isSaved ? "bg-white text-primary border-white" : "bg-white/10 hover:bg-white/20 border-white/20 text-white"
+                          )}
+                        >
+                          <Star className={cn("h-6 w-6", isSaved && "fill-primary")} />
+                        </Button>
                         {existingInterest ? (
                           <Button disabled className="h-14 px-8 rounded-2xl bg-white/20 text-white border-white/10 backdrop-blur-md opacity-80">
                             <Check className="h-5 w-5 mr-2" /> Interest Shared
@@ -344,13 +394,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                             Express Interest
                           </Button>
                         )}
-                        <Button 
-                          variant="outline" 
-                          className="h-14 px-8 rounded-2xl text-base font-bold gap-2 border-white/30 text-white hover:bg-white/10 backdrop-blur-md" 
-                          onClick={() => router.push(`/dashboard/messages?startWith=${startup.ownerUid}`)}
-                        >
-                          <MessageSquare className="h-5 w-5" /> Message
-                        </Button>
                       </>
                     )}
                     <Button variant="outline" size="icon" onClick={copyListingLink} className="rounded-2xl h-14 w-14 bg-white/10 hover:bg-white/20 border-white/20 text-white backdrop-blur-md transition-all">
