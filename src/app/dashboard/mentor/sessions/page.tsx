@@ -22,6 +22,7 @@ export default function MentorshipSessionsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({ founderName: '', scheduledAt: '', notes: '' });
 
+  // Consolidating query to ensure it always includes the owner filter for security compliance
   const sessionsQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
@@ -48,7 +49,8 @@ export default function MentorshipSessionsPage() {
       setIsAddOpen(false);
       setFormData({ founderName: '', scheduledAt: '', notes: '' });
     } catch (e) {
-      console.error(e);
+      console.error("Session creation failed:", e);
+      toast({ title: "Error", description: "Could not schedule session.", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
