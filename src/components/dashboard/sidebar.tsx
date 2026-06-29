@@ -24,7 +24,11 @@ import {
   CheckSquare,
   FileText,
   Zap,
-  CreditCard
+  CreditCard,
+  Star,
+  Eye,
+  Calendar,
+  Send
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -41,6 +45,7 @@ interface SidebarItem {
   badgeCount?: number;
   showDot?: boolean;
   disabled?: boolean;
+  comingSoon?: boolean;
 }
 
 interface SidebarGroup {
@@ -66,6 +71,8 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     dashboard: true,
     startup: true,
+    investor: true,
+    mentorship: true,
     network: true,
     community: true,
     workspace: true,
@@ -134,9 +141,12 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
     setExpandedGroups(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const roles = profile?.roles || (profile?.role ? [profile.role] : []) || [];
+  const roles = (profile?.roles || (profile?.role ? [profile.role] : [])).filter(Boolean) as string[];
   const isFounder = roles.includes('founder');
+  const isInvestor = roles.includes('investor');
+  const isMentor = roles.includes('mentor');
 
+  // Build groups dynamically based on roles
   const groups: SidebarGroup[] = [
     {
       id: 'dashboard',
@@ -144,15 +154,45 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
       items: [
         { href: '/dashboard', label: 'Overview', icon: Home, showDot: unreadCounts.notifications > 0 },
       ]
-    },
-    {
+    }
+  ];
+
+  if (isFounder) {
+    groups.push({
       id: 'startup',
       label: 'Startup',
       items: [
         { href: '/dashboard/startup', label: 'My Venture', icon: Rocket },
         { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins },
       ]
-    },
+    });
+  }
+
+  if (isInvestor) {
+    groups.push({
+      id: 'investor',
+      label: 'Investor',
+      items: [
+        { href: '/dashboard/pitches', label: 'Interests Sent', icon: Send },
+        { href: '#', label: 'Saved Startups', icon: Star, disabled: true, comingSoon: true },
+        { href: '#', label: 'Watchlist', icon: Eye, disabled: true, comingSoon: true },
+      ]
+    });
+  }
+
+  if (isMentor) {
+    groups.push({
+      id: 'mentorship',
+      label: 'Mentorship',
+      items: [
+        { href: '/dashboard/connections', label: 'Mentorship Requests', icon: GraduationCap, badgeCount: unreadCounts.connections },
+        { href: '#', label: 'Active Founders', icon: Users, disabled: true, comingSoon: true },
+        { href: '#', label: 'Sessions', icon: Calendar, disabled: true, comingSoon: true },
+      ]
+    });
+  }
+
+  groups.push(
     {
       id: 'network',
       label: 'Network',
@@ -166,7 +206,7 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
       id: 'community',
       label: 'Community',
       items: [
-        { href: '/community', label: 'Ecosystem Feed', icon: Globe },
+        { href: '/community', label: 'Community Feed', icon: Globe },
         { href: '/founders', label: 'Founders', icon: Rocket },
         { href: '/investors', label: 'Investors', icon: ShieldAlert },
         { href: '/mentors', label: 'Mentors', icon: GraduationCap },
@@ -190,7 +230,7 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
         { href: '/dashboard/billing', label: 'Subscription', icon: CreditCard },
       ]
     }
-  ];
+  );
 
   return (
     <div className={cn("flex flex-col h-full bg-background", className)}>
@@ -244,6 +284,9 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
                   </div>
                   
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {item.comingSoon && (
+                      <span className="text-[8px] font-black uppercase tracking-tighter text-slate-300 group-hover:text-slate-400">Coming Soon</span>
+                    )}
                     {item.badgeCount !== undefined && item.badgeCount > 0 && (
                       <Badge variant="destructive" className="h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] font-black rounded-full border-none shadow-sm shadow-destructive/20">
                         {item.badgeCount}

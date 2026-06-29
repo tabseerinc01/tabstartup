@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -120,7 +121,7 @@ export default function DashboardOverviewPage() {
   const [stats, setStats] = useState({
     pendingConnections: 0,
     acceptedConnections: 0,
-    unreadMessages: 0,
+    unreadMessages: 0, 
     investorInterests: 0,
     venturePitches: 0,
     totalContacts: 0,
@@ -284,7 +285,7 @@ export default function DashboardOverviewPage() {
   const strength = profile ? calculateProfileStrength(profile, startup) : 0;
   const trust = profile ? calculateTrustScore(profile, startup) : 0;
   const displayName = profile?.fullName || user?.displayName || user?.email?.split('@')[0];
-  const role = profile?.primaryRole || profile?.role || 'Founder';
+  const activeRoles = (profile?.roles || (profile?.role ? [profile.role] : [])).filter(Boolean) as string[];
 
   if (isUserLoading) {
     return (
@@ -301,10 +302,17 @@ export default function DashboardOverviewPage() {
       <section className="relative overflow-hidden rounded-[3rem] bg-slate-900 text-white p-8 md:p-12 shadow-2xl">
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           <div className="lg:col-span-7 space-y-6">
-            <div className="space-y-2 text-center md:text-left">
-              <Badge className="bg-primary/20 text-primary border-none font-black text-[10px] uppercase tracking-widest px-3">
-                {role} • {profile?.plan || 'Basic'} Plan
-              </Badge>
+            <div className="space-y-4 text-center md:text-left">
+              <div className="flex flex-wrap justify-center md:justify-start gap-2">
+                {activeRoles.map(role => (
+                  <Badge key={role} className="bg-primary/20 text-primary border-none font-black text-[10px] uppercase tracking-widest px-3">
+                    {role}
+                  </Badge>
+                ))}
+                <Badge variant="outline" className="border-white/10 text-slate-400 font-bold text-[10px] px-3">
+                  {profile?.plan || 'Basic'} Plan
+                </Badge>
+              </div>
               <h1 className="text-4xl md:text-5xl font-black tracking-tighter">
                 Welcome back, <span className="text-primary">{displayName}</span>
               </h1>
