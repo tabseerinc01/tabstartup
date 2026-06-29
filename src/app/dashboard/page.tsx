@@ -48,7 +48,8 @@ import {
    Compass,
    Activity,
    GraduationCap,
-   Handshake
+   Handshake,
+   Star
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -555,7 +556,7 @@ export default function DashboardOverviewPage() {
                       <CardTitle className="text-xl font-black">Venture Overview</CardTitle>
                     </div>
                     {startup && (
-                      <Badge variant="outline" className="rounded-xl px-4 py-1 font-bold bg-white text-primary border-primary/20">
+                      <Badge variant="outline" className="rounded-xl px-4 py-1.5 font-bold bg-white text-primary border-primary/20">
                         {startup.stage} Stage
                       </Badge>
                     )}
