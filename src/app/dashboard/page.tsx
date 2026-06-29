@@ -137,7 +137,8 @@ export default function DashboardOverviewPage() {
     activeVenturePitches: 0,
     interestsSent: 0,
     connectedFounders: 0,
-    activeConversations: 0
+    activeConversations: 0,
+    mentorshipSessions: 0
   });
 
   useEffect(() => {
@@ -148,7 +149,7 @@ export default function DashboardOverviewPage() {
         const [
           pSnap, aSnap, pitchSnap, intSnap, contactSnap, 
           dealSnap, taskSnap, invSnap, connInvSnap, pendInvSnap, mentorSnap, activePitchSnap,
-          sentPitchSnap, connFounderSnap, chatSnap
+          sentPitchSnap, connFounderSnap, chatSnap, sessionSnap
         ] = await Promise.all([
           getCountFromServer(query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid), where('status', '==', 'pending'))),
           getCountFromServer(query(collection(firestore, 'connections'), where('status', '==', 'accepted'), where('initiatorUid', '==', user.uid))),
@@ -158,15 +159,14 @@ export default function DashboardOverviewPage() {
           getCountFromServer(query(collection(firestore, 'deals'), where('ownerUid', '==', user.uid))),
           getCountFromServer(query(collection(firestore, 'tasks'), where('ownerUid', '==', user.uid), where('status', '!=', 'Completed'))),
           getCountFromServer(query(collection(firestore, 'invoices'), where('ownerUid', '==', user.uid))),
-          // Networking
           getCountFromServer(query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid), where('type', '==', 'investor'), where('status', '==', 'accepted'))),
           getCountFromServer(query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid), where('type', '==', 'investor'), where('status', '==', 'pending'))),
           getCountFromServer(query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid), where('type', '==', 'mentor'), where('status', '==', 'accepted'))),
           getCountFromServer(query(collection(firestore, 'venturePitches'), where('senderUid', '==', user.uid), where('status', 'in', ['pending', 'reviewed']))),
-          // Investor Workspace Specifics
-          getCountFromServer(query(collection(firestore, 'venturePitches'), where('senderUid', '==', user.uid))), // Interests Sent
-          getCountFromServer(query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid), where('type', '==', 'founder'), where('status', '==', 'accepted'))), // Connected Founders
-          getCountFromServer(query(collection(firestore, 'chats'), where('participants', 'array-contains', user.uid))) // Active Conversations
+          getCountFromServer(query(collection(firestore, 'venturePitches'), where('senderUid', '==', user.uid))),
+          getCountFromServer(query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid), where('type', '==', 'founder'), where('status', '==', 'accepted'))),
+          getCountFromServer(query(collection(firestore, 'chats'), where('participants', 'array-contains', user.uid))),
+          getCountFromServer(query(collection(firestore, 'mentorshipSessions'), where('mentorUid', '==', user.uid)))
         ]);
 
         setStats({
@@ -185,7 +185,8 @@ export default function DashboardOverviewPage() {
           activeVenturePitches: activePitchSnap.data().count,
           interestsSent: sentPitchSnap.data().count,
           connectedFounders: connFounderSnap.data().count,
-          activeConversations: chatSnap.data().count
+          activeConversations: chatSnap.data().count,
+          mentorshipSessions: sessionSnap.data().count
         });
       } catch (e) {
         console.warn("Dashboard stats evaluation failed security check:", e);
@@ -221,11 +222,9 @@ export default function DashboardOverviewPage() {
       if (!firestore || !user?.uid) return;
       setIsRecLoading(true);
       try {
-        // Simple recommendation: Latest active startups
         const q = query(
           collection(firestore, 'startups'), 
           where('status', '==', 'active'),
-          orderBy('createdAt', 'desc'),
           limit(5)
         );
         const snap = await getDocs(q);
@@ -323,6 +322,7 @@ export default function DashboardOverviewPage() {
   const roles = (profile?.roles || (profile?.role ? [profile.role] : ['user'])).filter(Boolean) as string[];
   const isFounder = roles.includes('founder');
   const isInvestor = roles.includes('investor');
+  const isMentor = roles.includes('mentor');
 
   const strength = profile ? calculateProfileStrength(profile, startup) : 0;
   const trust = profile ? calculateTrustScore(profile, startup) : 0;
@@ -467,7 +467,6 @@ export default function DashboardOverviewPage() {
                </div>
 
                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                  {/* Recommended Startups */}
                   <Card className="md:col-span-7 border-none shadow-xl rounded-[2.5rem] bg-white ring-1 ring-slate-100 overflow-hidden">
                      <CardHeader className="bg-slate-50/50 px-8 py-6 border-b border-slate-100">
                         <div className="flex items-center justify-between">
@@ -512,7 +511,6 @@ export default function DashboardOverviewPage() {
                      </CardContent>
                   </Card>
 
-                  {/* Investor Quick Actions */}
                   <Card className="md:col-span-5 border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden group">
                      <CardHeader>
                         <CardTitle className="text-lg font-black">Capital Tools</CardTitle>
@@ -522,26 +520,48 @@ export default function DashboardOverviewPage() {
                         {[
                           { label: 'Find New Ventures', icon: Search, href: '/founders' },
                           { label: 'Review Pitches', icon: Zap, href: '/dashboard/pitches' },
-                          { label: 'Watchlist', icon: Star, href: '#', disabled: true },
+                          { label: 'Saved Startups', icon: Star, href: '/dashboard/investor/saved' },
                           { label: 'Investor Messages', icon: MessageSquare, href: '/dashboard/messages' },
                         ].map((btn, i) => (
-                          <Button key={i} variant="outline" className="w-full justify-start h-12 rounded-xl bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold transition-all border-none group/btn" asChild={!btn.disabled} disabled={btn.disabled}>
-                             {btn.disabled ? (
-                               <div className="flex items-center gap-3 w-full opacity-40">
-                                 <btn.icon className="h-4 w-4" /> <span>{btn.label}</span>
-                                 <Badge className="ml-auto text-[8px] bg-white/10">SOON</Badge>
-                               </div>
-                             ) : (
+                          <Button key={i} variant="outline" className="w-full justify-start h-12 rounded-xl bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold transition-all border-none group/btn" asChild>
                                <Link href={btn.href} className="flex items-center gap-3 w-full">
                                  <btn.icon className="h-4 w-4 text-primary group-hover/btn:scale-110 transition-transform" /> 
                                  <span>{btn.label}</span>
                                  <ArrowRight className="h-3 w-3 ml-auto opacity-0 group-hover/btn:opacity-100 transition-all" />
                                </Link>
-                             )}
                           </Button>
                         ))}
                      </CardContent>
                   </Card>
+               </div>
+            </section>
+          )}
+
+          {/* Mentorship Workspace Section */}
+          {isMentor && (
+            <section className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+               <div className="flex items-center justify-between px-2">
+                  <div className="flex items-center gap-3">
+                    <GraduationCap className="h-5 w-5 text-purple-500" />
+                    <h3 className="font-black text-slate-900 uppercase text-xs tracking-widest">Mentorship Workspace</h3>
+                  </div>
+                  <Badge variant="outline" className="border-purple-200 text-purple-600 bg-purple-50 font-bold px-3">Advisor Engine</Badge>
+               </div>
+
+               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {[
+                    { label: 'Mentorship Requests', value: stats.pendingConnections, icon: GraduationCap, color: 'text-purple-600', bg: 'bg-purple-50' },
+                    { label: 'Active Founders', value: stats.connectedFounders, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+                    { label: 'Sessions Logged', value: stats.mentorshipSessions, icon: Calendar, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                  ].map((stat, i) => (
+                    <Card key={i} className="border-none shadow-sm p-5 bg-white ring-1 ring-slate-100 hover:shadow-md transition-all group">
+                       <div className={cn("p-2 rounded-lg w-fit mb-4 group-hover:scale-110 transition-transform", stat.bg, stat.color)}>
+                          <stat.icon className="h-4 w-4" />
+                       </div>
+                       <p className="text-2xl font-black text-slate-900">{stat.value}</p>
+                       <p className="text-[10px] font-black text-slate-500 uppercase tracking-tight mt-1">{stat.label}</p>
+                    </Card>
+                  ))}
                </div>
             </section>
           )}
