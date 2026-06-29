@@ -1,9 +1,9 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Calendar, Plus, Clock, CheckCircle2, User, MoreVertical } from 'lucide-react';
@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 
 export default function MentorshipSessionsPage() {
@@ -20,9 +21,17 @@ export default function MentorshipSessionsPage() {
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState({ founderName: '', scheduledAt: '', notes: '' });
+  const [activeFounders, setActiveFounders] = useState<any[]>([]);
+  const [isLoadingFounders, setIsLoadingFounders] = useState(false);
+  
+  const [formData, setFormData] = useState({ 
+    founderUid: '', 
+    founderName: '', 
+    scheduledAt: '', 
+    notes: '' 
+  });
 
-  // Consolidating query to ensure it always includes the owner filter for security compliance
+  // Scoped query for security rule compliance
   const sessionsQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
@@ -34,20 +43,54 @@ export default function MentorshipSessionsPage() {
 
   const { data: sessions, isLoading } = useCollection(sessionsQuery);
 
+  // Load active founders for selection
+  useEffect(() => {
+    async function loadFounders() {
+      if (!firestore || !user?.uid || !isAddOpen) return;
+      setIsLoadingFounders(true);
+      try {
+        const q = query(
+          collection(firestore, 'connections'),
+          where('recipientUid', '==', user.uid),
+          where('type', '==', 'mentor'),
+          where('status', '==', 'accepted')
+        );
+        const snap = await getDocs(q);
+        // In a real app we'd fetch full user profiles here, but connection data usually has some basic info
+        // or we'd have it in cache. For now, we use existing connection data.
+        setActiveFounders(snap.docs.map(d => ({ id: d.data().initiatorUid, ...d.data() })));
+      } catch (e) {
+        console.error("Founders fetch failed:", e);
+      } finally {
+        setIsLoadingFounders(false);
+      }
+    }
+    loadFounders();
+  }, [firestore, user?.uid, isAddOpen]);
+
   const handleAddSession = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firestore || !user?.uid) return;
+    
+    if (!formData.founderUid) {
+      toast({ title: "Selection Required", description: "Please select a founder.", variant: "destructive" });
+      return;
+    }
+
     setIsSaving(true);
     try {
       await addDoc(collection(firestore, 'mentorshipSessions'), {
-        ...formData,
         mentorUid: user.uid,
+        founderUid: formData.founderUid,
+        founderName: formData.founderName,
+        scheduledAt: formData.scheduledAt,
+        notes: formData.notes,
         status: 'scheduled',
         createdAt: serverTimestamp()
       });
       toast({ title: "Session Scheduled" });
       setIsAddOpen(false);
-      setFormData({ founderName: '', scheduledAt: '', notes: '' });
+      setFormData({ founderUid: '', founderName: '', scheduledAt: '', notes: '' });
     } catch (e) {
       console.error("Session creation failed:", e);
       toast({ title: "Error", description: "Could not schedule session.", variant: "destructive" });
@@ -91,9 +134,39 @@ export default function MentorshipSessionsPage() {
             </DialogHeader>
             <form onSubmit={handleAddSession} className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Founder Name</Label>
-                <Input value={formData.founderName} onChange={e => setFormData({...formData, founderName: e.target.value})} required placeholder="Who did you meet?" />
+                <Label>Select Founder</Label>
+                <Select 
+                  value={formData.founderUid} 
+                  onValueChange={(val) => {
+                    const f = activeFounders.find(f => f.id === val);
+                    setFormData({...formData, founderUid: val, founderName: f?.initiatorName || 'Founder'});
+                  }}
+                >
+                   <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder={isLoadingFounders ? "Loading..." : "Choose a founder"} />
+                   </SelectTrigger>
+                   <SelectContent>
+                      {activeFounders.map(f => (
+                        <SelectItem key={f.id} value={f.id}>{f.initiatorName || `Founder (${f.id.slice(0,5)})`}</SelectItem>
+                      ))}
+                      {activeFounders.length === 0 && !isLoadingFounders && (
+                        <SelectItem value="manual" disabled>No active connections found</SelectItem>
+                      )}
+                   </SelectContent>
+                </Select>
               </div>
+
+              {!formData.founderUid && (
+                <div className="space-y-2">
+                  <Label>Founder Name (Fallback)</Label>
+                  <Input 
+                    value={formData.founderName} 
+                    onChange={e => setFormData({...formData, founderName: e.target.value})} 
+                    placeholder="Manually enter name if not in list" 
+                  />
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label>Scheduled Time</Label>
                 <Input type="datetime-local" value={formData.scheduledAt} onChange={e => setFormData({...formData, scheduledAt: e.target.value})} required />
