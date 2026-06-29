@@ -54,7 +54,14 @@ export default function MentorshipSessionsPage() {
     }
   };
 
-  if (isLoading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" /></div>;
+  if (isLoading) {
+    return (
+      <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
+        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing Sessions...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto w-full space-y-8 animate-in fade-in duration-700">
@@ -116,7 +123,9 @@ export default function MentorshipSessionsPage() {
                       </div>
                       <div>
                          <h3 className="font-black text-slate-900">{session.founderName}</h3>
-                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{format(new Date(session.scheduledAt), 'PPP p')}</p>
+                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                           {session.scheduledAt ? format(new Date(session.scheduledAt), 'PPP p') : 'Pending'}
+                         </p>
                       </div>
                    </div>
                    <Badge variant="outline" className="rounded-lg bg-green-50 text-green-700 border-none font-bold text-[10px] h-6 px-3">{session.status}</Badge>
