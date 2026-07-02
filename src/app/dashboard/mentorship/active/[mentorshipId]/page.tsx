@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useFirestore, useUser, useDoc, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { 
@@ -29,7 +29,8 @@ import {
   History,
   Send,
   Zap,
-  LayoutGrid
+  LayoutGrid,
+  Calendar
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,7 @@ import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { CreateSessionDialog } from '@/components/dashboard/mentorship/create-session-dialog';
 
 const PROGRESS_STAGES = ["Onboarding", "Discovery", "Growth Planning", "Execution", "Completed"];
 
@@ -95,6 +97,18 @@ export default function MentorshipWorkspacePage() {
     return query(collection(firestore, 'activeMentorships', mentorshipId as string, 'timeline'), orderBy('createdAt', 'desc'));
   }, [firestore, mentorshipId]);
   const { data: timeline } = useCollection(timelineQ);
+
+  // 4. Fetch Sessions for the hub view
+  const sessionsQ = useMemoFirebase(() => {
+    if (!firestore || !mentorshipId) return null;
+    return query(
+      collection(firestore, 'mentorshipSessions'),
+      where('mentorshipId', '==', mentorshipId),
+      orderBy('scheduledAt', 'desc'),
+      limit(3)
+    );
+  }, [firestore, mentorshipId]);
+  const { data: recentSessions } = useCollection(sessionsQ);
 
   const isMentor = user?.uid === mentorship?.mentorUid;
   const isFounder = user?.uid === mentorship?.founderUid;
@@ -215,15 +229,23 @@ export default function MentorshipWorkspacePage() {
         <div className="flex gap-2">
            <Button variant="outline" className="rounded-xl font-bold border-slate-200" asChild>
              <Link href={`/dashboard/messages?startWith=${isMentor ? mentorship.founderUid : mentorship.mentorUid}`}>
-                <MessageSquare className="h-4 w-4 mr-2" /> Open Conversation
+                <MessageSquare className="h-4 w-4 mr-2" /> Conversation
              </Link>
            </Button>
+           <Button variant="outline" className="rounded-xl font-bold border-slate-200" asChild>
+             <Link href={`/dashboard/mentorship/active/${mentorshipId}/sessions`}>
+                <Calendar className="h-4 w-4 mr-2" /> All Sessions
+             </Link>
+           </Button>
+           {isMentor && (
+             <CreateSessionDialog mentorship={mentorship} startup={profiles.startup} />
+           )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Relationship & Notes */}
-        <div className="lg:col-span-8 space-y-8">
+        <div className="lg:col-span-8 space-y-12">
           
           <Card className="border-none shadow-xl rounded-[2.5rem] bg-white ring-1 ring-slate-100 overflow-hidden">
              <CardHeader className="bg-slate-50/50 p-8 border-b border-slate-100">
@@ -268,8 +290,47 @@ export default function MentorshipWorkspacePage() {
              </CardContent>
           </Card>
 
+          {/* Sessions Overview Hub */}
+          <section className="space-y-6">
+             <div className="flex items-center justify-between px-2">
+                <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                   <Calendar className="h-5 w-5 text-primary" /> Recent Sessions
+                </h3>
+                <Link href={`/dashboard/mentorship/active/${mentorshipId}/sessions`} className="text-[10px] font-black text-primary hover:underline uppercase tracking-widest">View All</Link>
+             </div>
+             
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {recentSessions && recentSessions.length > 0 ? (
+                  recentSessions.map((session) => (
+                    <Link key={session.id} href={`/dashboard/mentorship/active/${mentorshipId}/sessions/${session.id}`}>
+                      <Card className="border-none shadow-sm hover:shadow-md transition-all rounded-2xl bg-white ring-1 ring-slate-100 p-5 h-full group">
+                         <div className="flex justify-between items-start mb-4">
+                            <Badge className={cn(
+                              "text-[8px] font-black uppercase px-2 h-4",
+                              session.status === 'Scheduled' ? "bg-primary/10 text-primary border-none" :
+                              session.status === 'Completed' ? "bg-green-50 text-green-700 border-none" : "bg-slate-100 text-slate-400 border-none"
+                            )}>
+                              {session.status}
+                            </Badge>
+                            <Clock className="h-3 w-3 text-slate-200 group-hover:text-primary transition-colors" />
+                         </div>
+                         <h4 className="font-bold text-slate-900 text-sm line-clamp-1 mb-1">{session.title}</h4>
+                         <p className="text-[9px] font-bold text-slate-400 uppercase">
+                           {session.scheduledAt?.toDate().toLocaleDateString()} @ {session.scheduledAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                         </p>
+                      </Card>
+                    </Link>
+                  ))
+                ) : (
+                  <Card className="col-span-full border-2 border-dashed rounded-[2rem] bg-slate-50/30 p-8 text-center">
+                    <p className="text-xs font-bold text-slate-400 uppercase">No sessions recorded</p>
+                  </Card>
+                )}
+             </div>
+          </section>
+
           {/* Progress Section */}
-          <div className="space-y-4">
+          <section className="space-y-4">
              <h3 className="text-xl font-black text-slate-900 px-2 flex items-center gap-2">
                <TrendingUp className="h-5 w-5 text-primary" /> Relationship Progress
              </h3>
@@ -294,10 +355,10 @@ export default function MentorshipWorkspacePage() {
                   );
                 })}
              </div>
-          </div>
+          </section>
 
           {/* Notes Section */}
-          <div className="space-y-4">
+          <section className="space-y-4">
              <div className="flex items-center justify-between px-2">
                 <h3 className="text-xl font-black text-slate-900 flex items-center gap-2">
                   <LayoutGrid className="h-5 w-5 text-primary" /> Workspace Notes
@@ -375,7 +436,7 @@ export default function MentorshipWorkspacePage() {
                   </div>
                 )}
              </div>
-          </div>
+          </section>
         </div>
 
         {/* Right Column: Timeline & Context */}

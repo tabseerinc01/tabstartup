@@ -67,6 +67,18 @@ service cloud.firestore {
       }
     }
 
+    match /mentorshipSessions/{sessionId} {
+      allow read: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('mentorUid', '') == request.auth.uid || resource.data.get('founderUid', '') == request.auth.uid));
+      allow create: if isSignedIn() && request.resource.data.mentorUid == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.mentorUid == request.auth.uid || resource.data.founderUid == request.auth.uid);
+      allow delete: if isHardcodedAdmin() || (isSignedIn() && resource.data.mentorUid == request.auth.uid);
+
+      match /actionItems/{itemId} {
+        allow read: if isSignedIn() && (get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.founderUid == request.auth.uid);
+        allow write: if isSignedIn() && (get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.founderUid == request.auth.uid);
+      }
+    }
+
     match /savedStartups/{saveId} {
       allow read: if isHardcodedAdmin();
       allow list: if isSignedIn() && resource.data.get('investorUid', '') == request.auth.uid;
@@ -74,14 +86,6 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.investorUid == request.auth.uid;
       allow update: if isSignedIn() && request.resource.data.investorUid == request.auth.uid;
       allow delete: if isAdmin() || (isSignedIn() && resource.data.investorUid == request.auth.uid);
-    }
-
-    match /mentorshipSessions/{sessionId} {
-      allow get: if isSignedIn();
-      allow list: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('mentorUid', '') == request.auth.uid || resource.data.get('founderUid', '') == request.auth.uid));
-      allow create: if isSignedIn() && (request.resource.data.mentorUid == request.auth.uid || request.resource.data.founderUid == request.auth.uid);
-      allow update: if isAdmin() || (isSignedIn() && resource.data.mentorUid == request.auth.uid);
-      allow delete: if isAdmin();
     }
 
     match /referrals/{referralId} {
@@ -133,7 +137,7 @@ service cloud.firestore {
     match /connections/{connectionId} {
       allow read: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('initiatorUid', '') == request.auth.uid || resource.data.get('recipientUid', '') == request.auth.uid));
       allow create: if isSignedIn() && request.resource.data.initiatorUid == request.auth.uid;
-      allow update: if isAdmin() || (isSignedIn() && (resource.data.recipientUid == request.auth.uid || resource.data.initiatorUid == request.auth.uid));
+      allow update: if isAdmin() || (isSignedIn() && (resource.data.recipientUid == request.auth.uid || request.auth.uid == resource.data.initiatorUid));
       allow delete: if isAdmin();
     }
 

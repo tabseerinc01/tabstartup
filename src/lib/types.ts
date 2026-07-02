@@ -103,3 +103,33 @@ export interface Task {
   createdAt: any;
   updatedAt: any;
 }
+
+export interface MentorshipSession {
+  id: string;
+  mentorshipId: string;
+  mentorUid: string;
+  founderUid: string;
+  startupId: string;
+  title: string;
+  agenda: string;
+  scheduledAt: any;
+  estimatedDuration: number; // in minutes
+  meetingType: 'Video Call' | 'Google Meet' | 'Zoom' | 'Phone Call' | 'In Person' | 'Other';
+  meetingLink?: string;
+  status: 'Scheduled' | 'In Progress' | 'Completed' | 'Cancelled';
+  summary?: string;
+  keyLearnings?: string;
+  nextSteps?: string;
+  completedAt?: any;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface SessionActionItem {
+  id: string;
+  sessionId: string;
+  title: string;
+  status: 'Pending' | 'Completed';
+  authorUid: string;
+  createdAt: any;
+}
