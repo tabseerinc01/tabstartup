@@ -166,7 +166,8 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
       items: [
         { href: '/dashboard/startup', label: 'My Venture', icon: Rocket },
         { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins },
-        { href: '/dashboard/mentorship/requests', label: 'Mentorship', icon: GraduationCap },
+        { href: '/dashboard/founder/mentors', label: 'My Mentors', icon: Users },
+        { href: '/dashboard/mentorship/requests', label: 'Mentorship Requests', icon: Inbox },
       ]
     });
   }

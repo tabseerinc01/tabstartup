@@ -45,12 +45,34 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /activeMentorships/{mentorshipId} {
+      allow read: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('mentorUid', '') == request.auth.uid || resource.data.get('founderUid', '') == request.auth.uid));
+      allow create: if isSignedIn() && (request.resource.data.mentorUid == request.auth.uid || isAdmin());
+      allow update: if isAdmin() || (isSignedIn() && (resource.data.mentorUid == request.auth.uid || resource.data.founderUid == request.auth.uid));
+      
+      match /notes/{noteId} {
+        allow read: if isHardcodedAdmin() || (isSignedIn() && (
+          (resource.data.type == 'shared' && (get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.founderUid == request.auth.uid)) ||
+          (resource.data.type == 'private' && get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid)
+        ));
+        allow create: if isSignedIn() && (
+          (request.resource.data.type == 'shared' && (get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.founderUid == request.auth.uid)) ||
+          (request.resource.data.type == 'private' && get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid)
+        );
+      }
+      
+      match /timeline/{itemId} {
+        allow read: if isSignedIn() && (get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.founderUid == request.auth.uid);
+        allow write: if isSignedIn() && (get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.founderUid == request.auth.uid);
+      }
+    }
+
     match /savedStartups/{saveId} {
       allow read: if isHardcodedAdmin();
       allow list: if isSignedIn() && resource.data.get('investorUid', '') == request.auth.uid;
       allow get: if isSignedIn() && resource.data.get('investorUid', '') == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.investorUid == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.investorUid == request.auth.uid;
+      allow update: if isSignedIn() && request.resource.data.investorUid == request.auth.uid;
       allow delete: if isAdmin() || (isSignedIn() && resource.data.investorUid == request.auth.uid);
     }
 

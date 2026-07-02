@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, updateDoc, doc, serverTimestamp, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, updateDoc, doc, serverTimestamp, addDoc } from 'firebase/firestore';
 import { 
   GraduationCap, 
   Loader2, 
@@ -67,15 +67,38 @@ export default function MentorshipRequestsPage() {
         updatedAt: serverTimestamp()
       });
 
+      // Phase 2: Create Active Mentorship on Acceptance
+      if (status === 'Accepted') {
+        const mentorshipData = {
+          mentorUid: request.mentorUid,
+          founderUid: request.founderUid,
+          startupId: request.startupId,
+          requestId: id,
+          status: 'Onboarding',
+          startedAt: serverTimestamp(),
+          lastActivityAt: serverTimestamp()
+        };
+        const mRef = await addDoc(collection(firestore, 'activeMentorships'), mentorshipData);
+        
+        // Add Initial Timeline Event
+        await addDoc(collection(firestore, 'activeMentorships', mRef.id, 'timeline'), {
+          type: 'start',
+          details: 'Mentorship relationship established.',
+          createdAt: serverTimestamp()
+        });
+
+        toast({ title: "Mentorship Activated", description: "Relationship moved to Active Workspace." });
+      }
+
       // Notify the other party
-      const targetUid = status === 'Cancelled' ? request.mentorUid : request.founderUid;
+      const targetUid = status === 'Cancelled' ? request.mentorUid : (status === 'Accepted' ? request.founderUid : request.founderUid);
       createNotification(firestore, {
         recipientUid: targetUid,
         actorUid: user.uid,
         type: 'connection',
         title: `Mentorship Request ${status}`,
         message: status === 'Accepted' 
-          ? 'Your mentorship request has been accepted! You can now start communicating.' 
+          ? 'Your mentorship request has been accepted! Access your new workspace under My Mentors.' 
           : status === 'Cancelled' 
             ? 'A founder has withdrawn their mentorship request.' 
             : 'Your mentorship request was not accepted at this time.',
@@ -180,7 +203,6 @@ export default function MentorshipRequestsPage() {
 
 function RequestCard({ req, mode, onAction, isLoading }: any) {
   const firestore = useFirestore();
-  const router = useRouter();
   const [otherUser, setOtherUser] = useState<any>(null);
   const [startup, setStartup] = useState<any>(null);
 

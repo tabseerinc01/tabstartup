@@ -4,45 +4,51 @@
 import { useState, useEffect } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, getDoc, doc } from 'firebase/firestore';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, Users, MessageSquare, Rocket, MapPin, ArrowRight } from 'lucide-react';
+import { Loader2, Users, MessageSquare, Rocket, MapPin, ArrowRight, Clock } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ActiveFoundersPage() {
   const { user } = useUser();
   const firestore = useFirestore();
 
-  const activeFoundersQuery = useMemoFirebase(() => {
+  // Phase 2: Querying activeMentorships instead of connections
+  const mentorshipsQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
-      collection(firestore, 'connections'),
-      where('recipientUid', '==', user.uid),
-      where('type', '==', 'mentor'),
-      where('status', '==', 'accepted')
+      collection(firestore, 'activeMentorships'),
+      where('mentorUid', '==', user.uid)
     );
   }, [firestore, user?.uid]);
 
-  const { data: connections, isLoading } = useCollection(activeFoundersQuery);
+  const { data: mentorships, isLoading } = useCollection(mentorshipsQuery);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
+  const [startups, setStartups] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    async function loadProfiles() {
-      if (!firestore || !connections) return;
-      const uids = connections.map(c => c.initiatorUid);
+    async function loadMetadata() {
+      if (!firestore || !mentorships) return;
       const newProfiles = { ...profiles };
-      for (const uid of uids) {
-        if (!newProfiles[uid]) {
-          const snap = await getDoc(doc(firestore, 'users', uid));
-          if (snap.exists()) newProfiles[uid] = snap.data();
+      const newStartups = { ...startups };
+      
+      for (const m of mentorships) {
+        if (!newProfiles[m.founderUid]) {
+          const uSnap = await getDoc(doc(firestore, 'users', m.founderUid));
+          if (uSnap.exists()) newProfiles[m.founderUid] = uSnap.data();
+        }
+        if (m.startupId && !newStartups[m.startupId]) {
+          const sSnap = await getDoc(doc(firestore, 'startups', m.startupId));
+          if (sSnap.exists()) newStartups[m.startupId] = sSnap.data();
         }
       }
       setProfiles(newProfiles);
+      setStartups(newStartups);
     }
-    loadProfiles();
-  }, [firestore, connections]);
+    loadMetadata();
+  }, [firestore, mentorships]);
 
   if (isLoading) {
     return (
@@ -65,12 +71,15 @@ export default function ActiveFoundersPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {connections && connections.length > 0 ? (
-          connections.map((conn) => {
-            const founder = profiles[conn.initiatorUid];
+        {mentorships && mentorships.length > 0 ? (
+          mentorships.map((m) => {
+            const founder = profiles[m.founderUid];
+            const startup = startups[m.startupId];
             const name = founder?.fullName || "Founder";
+            const startedAt = m.startedAt?.toDate ? m.startedAt.toDate() : new Date();
+
             return (
-              <Card key={conn.id} className="group border-none shadow-sm hover:shadow-xl transition-all rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
+              <Card key={m.id} className="group border-none shadow-sm hover:shadow-xl transition-all rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
                 <CardContent className="p-8">
                   <div className="flex items-start gap-5">
                     <Avatar className="h-16 w-16 rounded-2xl border-4 border-slate-50 shadow-md">
@@ -78,22 +87,26 @@ export default function ActiveFoundersPage() {
                       <AvatarFallback className="font-black bg-primary/5 text-primary">{name[0]}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-xl font-black text-slate-900 group-hover:text-primary transition-colors truncate">{name}</h3>
-                      <p className="text-sm font-bold text-primary truncate mt-1 uppercase tracking-tight">{founder?.headline || "Building Venture"}</p>
+                      <div className="flex justify-between items-start">
+                        <h3 className="text-xl font-black text-slate-900 group-hover:text-primary transition-colors truncate">{name}</h3>
+                        <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary bg-primary/5">{m.status}</Badge>
+                      </div>
                       
                       <div className="flex items-center gap-4 mt-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        <span className="flex items-center gap-1.5"><MapPin className="h-3 w-3" /> {founder?.location || 'Remote'}</span>
-                        <span className="flex items-center gap-1.5"><Rocket className="h-3 w-3" /> Early Stage</span>
+                        <span className="flex items-center gap-1.5"><Rocket className="h-3 w-3 text-primary/50" /> {startup?.name || 'Venture'}</span>
+                        <span className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> Since {startedAt.toLocaleDateString()}</span>
                       </div>
 
                       <div className="flex items-center gap-3 mt-8 pt-6 border-t border-slate-50">
                         <Button className="rounded-xl h-10 px-6 font-bold shadow-lg shadow-primary/20 gap-2" asChild>
-                           <Link href={`/dashboard/messages?startWith=${conn.initiatorUid}`}>
-                              <MessageSquare className="h-4 w-4" /> Message
+                           <Link href={`/dashboard/mentorship/active/${m.id}`}>
+                              View Workspace <ArrowRight className="h-4 w-4" />
                            </Link>
                         </Button>
-                        <Button variant="ghost" className="rounded-xl h-10 font-bold text-slate-400" asChild>
-                           <Link href={`/founders/${conn.initiatorUid}`}>Full Profile</Link>
+                        <Button variant="ghost" className="rounded-xl h-10 px-4 font-bold text-slate-400" asChild>
+                           <Link href={`/dashboard/messages?startWith=${m.founderUid}`}>
+                              <MessageSquare className="h-4 w-4" />
+                           </Link>
                         </Button>
                       </div>
                     </div>
@@ -111,7 +124,7 @@ export default function ActiveFoundersPage() {
               <p className="text-xl font-black text-slate-900">No active mentorships</p>
               <p className="text-slate-500 font-medium max-w-sm mx-auto">Review mentorship requests to start supporting founders.</p>
               <Button asChild className="rounded-full px-8 h-12 font-bold">
-                <Link href="/dashboard/connections">Review Requests</Link>
+                <Link href="/dashboard/mentorship/requests">Review Requests</Link>
               </Button>
             </CardContent>
           </Card>
