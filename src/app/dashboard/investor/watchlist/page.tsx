@@ -21,7 +21,8 @@ import {
   CheckCircle2,
   Filter,
   Calendar,
-  User as UserIcon
+  User as UserIcon,
+  ShieldCheck
 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
