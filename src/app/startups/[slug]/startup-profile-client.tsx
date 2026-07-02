@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -34,7 +33,7 @@ import {
   Heart, 
   TrendingUp, 
   Users,
-  MessageSquare,
+  MessageSquare, 
   ArrowRight,
   ShieldCheck,
   FileText,
@@ -46,6 +45,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { createNotification } from '@/lib/notifications';
+import { cn } from '@/lib/utils';
 
 export default function StartupProfileClient({ slugOrId }: { slugOrId: string }) {
   const { user, isUserLoading: isAuthLoading } = useUser();
