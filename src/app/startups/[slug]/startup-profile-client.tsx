@@ -340,6 +340,23 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     );
   }
 
+  if (!startup) {
+    return (
+      <div className="flex min-h-screen flex-col">
+        <PublicHeader />
+        <main className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+           <div className="p-6 bg-slate-50 rounded-full mb-6">
+              <Rocket className="h-12 w-12 text-slate-200" />
+           </div>
+           <h1 className="text-3xl font-black text-slate-900 mb-2">Venture Not Found</h1>
+           <p className="text-slate-500 mb-8 max-w-sm">The startup you're looking for might have changed its name or the link is expired.</p>
+           <Button asChild className="rounded-full px-8"><Link href="/startups">Browse Startups</Link></Button>
+        </main>
+        <PublicFooter />
+      </div>
+    );
+  }
+
   const isOwnStartup = user?.uid === startup.ownerUid;
 
   return (
