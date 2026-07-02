@@ -131,11 +131,19 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             }
           }
 
-          const interestSnap = await getDoc(doc(firestore, 'startups', ownerUid, 'interests', user.uid));
-          if (interestSnap.exists()) {
-            setExistingInterest(interestSnap.data());
+          // Check for existing interest/pitch
+          const pitchQ = query(
+            collection(firestore, 'venturePitches'),
+            where('senderUid', '==', user.uid),
+            where('recipientUid', '==', ownerUid),
+            limit(1)
+          );
+          const pitchSnap = await getDocs(pitchQ);
+          if (!pitchSnap.empty) {
+            setExistingInterest(pitchSnap.docs[0].data());
           }
 
+          // Check Saved/Watched status
           const savedQ = query(
             collection(firestore, 'savedStartups'),
             where('investorUid', '==', user.uid),
@@ -192,50 +200,40 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     const ownerUid = startup.ownerUid;
     const investorName = currentUserProfile?.fullName || user.displayName || "A Capital Partner";
     
-    const basePayload = {
+    const pitchData = {
+      senderUid: user.uid,
+      senderName: investorName,
+      recipientUid: ownerUid,
       startupId: ownerUid,
-      investorId: user.uid,
-      investorName: investorName,
-      timestamp: serverTimestamp(),
+      startupName: startup.name,
+      pitchMessage: `Investor expressed interest via public profile.`,
+      status: 'pending',
+      createdAt: serverTimestamp(),
     };
 
-    const interestRef = doc(firestore, 'startups', ownerUid, 'interests', user.uid);
-    setDoc(interestRef, basePayload)
-      .then(() => {
-        setExistingInterest(basePayload);
-        toast({ title: "Interest Shared", description: "The founder has been notified." });
-        
-        const connectionData = {
-          initiatorUid: user.uid,
-          recipientUid: ownerUid,
-          type: 'investor',
-          status: 'pending',
-          message: `I would like to explore an investment opportunity with ${startup.name}.`,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        };
-        addDoc(collection(firestore!, 'connections'), connectionData).catch(() => {});
-
-        createNotification(firestore!, {
-          recipientUid: ownerUid,
-          actorUid: user.uid,
-          type: 'investor_interest',
-          title: 'New Venture Interest',
-          message: `${investorName} has expressed interest in ${startup.name}.`,
-          targetId: ownerUid,
-          targetType: 'user'
-        });
-      })
-      .catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: interestRef.path,
-          operation: 'create',
-          requestResourceData: basePayload
-        }));
-      })
-      .finally(() => {
-        setIsSubmittingInterest(false);
+    try {
+      const docRef = await addDoc(collection(firestore, 'venturePitches'), pitchData);
+      setExistingInterest(pitchData);
+      toast({ title: "Interest Shared", description: "The founder has been notified." });
+      
+      createNotification(firestore, {
+        recipientUid: ownerUid,
+        actorUid: user.uid,
+        type: 'venture_pitch',
+        title: '🚀 Venture Interest',
+        message: `${investorName} expressed interest in your startup.`,
+        targetId: docRef.id,
+        targetType: 'venture_pitch'
       });
+    } catch (error) {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: 'venturePitches',
+        operation: 'create',
+        requestResourceData: pitchData
+      }));
+    } finally {
+      setIsSubmittingInterest(false);
+    }
   }, [user, firestore, startup, currentUserProfile, isSubmittingInterest, existingInterest, router, toast]);
 
   useEffect(() => {
@@ -374,6 +372,11 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                       <Badge className="bg-white/20 text-white border-white/20 backdrop-blur-xl px-4 py-1.5 rounded-xl text-[10px] font-black uppercase">
                         {startup.stage} Stage
                       </Badge>
+                      {startup.startupVerified && (
+                        <Badge className="bg-blue-500 text-white border-none px-4 py-1.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-1">
+                          <ShieldCheck className="h-3 w-3" /> Verified
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xl md:text-2xl font-medium opacity-90 leading-relaxed italic border-l-4 border-white/30 pl-6">
                       "{startup.shortDescription || 'Building the future.'}"

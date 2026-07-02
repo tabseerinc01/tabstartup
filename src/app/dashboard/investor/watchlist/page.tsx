@@ -114,6 +114,7 @@ export default function WatchlistPage() {
                 if (fSnap.exists()) newFounders[sData.ownerUid] = fSnap.data();
               }
 
+              // Load latest community activity
               const activityQ = query(
                 collection(firestore, 'communityPosts'),
                 where('authorUid', '==', sData.ownerUid),
@@ -341,7 +342,7 @@ export default function WatchlistPage() {
                           <div className="space-y-4">
                              <div className="flex items-center gap-2">
                                 <ShieldCheck className="h-4 w-4 text-primary" />
-                                <span className="text-[10px] font-bold text-slate-400 uppercase">Verification Level</span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase">Verification</span>
                              </div>
                              <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
                                 <div className="bg-primary h-full transition-all" style={{ width: s?.startupVerified ? '100%' : '30%' }} />
@@ -379,24 +380,6 @@ export default function WatchlistPage() {
           </div>
         )}
       </div>
-
-      <section className="bg-primary rounded-[2.5rem] p-10 text-white relative overflow-hidden group">
-         <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-            <div className="space-y-4">
-               <h2 className="text-3xl font-black tracking-tight">Private Intelligence</h2>
-               <p className="text-white/80 font-medium leading-relaxed">
-                  Watching a startup is completely private. Founders are never notified when you add them to your watchlist.
-               </p>
-            </div>
-            <div className="flex justify-end">
-               <div className="p-6 bg-white/10 backdrop-blur-xl rounded-[2rem] border border-white/10 text-center space-y-2">
-                  <p className="text-4xl font-black">100%</p>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-primary">Confidentiality Guarantee</p>
-               </div>
-            </div>
-         </div>
-         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-32 -mt-32" />
-      </section>
     </div>
   );
 }

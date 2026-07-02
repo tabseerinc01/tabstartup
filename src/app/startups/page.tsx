@@ -139,7 +139,7 @@ export default function StartupsDirectoryPage() {
         await deleteDoc(doc(firestore, 'savedStartups', existingId));
         toast({ title: isWatchlist ? "Removed from Watchlist" : "Removed from Saved" });
       } else {
-        await addDoc(collection(firestore, 'savedStartups'), {
+        const docRef = await addDoc(collection(firestore, 'savedStartups'), {
           investorUid: user.uid,
           startupId: startup.ownerUid,
           startupName: startup.name,
@@ -277,7 +277,7 @@ export default function StartupsDirectoryPage() {
                         <CardTitle className="text-2xl font-black group-hover:text-primary transition-colors">{s.name}</CardTitle>
                       </Link>
                       
-                      {/* Priority Badges */}
+                      {/* Intelligence Badges */}
                       <div className="flex flex-wrap gap-2 mt-4">
                         {s.startupVerified && (
                           <Badge className="bg-blue-50 text-blue-700 border-blue-100 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase flex items-center gap-1">
@@ -307,7 +307,7 @@ export default function StartupsDirectoryPage() {
                       </p>
                       
                       <div className="pt-6 border-t border-slate-50 space-y-6">
-                         {/* Quick Actions Bar for Directory */}
+                         {/* Action Hub for Directory */}
                          {!isOwn && (
                            <div className="flex items-center gap-2 pt-2">
                               <Button 
