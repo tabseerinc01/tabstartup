@@ -30,6 +30,22 @@
       },
       "required": ["uid", "fullName", "email", "createdAt", "updatedAt"]
     },
+    "MentorshipRequest": {
+      "title": "MentorshipRequest",
+      "type": "object",
+      "description": "An inquiry for guidance sent from a founder to a mentor.",
+      "properties": {
+        "mentorUid": { "type": "string" },
+        "founderUid": { "type": "string" },
+        "startupId": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "goals": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Accepted", "Declined", "Cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["mentorUid", "founderUid", "status", "createdAt"]
+    },
     "SavedStartup": {
       "title": "SavedStartup",
       "type": "object",
@@ -129,6 +145,10 @@
       {
         "path": "/users/{userId}",
         "definition": { "entityName": "User", "schema": { "$ref": "#/backend/entities/User" }, "description": "User profile data." }
+      },
+      {
+        "path": "/mentorshipRequests/{requestId}",
+        "definition": { "entityName": "MentorshipRequest", "schema": { "$ref": "#/backend/entities/MentorshipRequest" }, "description": "Inquiries for mentorship." }
       },
       {
         "path": "/savedStartups/{saveId}",

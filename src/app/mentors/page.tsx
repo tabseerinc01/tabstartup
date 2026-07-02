@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { collection, query, where, limit, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { useFirestore } from '@/firebase';
 import {
   Card,
@@ -22,7 +23,7 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Search, MapPin, ArrowRight, Briefcase, GraduationCap, Star, Clock } from 'lucide-react';
+import { Loader2, Search, MapPin, ArrowRight, Briefcase, GraduationCap, CheckCircle2, Globe, ShieldCheck } from 'lucide-react';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -32,7 +33,8 @@ export default function MentorsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [expertiseFilter, setExpertiseFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('newest');
+  const [countryFilter, setCountryFilter] = useState('all');
+  const [availabilityFilter, setAvailabilityFilter] = useState('all');
   
   const firestore = useFirestore();
 
@@ -41,31 +43,13 @@ export default function MentorsPage() {
       if (!firestore) return;
       setIsLoading(true);
       try {
-        const multiRoleQuery = query(
-          collection(firestore, 'users'), 
-          where('roles', 'array-contains', 'mentor'), 
-          limit(100)
-        );
-        const legacyQuery = query(
+        const q = query(
           collection(firestore, 'users'),
-          where('isMentor', '==', true),
+          where('roles', 'array-contains', 'mentor'),
           limit(100)
         );
-
-        const [multiSnap, legacySnap] = await Promise.all([
-          getDocs(multiRoleQuery),
-          getDocs(legacyQuery)
-        ]);
-
-        const userMap = new Map();
-        multiSnap.docs.forEach(d => userMap.set(d.id, { id: d.id, ...d.data() }));
-        legacySnap.docs.forEach(d => {
-          if (!userMap.has(d.id)) {
-            userMap.set(d.id, { id: d.id, ...d.data() });
-          }
-        });
-
-        setMentors(Array.from(userMap.values()));
+        const snap = await getDocs(q);
+        setMentors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       } catch (error) {
         console.error("Error loading mentors:", error);
       } finally {
@@ -79,20 +63,17 @@ export default function MentorsPage() {
     return mentors.filter((m) => {
       const name = (m.fullName || '').toLowerCase();
       const headline = (m.headline || '').toLowerCase();
-      const bio = (m.mentorBio || '').toLowerCase();
       const searchTerm = search.toLowerCase();
       
-      const matchesSearch = name.includes(searchTerm) || headline.includes(searchTerm) || bio.includes(searchTerm);
+      const matchesSearch = name.includes(searchTerm) || headline.includes(searchTerm);
       const matchesExpertise = expertiseFilter === 'all' || 
                               (m.mentorSkills || []).some((s: string) => s.toLowerCase().includes(expertiseFilter.toLowerCase()));
+      const matchesCountry = countryFilter === 'all' || (m.location || '').toLowerCase().includes(countryFilter.toLowerCase());
+      const matchesAvailability = availabilityFilter === 'all' || (m.mentorAvailability || 'Available').toLowerCase() === availabilityFilter.toLowerCase();
 
-      return matchesSearch && matchesExpertise;
-    }).sort((a, b) => {
-      if (sortBy === 'newest') return (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0);
-      if (sortBy === 'experience') return (parseInt(b.yearsOfExperience) || 0) - (parseInt(a.yearsOfExperience) || 0);
-      return 0;
+      return matchesSearch && matchesExpertise && matchesCountry && matchesAvailability;
     });
-  }, [mentors, search, expertiseFilter, sortBy]);
+  }, [mentors, search, expertiseFilter, countryFilter, availabilityFilter]);
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
@@ -118,7 +99,7 @@ export default function MentorsPage() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <Input
-                    placeholder="Search expertise..."
+                    placeholder="Name or headline..."
                     className="pl-10 rounded-xl"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -127,7 +108,7 @@ export default function MentorsPage() {
               </div>
               
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Expertise Area</Label>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Specialty</Label>
                 <Select value={expertiseFilter} onValueChange={setExpertiseFilter}>
                   <SelectTrigger className="rounded-xl">
                     <SelectValue />
@@ -144,14 +125,15 @@ export default function MentorsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Sort By</Label>
-                <Select value={sortBy} onValueChange={setSortBy}>
+                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Availability</Label>
+                <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
                   <SelectTrigger className="rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="newest">Recently Joined</SelectItem>
-                    <SelectItem value="experience">Years of Experience</SelectItem>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="available">Available</SelectItem>
+                    <SelectItem value="busy">Reviewing</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -201,7 +183,10 @@ function MentorCard({ mentor }: { mentor: any }) {
           <AvatarFallback className="rounded-2xl text-2xl font-bold">{initials}</AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
-          <h3 className="text-xl font-bold truncate group-hover:text-primary transition-colors text-slate-900">{name}</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-xl font-bold truncate group-hover:text-primary transition-colors text-slate-900">{name}</h3>
+            {mentor.isVerified && <ShieldCheck className="h-4 w-4 text-primary fill-primary/10" />}
+          </div>
           <p className="text-sm font-semibold text-primary/80 line-clamp-2 mt-1 uppercase tracking-tight">
             {mentor.headline || "Industry Expert"}
           </p>
@@ -214,7 +199,7 @@ function MentorCard({ mentor }: { mentor: any }) {
       <CardContent className="flex flex-col flex-1 px-8 pb-8 space-y-6">
         <div className="space-y-4">
           <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Expertise Area</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Expertise</p>
             <div className="flex flex-wrap gap-1.5">
               {Array.isArray(mentor.mentorSkills) && mentor.mentorSkills.length > 0 ? (
                 mentor.mentorSkills.slice(0, 3).map((skill: string) => (
@@ -246,7 +231,7 @@ function MentorCard({ mentor }: { mentor: any }) {
 
         <Button className="w-full rounded-2xl h-12 gap-2 mt-auto group-hover:bg-primary group-hover:text-primary-foreground transition-all" variant="outline" asChild>
           <Link href={`/mentors/${mentor.id}`}>
-            Request Guidance <ArrowRight className="h-4 w-4" />
+            View Expertise <ArrowRight className="h-4 w-4" />
           </Link>
         </Button>
       </CardContent>

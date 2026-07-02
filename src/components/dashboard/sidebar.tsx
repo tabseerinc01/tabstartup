@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -27,7 +28,8 @@ import {
   Star,
   Eye,
   Calendar,
-  Send
+  Send,
+  Inbox
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -65,7 +67,8 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
     connections: 0,
     messages: 0,
     notifications: 0,
-    pitches: 0
+    pitches: 0,
+    mentorship: 0
   });
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     dashboard: true,
@@ -107,17 +110,20 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
         connections: 0,
         messages: 0,
         notifications: 0,
-        pitches: 0
+        pitches: 0,
+        mentorship: 0
       };
 
       snapshot.docs.forEach(doc => {
         const data = doc.data();
         if (data.type === 'message') {
           counts.messages++;
-        } else if (['connection', 'investor_interest', 'cofounder_interest', 'mentorship_request'].includes(data.type)) {
+        } else if (['connection', 'investor_interest', 'cofounder_interest'].includes(data.type)) {
           counts.connections++;
         } else if (data.type === 'venture_pitch') {
           counts.pitches++;
+        } else if (data.type === 'mentorship_request') {
+          counts.mentorship++;
         }
         counts.notifications++;
       });
@@ -160,6 +166,7 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
       items: [
         { href: '/dashboard/startup', label: 'My Venture', icon: Rocket },
         { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins },
+        { href: '/dashboard/mentorship/requests', label: 'Mentorship', icon: GraduationCap },
       ]
     });
   }
@@ -181,9 +188,9 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
       id: 'mentorship',
       label: 'Mentorship',
       items: [
-        { href: '/dashboard/connections', label: 'Mentorship Requests', icon: GraduationCap, badgeCount: unreadCounts.connections },
+        { href: '/dashboard/mentorship/requests', label: 'Requests Hub', icon: Inbox, badgeCount: unreadCounts.mentorship },
         { href: '/dashboard/mentor/founders', label: 'Active Founders', icon: Users },
-        { href: '/dashboard/mentor/sessions', label: 'Sessions', icon: Calendar },
+        { href: '/dashboard/mentor/sessions', label: 'Sessions Log', icon: Calendar },
       ]
     });
   }

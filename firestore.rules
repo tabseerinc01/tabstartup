@@ -9,7 +9,6 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Hardcoded Admin check - placing UID first for faster short-circuit
     function isHardcodedAdmin() {
       return isSignedIn() && (
         request.auth.uid == 'T2JnkPYdsoZGO8krUqcP3T5bvg62' ||
@@ -17,7 +16,6 @@ service cloud.firestore {
       );
     }
 
-    // Comprehensive Admin check
     function isAdmin() {
       return isHardcodedAdmin() || (
         isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
@@ -39,6 +37,14 @@ service cloud.firestore {
       allow update: if isOwner(userId) || isAdmin();
     }
 
+    match /mentorshipRequests/{requestId} {
+      allow get: if isSignedIn();
+      allow list: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('founderUid', '') == request.auth.uid || resource.data.get('mentorUid', '') == request.auth.uid));
+      allow create: if isSignedIn() && request.resource.data.founderUid == request.auth.uid;
+      allow update: if isAdmin() || (isSignedIn() && (resource.data.mentorUid == request.auth.uid || resource.data.founderUid == request.auth.uid));
+      allow delete: if isAdmin();
+    }
+
     match /savedStartups/{saveId} {
       allow read: if isHardcodedAdmin();
       allow list: if isSignedIn() && resource.data.get('investorUid', '') == request.auth.uid;
@@ -49,47 +55,38 @@ service cloud.firestore {
     }
 
     match /mentorshipSessions/{sessionId} {
-      // Explicitly allow list for hardcoded admins
-      allow list: if isHardcodedAdmin();
-      // Allow filtered list for owners
-      allow list: if isSignedIn() && (resource.data.get('mentorUid', '') == request.auth.uid || resource.data.get('founderUid', '') == request.auth.uid);
-      // General read for single docs
       allow get: if isSignedIn();
-      
+      allow list: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('mentorUid', '') == request.auth.uid || resource.data.get('founderUid', '') == request.auth.uid));
       allow create: if isSignedIn() && (request.resource.data.mentorUid == request.auth.uid || request.resource.data.founderUid == request.auth.uid);
       allow update: if isAdmin() || (isSignedIn() && resource.data.mentorUid == request.auth.uid);
       allow delete: if isAdmin();
     }
 
     match /referrals/{referralId} {
-      allow read: if isHardcodedAdmin();
-      allow list: if isSignedIn() && (resource.data.get('referrerUid', '') == request.auth.uid || resource.data.get('referredUid', '') == request.auth.uid);
       allow get: if isSignedIn();
+      allow list: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('referrerUid', '') == request.auth.uid || resource.data.get('referredUid', '') == request.auth.uid));
       allow create: if isSignedIn() && request.resource.data.referrerUid != request.auth.uid;
       allow update: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.referredUid);
     }
 
     match /venturePitches/{pitchId} {
-      allow read: if isHardcodedAdmin();
-      allow list: if isSignedIn() && (resource.data.get('senderUid', '') == request.auth.uid || resource.data.get('recipientUid', '') == request.auth.uid);
       allow get: if isSignedIn();
+      allow list: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('senderUid', '') == request.auth.uid || resource.data.get('recipientUid', '') == request.auth.uid));
       allow create: if isSignedIn() && request.resource.data.senderUid == request.auth.uid;
       allow update: if isAdmin() || (isSignedIn() && (resource.data.recipientUid == request.auth.uid || resource.data.senderUid == request.auth.uid));
       allow delete: if isAdmin();
     }
 
     match /contacts/{contactId} {
-      allow read: if isHardcodedAdmin();
-      allow list: if isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid;
       allow get: if isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid;
+      allow list: if isHardcodedAdmin() || (isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid);
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
     }
     
     match /deals/{dealId} {
-      allow read: if isHardcodedAdmin();
-      allow list: if isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid;
       allow get: if isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid;
+      allow list: if isHardcodedAdmin() || (isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid);
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
       match /notes/{noteId} { allow read, write: if isSignedIn(); }
@@ -97,26 +94,22 @@ service cloud.firestore {
     }
 
     match /invoices/{invoiceId} {
-      allow read: if isHardcodedAdmin();
-      allow list: if isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid;
       allow get: if true; 
+      allow list: if isHardcodedAdmin() || (isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid);
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
     }
 
     match /tasks/{taskId} {
-      allow read: if isHardcodedAdmin();
-      allow list: if isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid;
       allow get: if isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid;
+      allow list: if isHardcodedAdmin() || (isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid);
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
       match /activities/{activityId} { allow read, write: if isSignedIn(); }
     }
 
     match /connections/{connectionId} {
-      allow read: if isHardcodedAdmin();
-      allow list: if isSignedIn() && (resource.data.get('initiatorUid', '') == request.auth.uid || resource.data.get('recipientUid', '') == request.auth.uid);
-      allow get: if isSignedIn();
+      allow read: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('initiatorUid', '') == request.auth.uid || resource.data.get('recipientUid', '') == request.auth.uid));
       allow create: if isSignedIn() && request.resource.data.initiatorUid == request.auth.uid;
       allow update: if isAdmin() || (isSignedIn() && (resource.data.recipientUid == request.auth.uid || resource.data.initiatorUid == request.auth.uid));
       allow delete: if isAdmin();
