@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useFirestore, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { 
   doc, 
@@ -54,6 +54,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [startup, setStartup] = useState<any>(null);
   const [founder, setFounder] = useState<any>(null);
@@ -133,7 +134,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             setExistingInterest(interestSnap.data());
           }
 
-          // Load Saved & Watched states
+          // Load Saved & Watched states - Independent records
           const savedQ = query(
             collection(firestore, 'savedStartups'),
             where('investorUid', '==', user.uid),
@@ -141,16 +142,24 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           );
           const savedSnap = await getDocs(savedQ);
           
+          let foundSave = false;
+          let foundWatch = false;
+
           savedSnap.docs.forEach(d => {
             const data = d.data();
             if (data.isWatchlist) {
               setIsWatched(true);
               setWatchedDocId(d.id);
+              foundWatch = true;
             } else {
               setIsSaved(true);
               setSavedDocId(d.id);
+              foundSave = true;
             }
           });
+
+          if (!foundSave) { setIsSaved(false); setSavedDocId(null); }
+          if (!foundWatch) { setIsWatched(false); setWatchedDocId(null); }
         }
       } catch (error) {
         console.error("Startup Loading Error:", error);
@@ -185,7 +194,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         });
         setIsSaved(true);
         setSavedDocId(docRef.id);
-        toast({ title: "Startup Saved" });
+        toast({ title: "Startup Saved", description: "This venture is now in your saved collection." });
       }
     } catch (e) {
       console.error(e);
@@ -217,7 +226,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         });
         setIsWatched(true);
         setWatchedDocId(docRef.id);
-        toast({ title: "Added to Watchlist", description: "This action is private and only visible to you." });
+        toast({ title: "Added to Watchlist", description: "You will now see updates from this startup in your dashboard." });
       }
     } catch (e) {
       console.error(e);
@@ -327,7 +336,9 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   useEffect(() => {
     if (!isLoading && user && startup && !hasAttemptedAutoSubmit.current) {
       const pendingId = localStorage.getItem('pending_interest_startup_id');
-      if (pendingId === startup.id) {
+      const actionParam = searchParams.get('action');
+      
+      if (pendingId === startup.id || actionParam === 'pitch') {
         hasAttemptedAutoSubmit.current = true;
         localStorage.removeItem('pending_interest_startup_id');
         localStorage.removeItem('pending_interest_owner_uid');
@@ -335,7 +346,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         return () => clearTimeout(timer);
       }
     }
-  }, [isLoading, user, startup, handleExpressInterest]);
+  }, [isLoading, user, startup, handleExpressInterest, searchParams]);
 
   const copyListingLink = () => {
     const identifier = startup?.slug || startup?.id;
@@ -403,12 +414,13 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                   {/* Investor Action Bar */}
                   <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                     {!isOwnStartup && (
-                      <div className="flex flex-wrap gap-3 p-2 bg-black/10 backdrop-blur-xl rounded-[2rem] border border-white/10">
+                      <div className="flex flex-wrap gap-3 p-2 bg-black/10 backdrop-blur-xl rounded-[2rem] border border-white/10 shadow-2xl">
                         {/* Save Action */}
                         <Button 
                           variant="ghost" 
                           onClick={handleSaveToggle} 
                           disabled={isSavingStartup}
+                          title={isSaved ? "Remove from Saved" : "Save for Later"}
                           className={cn(
                             "rounded-full h-12 px-6 gap-2 font-black transition-all",
                             isSaved ? "bg-white text-primary hover:bg-white/90" : "text-white hover:bg-white/10"
@@ -427,6 +439,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                           variant="ghost" 
                           onClick={handleWatchToggle} 
                           disabled={isWatchingStartup}
+                          title={isWatched ? "Stop Watching" : "Add to Watchlist"}
                           className={cn(
                             "rounded-full h-12 px-6 gap-2 font-black transition-all",
                             isWatched ? "bg-white text-primary hover:bg-white/90" : "text-white hover:bg-white/10"
@@ -445,7 +458,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                           onClick={handleExpressInterest} 
                           disabled={isSubmittingInterest || !!existingInterest}
                           className={cn(
-                            "rounded-full h-12 px-8 gap-2 font-black transition-all shadow-2xl",
+                            "rounded-full h-12 px-8 gap-2 font-black transition-all",
                             existingInterest 
                               ? "bg-green-500 text-white hover:bg-green-500 cursor-default" 
                               : "bg-white text-primary hover:bg-slate-50"
@@ -465,7 +478,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                       variant="outline" 
                       size="icon" 
                       onClick={copyListingLink} 
-                      className="rounded-full h-12 w-12 bg-white/10 hover:bg-white/20 border-white/20 text-white backdrop-blur-md transition-all"
+                      className="rounded-full h-12 w-12 bg-white/10 hover:bg-white/20 border-white/20 text-white backdrop-blur-md transition-all shadow-xl"
                     >
                       <Share2 className="h-5 w-5" />
                     </Button>
