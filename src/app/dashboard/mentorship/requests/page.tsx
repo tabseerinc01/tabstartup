@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, query, where, updateDoc, doc, serverTimestamp, addDoc } from 'firebase/firestore';
 import { 
@@ -129,8 +128,8 @@ export default function MentorshipRequestsPage() {
     );
   }
 
-  const incoming = (rawIncoming || []).sort((a, b) => b.createdAt?.toMillis?.() - a.createdAt?.toMillis?.());
-  const outgoing = (rawOutgoing || []).sort((a, b) => b.createdAt?.toMillis?.() - a.createdAt?.toMillis?.());
+  const incoming = (rawIncoming || []).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+  const outgoing = (rawOutgoing || []).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
 
   return (
     <div className="max-w-6xl mx-auto w-full space-y-8 animate-in fade-in duration-700 pb-20">
