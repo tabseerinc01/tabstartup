@@ -12,10 +12,11 @@ import {
   serverTimestamp, 
   getDoc,
   getDocs,
-  writeBatch
+  writeBatch,
+  deleteDoc
 } from 'firebase/firestore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -31,79 +32,78 @@ import {
   MessageSquare, 
   ArrowRight,
   ShieldCheck,
-  Search
+  Send,
+  Inbox,
+  Trash2
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function VenturePitchesPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const router = useRouter();
 
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
-  // 1. Sent Pitches (I am the founder)
-  const sentQuery = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
-    return query(collection(firestore, 'venturePitches'), where('senderUid', '==', user.uid));
-  }, [firestore, user?.uid]);
-
-  // 2. Received Pitches (I am the investor)
+  // 1. Received: Opportunities founders initiated toward me
   const receivedQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'venturePitches'), where('recipientUid', '==', user.uid));
   }, [firestore, user?.uid]);
 
-  const { data: sentPitches, isLoading: isSentLoading } = useCollection(sentQuery);
-  const { data: receivedPitches, isLoading: isReceivedLoading } = useCollection(receivedQuery);
+  // 2. Sent: Startups where I expressed interest (connection type: investor)
+  const sentQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(
+      collection(firestore, 'connections'), 
+      where('initiatorUid', '==', user.uid),
+      where('type', '==', 'investor')
+    );
+  }, [firestore, user?.uid]);
 
-  // Auto-clear pitch notifications when entering this page
+  const { data: rawReceived, isLoading: isReceivedLoading } = useCollection(receivedQuery);
+  const { data: rawSent, isLoading: isSentLoading } = useCollection(sentQuery);
+
+  // Auto-clear notifications when entering
   useEffect(() => {
     if (!firestore || !user?.uid) return;
-    
     const clearNotifications = async () => {
       const q = query(
         collection(firestore, 'notifications'),
         where('recipientUid', '==', user.uid),
         where('read', '==', false),
-        where('type', '==', 'venture_pitch')
+        where('type', 'in', ['venture_pitch', 'investor_interest'])
       );
-      
       try {
         const snap = await getDocs(q);
         if (!snap.empty) {
           const batch = writeBatch(firestore);
-          snap.docs.forEach(d => {
-            batch.update(d.ref, { read: true });
-          });
+          snap.docs.forEach(d => batch.update(d.ref, { read: true }));
           await batch.commit();
         }
-      } catch (e) {
-        console.warn("Could not auto-clear pitch notifications", e);
-      }
+      } catch (e) { console.warn(e); }
     };
-    
     clearNotifications();
   }, [firestore, user?.uid]);
 
-  const handleUpdateStatus = async (pitchId: string, status: string) => {
+  const handleUpdateStatus = async (id: string, collectionName: string, status: string) => {
     if (!firestore || isActionLoading) return;
-    setIsActionLoading(pitchId);
+    setIsActionLoading(id);
 
     try {
-      await updateDoc(doc(firestore, 'venturePitches', pitchId), {
+      await updateDoc(doc(firestore, collectionName, id), {
         status,
         updatedAt: serverTimestamp()
       });
-      toast({ title: `Pitch marked as ${status}` });
+      toast({ title: `Record marked as ${status}` });
     } catch (e) {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: `venturePitches/${pitchId}`,
+        path: `${collectionName}/${id}`,
         operation: 'update',
         requestResourceData: { status }
       }));
@@ -112,12 +112,25 @@ export default function VenturePitchesPage() {
     }
   };
 
-  // Count only received pitches that need action (pending or reviewed)
-  const pendingReceivedCount = useMemo(() => {
-    return (receivedPitches || []).filter(p => p.status === 'pending' || p.status === 'reviewed').length;
-  }, [receivedPitches]);
+  const handleWithdraw = async (id: string) => {
+    if (!firestore || isActionLoading) return;
+    if (!confirm("Withdraw your interest in this startup?")) return;
+    
+    setIsActionLoading(id);
+    try {
+      await deleteDoc(doc(firestore, 'connections', id));
+      toast({ title: "Interest Withdrawn" });
+    } catch (e) {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({
+        path: `connections/${id}`,
+        operation: 'delete'
+      }));
+    } finally {
+      setIsActionLoading(null);
+    }
+  };
 
-  const isLoading = isUserLoading || isSentLoading || isReceivedLoading;
+  const isLoading = isUserLoading || isReceivedLoading || isSentLoading;
 
   if (isLoading) {
     return (
@@ -128,121 +141,84 @@ export default function VenturePitchesPage() {
     );
   }
 
+  const received = (rawReceived || []).sort((a, b) => b.createdAt?.toMillis?.() - a.createdAt?.toMillis?.());
+  const sent = (rawSent || []).sort((a, b) => b.createdAt?.toMillis?.() - a.createdAt?.toMillis?.());
+
   return (
     <div className="max-w-6xl mx-auto w-full space-y-8 animate-in fade-in duration-700 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <div className="flex items-center gap-2 mb-1">
              <div className="h-1 w-8 bg-primary rounded-full" />
-             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Opportunity Management</span>
+             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Opportunity Hub</span>
           </div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900">Venture Pitches</h1>
-          <p className="text-slate-500 font-medium">Manage and review official startup opportunity submissions.</p>
+          <h1 className="text-4xl font-black tracking-tight text-slate-900">Interests & Pitches</h1>
+          <p className="text-slate-500 font-medium">Manage incoming opportunities and your outgoing pipeline.</p>
         </div>
       </div>
 
       <Tabs defaultValue="received" className="space-y-6">
         <TabsList className="bg-slate-100 p-1 rounded-2xl w-full sm:w-auto h-auto flex gap-1">
           <TabsTrigger value="received" className="flex-1 sm:flex-none rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white shadow-sm">
-            Received {pendingReceivedCount > 0 && <Badge variant="destructive" className="ml-2 h-4 px-1">{pendingReceivedCount}</Badge>}
+            Received {received.filter(p => p.status === 'pending').length > 0 && <Badge variant="destructive" className="ml-2 h-4 px-1">{received.filter(p => p.status === 'pending').length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="sent" className="flex-1 sm:flex-none rounded-xl px-6 py-2.5 font-bold data-[state=active]:bg-white">Sent Pitches</TabsTrigger>
         </TabsList>
 
         <TabsContent value="received">
-          <PitchList 
-            items={receivedPitches || []} 
-            isIncoming={true} 
-            onUpdateStatus={handleUpdateStatus}
-            loadingId={isActionLoading}
-          />
+          <div className="grid gap-6">
+            {received.length > 0 ? (
+              received.map((pitch) => (
+                <ReceivedPitchCard 
+                  key={pitch.id} 
+                  pitch={pitch} 
+                  onAction={handleUpdateStatus}
+                  isLoading={isActionLoading === pitch.id}
+                />
+              ))
+            ) : (
+              <EmptyState message="No founders have contacted you yet." icon={Inbox} />
+            )}
+          </div>
         </TabsContent>
         
         <TabsContent value="sent">
-          <PitchList 
-            items={sentPitches || []} 
-            isIncoming={false} 
-            onUpdateStatus={handleUpdateStatus}
-            loadingId={isActionLoading}
-          />
+          <div className="grid gap-6">
+            {sent.length > 0 ? (
+              sent.map((interest) => (
+                <SentInterestCard 
+                  key={interest.id} 
+                  interest={interest} 
+                  onWithdraw={handleWithdraw}
+                  isLoading={isActionLoading === interest.id}
+                />
+              ))
+            ) : (
+              <EmptyState message="You haven't expressed interest in any startups yet." icon={Send} />
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function PitchList({ items, isIncoming, onUpdateStatus, loadingId }: any) {
-  if (items.length === 0) {
-    return (
-      <Card className="border-2 border-dashed rounded-[3rem] bg-background/50 py-32 text-center">
-        <CardContent className="space-y-6">
-          <div className="p-6 bg-slate-50 rounded-full w-fit mx-auto">
-            <Zap className="h-16 w-16 text-slate-200" />
-          </div>
-          <div>
-            <p className="text-xl font-black text-slate-900">No pitches recorded</p>
-            <p className="text-slate-500 font-medium">
-              {isIncoming ? "You haven't received any venture pitches yet." : "You haven't submitted any pitches to investors yet."}
-            </p>
-          </div>
-          <Button variant="outline" asChild className="rounded-full">
-            <Link href="/investors">Explore Investors</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="grid gap-6">
-      {items.sort((a: any, b: any) => b.createdAt?.toMillis() - a.createdAt?.toMillis()).map((pitch: any) => (
-        <PitchCard 
-          key={pitch.id} 
-          pitch={pitch} 
-          isIncoming={isIncoming} 
-          onUpdateStatus={onUpdateStatus}
-          isLoading={loadingId === pitch.id}
-        />
-      ))}
-    </div>
-  );
-}
-
-function PitchCard({ pitch, isIncoming, onUpdateStatus, isLoading }: any) {
-  const [senderProfile, setSenderProfile] = useState<any>(null);
-  const firestore = useFirestore();
-
-  useEffect(() => {
-    async function loadSender() {
-      if (!firestore || !pitch.senderUid) return;
-      const snap = await getDoc(doc(firestore, 'users', pitch.senderUid));
-      if (snap.exists()) setSenderProfile(snap.data());
-    }
-    loadSender();
-  }, [firestore, pitch.senderUid]);
-
+function ReceivedPitchCard({ pitch, onAction, isLoading }: any) {
   const createdAt = pitch.createdAt?.toDate ? pitch.createdAt.toDate() : new Date();
-
+  
   return (
     <Card className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-100">
       <CardContent className="p-0">
         <div className="flex flex-col md:flex-row">
           <div className="flex-1 p-8 space-y-6">
             <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <Avatar className="h-14 w-14 rounded-2xl border-4 border-slate-50 shadow-md">
-                   <AvatarImage src={senderProfile?.imageUrl} />
-                   <AvatarFallback className="font-black bg-primary/10 text-primary">{pitch.senderName?.charAt(0)}</AvatarFallback>
-                </Avatar>
-                <div>
-                   <h3 className="text-xl font-black text-slate-900">{pitch.startupName}</h3>
-                   <div className="flex items-center gap-2 mt-1">
-                      <p className="text-xs font-bold text-primary uppercase tracking-widest">{pitch.senderName}</p>
-                      <div className="h-1 w-1 bg-slate-300 rounded-full" />
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                        {formatDistanceToNow(createdAt, { addSuffix: true })}
-                      </span>
-                   </div>
+              <div className="space-y-1">
+                <h3 className="text-2xl font-black text-slate-900">{pitch.startupName}</h3>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold text-primary uppercase tracking-widest">{pitch.senderName}</p>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                    Received {formatDistanceToNow(createdAt, { addSuffix: true })}
+                  </span>
                 </div>
               </div>
               <Badge className={cn(
@@ -252,7 +228,7 @@ function PitchCard({ pitch, isIncoming, onUpdateStatus, isLoading }: any) {
                 pitch.status === 'reviewed' ? "bg-blue-100 text-blue-700" :
                 "bg-slate-100 text-slate-400"
               )}>
-                {pitch.status}
+                {pitch.status === 'pending' ? 'New' : pitch.status}
               </Badge>
             </div>
 
@@ -260,72 +236,154 @@ function PitchCard({ pitch, isIncoming, onUpdateStatus, isLoading }: any) {
                <p className="text-slate-600 leading-relaxed font-medium italic">
                  "{pitch.pitchMessage}"
                </p>
-               <div className="absolute top-0 right-0 p-4 opacity-10">
-                 <Rocket className="h-12 w-12 text-primary" />
-               </div>
             </div>
 
-            <div className="flex items-center gap-4 pt-4">
-              {isIncoming && pitch.status === 'pending' && (
-                <>
-                  <Button 
-                    className="rounded-xl h-11 px-6 font-bold gap-2 shadow-lg shadow-primary/20"
-                    onClick={() => onUpdateStatus(pitch.id, 'reviewed')}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-                    Mark Reviewed
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    className="rounded-xl h-11 px-6 font-bold border-green-200 text-green-700 hover:bg-green-50 gap-2"
-                    onClick={() => onUpdateStatus(pitch.id, 'accepted')}
-                    disabled={isLoading}
-                  >
-                    <Check className="h-4 w-4" /> Accept
-                  </Button>
-                </>
-              )}
-              
-              {isIncoming && pitch.status === 'reviewed' && (
-                <Button 
-                  className="rounded-xl h-11 px-6 font-bold bg-green-500 hover:bg-green-600 gap-2 shadow-lg shadow-green-200"
-                  onClick={() => onUpdateStatus(pitch.id, 'accepted')}
-                  disabled={isLoading}
-                >
-                  <Check className="h-4 w-4" /> Official Accept
-                </Button>
-              )}
-
-              <Button variant="ghost" asChild className="rounded-xl h-11 px-6 font-bold text-slate-400 gap-2">
-                <Link href={`/startups/${pitch.startupId}`}>
-                   View Venture Profile <ArrowRight className="h-4 w-4" />
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <Button size="sm" className="rounded-xl h-10 px-6 font-bold shadow-lg shadow-primary/20" asChild>
+                <Link href={`/startups/${pitch.startupId}`}>View Startup</Link>
+              </Button>
+              <Button variant="outline" size="sm" className="rounded-xl h-10 px-6 font-bold border-slate-200" asChild>
+                <Link href={`/founders/${pitch.senderUid}`}>View Founder</Link>
+              </Button>
+              <Button variant="ghost" size="sm" className="rounded-xl h-10 px-6 font-bold text-primary gap-2" asChild>
+                <Link href={`/dashboard/messages?startWith=${pitch.senderUid}`}>
+                   <MessageSquare className="h-4 w-4" /> Message
                 </Link>
               </Button>
+              
+              <div className="flex-1" />
+
+              {pitch.status !== 'accepted' && pitch.status !== 'rejected' && (
+                <div className="flex gap-2">
+                   <Button 
+                    size="icon" 
+                    variant="outline" 
+                    className="h-10 w-10 rounded-xl border-green-200 text-green-600 hover:bg-green-50"
+                    onClick={() => onAction(pitch.id, 'venturePitches', 'accepted')}
+                    disabled={isLoading}
+                   >
+                     {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                   </Button>
+                   <Button 
+                    size="icon" 
+                    variant="outline" 
+                    className="h-10 w-10 rounded-xl border-red-200 text-red-600 hover:bg-red-50"
+                    onClick={() => onAction(pitch.id, 'venturePitches', 'rejected')}
+                    disabled={isLoading}
+                   >
+                     <X className="h-4 w-4" />
+                   </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SentInterestCard({ interest, onWithdraw, isLoading }: any) {
+  const firestore = useFirestore();
+  const [startup, setStartup] = useState<any>(null);
+  const [founder, setFounder] = useState<any>(null);
+
+  useEffect(() => {
+    async function loadData() {
+      if (!firestore || !interest.recipientUid) return;
+      const [sSnap, fSnap] = await Promise.all([
+        getDoc(doc(firestore, 'startups', interest.recipientUid)),
+        getDoc(doc(firestore, 'users', interest.recipientUid))
+      ]);
+      if (sSnap.exists()) setStartup(sSnap.data());
+      if (fSnap.exists()) setFounder(fSnap.data());
+    }
+    loadData();
+  }, [firestore, interest.recipientUid]);
+
+  const createdAt = interest.createdAt?.toDate ? interest.createdAt.toDate() : new Date();
+
+  return (
+    <Card className="group overflow-hidden rounded-[2.5rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background ring-1 ring-slate-100">
+      <CardContent className="p-8">
+        <div className="flex flex-col md:flex-row justify-between items-start gap-6">
+          <div className="flex items-center gap-5">
+            <div className="h-16 w-16 rounded-2xl bg-primary/5 flex items-center justify-center text-primary font-black text-2xl shadow-inner border border-primary/5">
+              {startup?.name?.charAt(0) || <Rocket className="h-6 w-6" />}
+            </div>
+            <div>
+              <h3 className="text-2xl font-black text-slate-900 group-hover:text-primary transition-colors">{startup?.name || "Loading..."}</h3>
+              <div className="flex items-center gap-3 mt-1">
+                <span className="text-sm font-bold text-slate-400 uppercase tracking-tight">{founder?.fullName || "Founder"}</span>
+                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+                  Interested {formatDistanceToNow(createdAt, { addSuffix: true })}
+                </span>
+              </div>
             </div>
           </div>
           
-          <div className="w-full md:w-64 bg-slate-900 text-white p-8 flex flex-col justify-center border-t md:border-t-0 md:border-l border-slate-800">
-             <div className="space-y-6">
-                <div className="space-y-1">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Opportunity Ref</p>
-                   <code className="text-xs font-mono text-primary">{pitch.id.slice(0, 12)}</code>
-                </div>
-                <div className="space-y-3">
-                   <Button variant="outline" className="w-full justify-start h-10 rounded-xl bg-white/5 border-none hover:bg-white/10 text-white text-xs font-bold gap-2" asChild>
-                      <Link href={`/dashboard/messages?startWith=${isIncoming ? pitch.senderUid : pitch.recipientUid}`}>
-                         <MessageSquare className="h-3.5 w-3.5" /> Direct Message
-                      </Link>
-                   </Button>
-                   <Button variant="outline" className="w-full justify-start h-10 rounded-xl bg-white/5 border-none hover:bg-white/10 text-white text-xs font-bold gap-2" asChild>
-                      <Link href={isIncoming ? `/founders/${pitch.senderUid}` : `/investors/${pitch.recipientUid}`}>
-                         <User className="h-3.5 w-3.5" /> View {isIncoming ? 'Founder' : 'Investor'}
-                      </Link>
-                   </Button>
-                </div>
-             </div>
-          </div>
+          <Badge className={cn(
+            "rounded-xl px-4 py-1.5 text-[10px] font-black uppercase tracking-widest border-none",
+            interest.status === 'pending' ? "bg-amber-100 text-amber-700" :
+            interest.status === 'accepted' ? "bg-green-100 text-green-700" :
+            "bg-red-100 text-red-700"
+          )}>
+            {interest.status}
+          </Badge>
         </div>
+
+        <div className="mt-6 flex flex-wrap items-center gap-3 pt-6 border-t border-slate-50">
+           <Button size="sm" className="rounded-xl h-10 px-6 font-bold" asChild>
+             <Link href={`/startups/${startup?.slug || interest.recipientUid}`}>View Startup</Link>
+           </Button>
+           <Button variant="outline" size="sm" className="rounded-xl h-10 px-6 font-bold border-slate-200" asChild>
+             <Link href={`/founders/${interest.recipientUid}`}>View Founder</Link>
+           </Button>
+           
+           {interest.status === 'accepted' && (
+             <Button variant="ghost" size="sm" className="rounded-xl h-10 px-6 font-bold text-primary gap-2" asChild>
+                <Link href={`/dashboard/messages?startWith=${interest.recipientUid}`}>
+                   <MessageSquare className="h-4 w-4" /> Message
+                </Link>
+             </Button>
+           )}
+
+           <div className="flex-1" />
+
+           {interest.status === 'pending' && (
+             <Button 
+               variant="ghost" 
+               size="sm" 
+               className="rounded-xl h-10 px-4 font-bold text-slate-400 hover:text-destructive hover:bg-destructive/5 gap-2"
+               onClick={() => onWithdraw(interest.id)}
+               disabled={isLoading}
+             >
+               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+               Withdraw
+             </Button>
+           )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EmptyState({ message, icon: Icon }: { message: string, icon: any }) {
+  return (
+    <Card className="border-2 border-dashed rounded-[3rem] bg-background/50 py-32 text-center border-slate-200">
+      <CardContent className="space-y-6">
+        <div className="p-6 bg-slate-50 rounded-full w-fit mx-auto">
+          <Icon className="h-16 w-16 text-slate-200" />
+        </div>
+        <div>
+          <p className="text-xl font-black text-slate-900">{message}</p>
+          <p className="text-slate-500 font-medium max-w-sm mx-auto">
+            Opportunities will appear here once interactions are initiated.
+          </p>
+        </div>
+        <Button variant="outline" asChild className="rounded-full">
+          <Link href="/startups">Discover Startups</Link>
+        </Button>
       </CardContent>
     </Card>
   );
