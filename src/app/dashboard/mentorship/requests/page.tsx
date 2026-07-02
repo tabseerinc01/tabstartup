@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, updateDoc, doc, serverTimestamp, addDoc } from 'firebase/firestore';
+import { collection, query, where, updateDoc, doc, getDoc, serverTimestamp, addDoc } from 'firebase/firestore';
 import { 
   GraduationCap, 
   Loader2, 
