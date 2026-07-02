@@ -32,7 +32,10 @@ import {
   Heart,
   Eye,
   Zap,
-  Check
+  Check,
+  ShieldCheck,
+  HandCoins,
+  Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -152,8 +155,6 @@ export default function StartupsDirectoryPage() {
     }
   };
 
-  const isInvestor = !!user && relationsMap; // Check role if needed, but directory is public
-
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <PublicHeader />
@@ -247,37 +248,65 @@ export default function StartupsDirectoryPage() {
                 return (
                   <Card key={s.id} className="group border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background rounded-[2.5rem] overflow-hidden flex flex-col h-full ring-1 ring-slate-100">
                     <CardHeader className="p-8 pb-4">
-                      <div className="flex justify-between items-start mb-4">
+                      <div className="flex justify-between items-start mb-6">
                         <Link href={`/startups/${startupId}`}>
                           <div className="p-3 bg-primary/5 rounded-2xl text-primary group-hover:bg-primary group-hover:text-white transition-all">
                             <Rocket className="h-6 w-6" />
                           </div>
                         </Link>
-                        <div className="flex gap-2">
-                          {s.featured && <Badge className="bg-amber-500 border-none text-[8px] font-black uppercase">Featured</Badge>}
-                          <Badge variant="outline" className="text-[8px] font-black uppercase">{s.stage}</Badge>
+                        <div className="flex flex-wrap justify-end gap-1.5 max-w-[200px]">
+                           {/* Status Pills */}
+                           {relations.interested && (
+                             <Badge className="bg-green-100 text-green-700 border-none rounded-lg px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
+                               Interest Sent ✓
+                             </Badge>
+                           )}
+                           {relations.watchedId && (
+                             <Badge className="bg-primary/10 text-primary border-none rounded-lg px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
+                               Watching ✓
+                             </Badge>
+                           )}
+                           {relations.savedId && (
+                             <Badge className="bg-primary/10 text-primary border-none rounded-lg px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
+                               Saved ✓
+                             </Badge>
+                           )}
                         </div>
                       </div>
                       <Link href={`/startups/${startupId}`}>
                         <CardTitle className="text-2xl font-black group-hover:text-primary transition-colors">{s.name}</CardTitle>
                       </Link>
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">
-                        <MapPin className="h-3 w-3" /> {s.location || 'Remote'}
+                      
+                      {/* Priority Badges */}
+                      <div className="flex flex-wrap gap-2 mt-4">
+                        {s.startupVerified && (
+                          <Badge className="bg-blue-50 text-blue-700 border-blue-100 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase flex items-center gap-1">
+                            <ShieldCheck className="h-3 w-3" /> Verified
+                          </Badge>
+                        )}
+                        {s.fundingNeed && (
+                          <Badge className="bg-green-50 text-green-700 border-green-100 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase flex items-center gap-1">
+                            <HandCoins className="h-3 w-3" /> Raising {s.fundingNeed}
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="rounded-lg px-2.5 py-1 text-[9px] font-black uppercase">
+                          {s.stage}
+                        </Badge>
+                        <Badge variant="outline" className="border-slate-200 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase text-slate-500">
+                          {s.industry}
+                        </Badge>
+                        <Badge variant="outline" className="border-slate-200 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase text-slate-500 flex items-center gap-1">
+                          <Globe className="h-2.5 w-2.5" /> {s.location || 'Global'}
+                        </Badge>
                       </div>
                     </CardHeader>
+                    
                     <CardContent className="p-8 pt-0 flex-1 space-y-6">
-                      <p className="text-slate-500 leading-relaxed font-medium line-clamp-3 italic">
+                      <p className="text-slate-500 leading-relaxed font-medium line-clamp-3 italic text-sm">
                         "{s.shortDescription || 'A visionary startup building for the next generation.'}"
                       </p>
                       
                       <div className="pt-6 border-t border-slate-50 space-y-6">
-                         <div className="flex items-center justify-between">
-                            <Badge variant="secondary" className="bg-primary/5 text-primary border-none rounded-lg px-2 h-5 text-[9px] font-black uppercase">{s.industry}</Badge>
-                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
-                               Funding: {s.fundingNeed || 'TBD'}
-                            </span>
-                         </div>
-
                          {/* Quick Actions Bar for Directory */}
                          {!isOwn && (
                            <div className="flex items-center gap-2 pt-2">
@@ -292,7 +321,7 @@ export default function StartupsDirectoryPage() {
                                 )}
                               >
                                 {isActionProcessing === `${s.id}-savedId` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Heart className={cn("h-3 w-3", relations.savedId && "fill-primary")} />}
-                                {relations.savedId ? "Saved ✓" : "Save"}
+                                {relations.savedId ? "Saved" : "Save"}
                               </Button>
                               
                               <Button 
@@ -306,7 +335,7 @@ export default function StartupsDirectoryPage() {
                                 )}
                               >
                                 {isActionProcessing === `${s.id}-watchedId` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className={cn("h-3 w-3", relations.watchedId && "fill-primary")} />}
-                                {relations.watchedId ? "Watching ✓" : "Watch"}
+                                {relations.watchedId ? "Watching" : "Watch"}
                               </Button>
 
                               <Button 
@@ -314,20 +343,20 @@ export default function StartupsDirectoryPage() {
                                 size="sm" 
                                 asChild
                                 className={cn(
-                                  "rounded-xl h-9 px-4 gap-1.5 text-[10px] font-black uppercase ml-auto",
-                                  relations.interested && "bg-green-50 text-green-600 hover:bg-green-50 pointer-events-none"
+                                  "rounded-xl h-9 px-4 gap-1.5 text-[10px] font-black uppercase ml-auto shadow-sm",
+                                  relations.interested && "bg-green-50 text-green-600 hover:bg-green-50 pointer-events-none border-none"
                                 )}
                               >
                                 <Link href={`/startups/${startupId}${relations.interested ? '' : '?action=pitch'}`}>
                                    {relations.interested ? <Check className="h-3 w-3" /> : <Rocket className="h-3 w-3" />}
-                                   {relations.interested ? "Interest Sent ✓" : "Express Interest"}
+                                   {relations.interested ? "Interest Sent" : "Express Interest"}
                                 </Link>
                               </Button>
                            </div>
                          )}
 
                          {!isOwn && (
-                           <Button className="w-full rounded-xl font-bold h-11 group-hover:bg-primary transition-all" variant="ghost" asChild>
+                           <Button className="w-full rounded-xl font-bold h-11 group-hover:bg-primary group-hover:text-white transition-all" variant="ghost" asChild>
                               <Link href={`/startups/${startupId}`}>View Full Profile <ArrowRight className="ml-2 h-4 w-4" /></Link>
                            </Button>
                          )}

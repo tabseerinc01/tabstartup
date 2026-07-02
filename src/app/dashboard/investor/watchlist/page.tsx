@@ -22,7 +22,10 @@ import {
   Filter,
   Calendar,
   User as UserIcon,
-  ShieldCheck
+  ShieldCheck,
+  HandCoins,
+  Globe,
+  Check
 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -34,6 +37,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 export default function WatchlistPage() {
   const { user } = useUser();
@@ -44,7 +48,6 @@ export default function WatchlistPage() {
   const [startupsData, setStartupsData] = useState<Record<string, any>>({});
   const [foundersData, setFoundersData] = useState<Record<string, any>>({});
   const [activityData, setActivityData] = useState<Record<string, any>>({});
-  const [interestsData, setInterestsData] = useState<Record<string, boolean>>({});
   const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   // 1. Fetch Watchlist Records
@@ -59,7 +62,34 @@ export default function WatchlistPage() {
 
   const { data: watchlistItems, isLoading: isWatchlistLoading } = useCollection(watchlistQuery);
 
-  // 2. Hydrate Watchlist with Startup and Founder details
+  // 2. Fetch User Relations (for status pills)
+  const allSavesQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'savedStartups'), where('investorUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+  const { data: userSaves } = useCollection(allSavesQuery);
+
+  const connsQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid), where('type', '==', 'investor'));
+  }, [firestore, user?.uid]);
+  const { data: userConns } = useCollection(connsQuery);
+
+  const relationsMap = useMemo(() => {
+    const map: Record<string, { savedId?: string, watchedId?: string, interested?: boolean }> = {};
+    userSaves?.forEach(s => {
+      if (!map[s.startupId]) map[s.startupId] = {};
+      if (s.isWatchlist) map[s.startupId].watchedId = s.id;
+      else map[s.startupId].savedId = s.id;
+    });
+    userConns?.forEach(c => {
+      if (!map[c.recipientUid]) map[c.recipientUid] = {};
+      map[c.recipientUid].interested = true;
+    });
+    return map;
+  }, [userSaves, userConns]);
+
+  // 3. Hydrate Details
   useEffect(() => {
     async function hydrateWatchlist() {
       if (!firestore || !watchlistItems || watchlistItems.length === 0) return;
@@ -69,7 +99,6 @@ export default function WatchlistPage() {
         const newStartups: Record<string, any> = { ...startupsData };
         const newFounders: Record<string, any> = { ...foundersData };
         const newActivities: Record<string, any> = { ...activityData };
-        const newInterests: Record<string, boolean> = { ...interestsData };
 
         for (const item of watchlistItems) {
           const startupId = item.startupId;
@@ -96,11 +125,6 @@ export default function WatchlistPage() {
               if (!aSnap.empty) {
                 newActivities[startupId] = aSnap.docs[0].data();
               }
-
-              if (user?.uid) {
-                const interestSnap = await getDoc(doc(firestore, 'startups', sData.ownerUid, 'interests', user.uid));
-                newInterests[startupId] = interestSnap.exists();
-              }
             }
           }
         }
@@ -108,7 +132,6 @@ export default function WatchlistPage() {
         setStartupsData(newStartups);
         setFoundersData(newFounders);
         setActivityData(newActivities);
-        setInterestsData(newInterests);
       } catch (e) {
         console.error("Hydration Error:", e);
       } finally {
@@ -116,7 +139,7 @@ export default function WatchlistPage() {
       }
     }
     hydrateWatchlist();
-  }, [firestore, watchlistItems, user?.uid]);
+  }, [firestore, watchlistItems]);
 
   const handleRemove = async (id: string) => {
     if (!firestore) return;
@@ -125,7 +148,6 @@ export default function WatchlistPage() {
       toast({ title: "Removed from Watchlist" });
     } catch (e) {
       console.error(e);
-      toast({ title: "Error removing item", variant: "destructive" });
     }
   };
 
@@ -192,13 +214,14 @@ export default function WatchlistPage() {
         </div>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-8">
         {sortedItems.length > 0 ? (
           sortedItems.map((item) => {
-            const startup = startupsData[item.startupId];
-            const founder = startup ? foundersData[startup.ownerUid] : null;
+            const s = startupsData[item.startupId];
+            const founder = s ? foundersData[s.ownerUid] : null;
             const activity = activityData[item.startupId];
-            const isInterestSent = interestsData[item.startupId];
+            const relations = relationsMap[item.startupId] || {};
+            const startupIdentifier = s?.slug || item.startupId;
 
             return (
               <Card key={item.id} className="group border-none shadow-sm hover:shadow-xl transition-all duration-500 rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
@@ -210,33 +233,60 @@ export default function WatchlistPage() {
                           <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-2xl shadow-inner border border-primary/5">
                             {item.startupName?.charAt(0)}
                           </div>
-                          <div>
-                            <h3 className="text-2xl font-black text-slate-900 group-hover:text-primary transition-colors">{item.startupName}</h3>
-                            <div className="flex flex-wrap items-center gap-3 mt-1">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-3 mb-1 flex-wrap">
+                               <h3 className="text-2xl font-black text-slate-900 group-hover:text-primary transition-colors">{item.startupName}</h3>
+                               {relations.interested && (
+                                 <Badge className="bg-green-100 text-green-700 border-none rounded-lg px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
+                                   Interest Sent ✓
+                                 </Badge>
+                               )}
+                               {relations.savedId && (
+                                 <Badge className="bg-primary/10 text-primary border-none rounded-lg px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
+                                   Saved ✓
+                                 </Badge>
+                               )}
+                               <Badge className="bg-primary/20 text-primary border-none rounded-lg px-2 py-0.5 text-[8px] font-black uppercase tracking-widest">
+                                 Watching ✓
+                               </Badge>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3">
                               <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
-                                <UserIcon className="h-3.5 w-3.5 text-primary/50" /> {founder?.fullName || "Leader"}
+                                <UserIcon className="h-3.5 w-3.5 text-primary/50" /> {founder?.fullName || "Founder"}
                               </span>
-                              <Badge variant="secondary" className="bg-primary/5 text-primary border-none rounded-md px-2 h-5 font-bold uppercase text-[9px] tracking-widest">
-                                {startup?.industry || "Venture"}
-                              </Badge>
-                              <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
-                                <MapPin className="h-3 w-3" /> {startup?.location || "Global"}
+                              <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+                                Watching since {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Recently'}
                               </span>
                             </div>
                           </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <Badge variant="outline" className="rounded-full border-slate-200 font-black text-[9px] h-6 px-3 uppercase tracking-tighter">
-                            {startup?.stage || "Idea"}
-                          </Badge>
-                          <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-2">
-                             Watching since {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString() : 'Recently'}
-                          </p>
-                        </div>
                       </div>
 
-                      <div className="bg-slate-50/50 p-5 rounded-[2rem] border border-slate-100 relative group/activity">
-                        <div className="flex items-center gap-2 mb-2">
+                      {/* Intelligent Priority Badges */}
+                      <div className="flex flex-wrap gap-2">
+                        {s?.startupVerified && (
+                          <Badge className="bg-blue-50 text-blue-700 border-blue-100 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase flex items-center gap-1">
+                            <ShieldCheck className="h-3 w-3" /> Verified
+                          </Badge>
+                        )}
+                        {s?.fundingNeed && (
+                          <Badge className="bg-green-50 text-green-700 border-green-100 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase flex items-center gap-1">
+                            <HandCoins className="h-3 w-3" /> Raising {s.fundingNeed}
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="rounded-lg px-2.5 py-1 text-[9px] font-black uppercase">
+                          {s?.stage || 'Idea'}
+                        </Badge>
+                        <Badge variant="outline" className="border-slate-200 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase text-slate-500">
+                          {s?.industry || 'Venture'}
+                        </Badge>
+                        <Badge variant="outline" className="border-slate-200 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase text-slate-500 flex items-center gap-1">
+                          <Globe className="h-2.5 w-2.5" /> {s?.location || 'Global'}
+                        </Badge>
+                      </div>
+
+                      <div className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 relative group/activity">
+                        <div className="flex items-center gap-2 mb-3">
                            <TrendingUp className="h-3.5 w-3.5 text-primary" />
                            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Latest Activity</span>
                         </div>
@@ -250,25 +300,21 @@ export default function WatchlistPage() {
                             </p>
                           </div>
                         ) : (
-                          <p className="text-xs text-slate-400 italic font-medium">No recent updates found for this venture.</p>
+                          <p className="text-xs text-slate-400 italic font-medium">No recent updates shared by the founder.</p>
                         )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-4 pt-4">
-                        <Button className="rounded-xl h-11 px-8 font-black gap-2 shadow-lg shadow-primary/20" asChild>
-                          <Link href={`/startups/${startup?.slug || item.startupId}`}>
+                        <Button className="rounded-xl h-11 px-8 font-black gap-2 shadow-lg shadow-primary/20 group-hover:scale-[1.02] transition-transform" asChild>
+                          <Link href={`/startups/${startupIdentifier}`}>
                             Analyze Profile <ArrowRight className="h-4 w-4" />
                           </Link>
                         </Button>
                         
-                        {isInterestSent ? (
-                          <Badge className="h-11 px-6 rounded-xl bg-green-50 text-green-600 border border-green-100 font-black text-xs gap-2">
-                            <CheckCircle2 className="h-4 w-4" /> Interest Sent
-                          </Badge>
-                        ) : (
-                          <Button variant="outline" className="rounded-xl h-11 px-6 font-bold border-slate-200 text-slate-600 hover:bg-primary hover:text-white hover:border-primary transition-all group/btn" asChild>
-                             <Link href={`/startups/${startup?.slug || item.startupId}?action=pitch`}>
-                                <Rocket className="h-4 w-4 mr-2 text-primary group-hover/btn:text-white" /> Express Interest
+                        {!relations.interested && (
+                          <Button variant="outline" className="rounded-xl h-11 px-6 font-bold border-slate-200 text-slate-600 hover:bg-primary hover:text-white hover:border-primary transition-all" asChild>
+                             <Link href={`/startups/${startupIdentifier}?action=pitch`}>
+                                <Rocket className="h-4 w-4 mr-2" /> Express Interest
                              </Link>
                           </Button>
                         )}
@@ -281,7 +327,7 @@ export default function WatchlistPage() {
                           onClick={() => handleRemove(item.id)}
                           className="rounded-xl h-10 px-4 text-slate-400 hover:text-destructive hover:bg-destructive/5 font-bold gap-2"
                         >
-                          <Trash2 className="h-4 w-4" /> Stop Watching
+                          <Trash2 className="h-4 w-4" /> Remove
                         </Button>
                       </div>
                     </div>
@@ -290,7 +336,7 @@ export default function WatchlistPage() {
                        <div className="space-y-6">
                           <div className="space-y-1">
                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Target Funding</p>
-                             <p className="text-2xl font-black text-primary">{startup?.fundingNeed || 'TBD'}</p>
+                             <p className="text-2xl font-black text-primary">{s?.fundingNeed || 'TBD'}</p>
                           </div>
                           <div className="space-y-4">
                              <div className="flex items-center gap-2">
@@ -298,12 +344,12 @@ export default function WatchlistPage() {
                                 <span className="text-[10px] font-bold text-slate-400 uppercase">Verification Level</span>
                              </div>
                              <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                                <div className="bg-primary h-full transition-all" style={{ width: startup?.startupVerified ? '100%' : '30%' }} />
+                                <div className="bg-primary h-full transition-all" style={{ width: s?.startupVerified ? '100%' : '30%' }} />
                              </div>
                           </div>
                        </div>
                        <Button variant="outline" className="w-full justify-start h-10 rounded-xl bg-white/5 border-none hover:bg-white/10 text-white text-xs font-bold gap-2" asChild>
-                          <Link href={`/dashboard/messages?startWith=${startup?.ownerUid}`}>
+                          <Link href={`/dashboard/messages?startWith=${s?.ownerUid}`}>
                              <MessageSquare className="h-3.5 w-3.5" /> Direct Inquiry
                           </Link>
                        </Button>
@@ -339,7 +385,7 @@ export default function WatchlistPage() {
             <div className="space-y-4">
                <h2 className="text-3xl font-black tracking-tight">Private Intelligence</h2>
                <p className="text-white/80 font-medium leading-relaxed">
-                  Watching a startup is completely private. Founders are never notified when you add them to your watchlist, allowing you to monitor traction discreetly before initiating a pitch.
+                  Watching a startup is completely private. Founders are never notified when you add them to your watchlist.
                </p>
             </div>
             <div className="flex justify-end">
