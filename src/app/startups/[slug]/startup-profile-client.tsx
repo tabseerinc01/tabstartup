@@ -40,7 +40,9 @@ import {
   AlertCircle,
   EyeOff,
   Check,
-  Star
+  Star,
+  Eye,
+  Zap
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
@@ -57,11 +59,19 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   const [founder, setFounder] = useState<any>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [existingInterest, setExistingInterest] = useState<any>(null);
+  
+  // Save State
   const [isSaved, setIsSaved] = useState(false);
   const [savedDocId, setSavedDocId] = useState<string | null>(null);
+  
+  // Watch State
+  const [isWatched, setIsWatched] = useState(false);
+  const [watchedDocId, setWatchedDocId] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingInterest, setIsSubmittingInterest] = useState(false);
   const [isSavingStartup, setIsSavingStartup] = useState(false);
+  const [isWatchingStartup, setIsWatchingStartup] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   
   const hasAttemptedAutoSubmit = useRef(false);
@@ -123,17 +133,24 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             setExistingInterest(interestSnap.data());
           }
 
+          // Load Saved & Watched states
           const savedQ = query(
             collection(firestore, 'savedStartups'),
             where('investorUid', '==', user.uid),
-            where('startupId', '==', ownerUid),
-            limit(1)
+            where('startupId', '==', ownerUid)
           );
           const savedSnap = await getDocs(savedQ);
-          if (!savedSnap.empty) {
-            setIsSaved(true);
-            setSavedDocId(savedSnap.docs[0].id);
-          }
+          
+          savedSnap.docs.forEach(d => {
+            const data = d.data();
+            if (data.isWatchlist) {
+              setIsWatched(true);
+              setWatchedDocId(d.id);
+            } else {
+              setIsSaved(true);
+              setSavedDocId(d.id);
+            }
+          });
         }
       } catch (error) {
         console.error("Startup Loading Error:", error);
@@ -148,6 +165,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   const handleSaveToggle = async () => {
     if (!user || !firestore || !startup) {
       toast({ title: "Login Required" });
+      router.push('/login');
       return;
     }
     setIsSavingStartup(true);
@@ -173,6 +191,38 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       console.error(e);
     } finally {
       setIsSavingStartup(false);
+    }
+  };
+
+  const handleWatchToggle = async () => {
+    if (!user || !firestore || !startup) {
+      toast({ title: "Login Required" });
+      router.push('/login');
+      return;
+    }
+    setIsWatchingStartup(true);
+    try {
+      if (isWatched && watchedDocId) {
+        await deleteDoc(doc(firestore, 'savedStartups', watchedDocId));
+        setIsWatched(false);
+        setWatchedDocId(null);
+        toast({ title: "Removed from Watchlist" });
+      } else {
+        const docRef = await addDoc(collection(firestore, 'savedStartups'), {
+          investorUid: user.uid,
+          startupId: startup.ownerUid,
+          startupName: startup.name,
+          isWatchlist: true,
+          createdAt: serverTimestamp()
+        });
+        setIsWatched(true);
+        setWatchedDocId(docRef.id);
+        toast({ title: "Added to Watchlist", description: "This action is private and only visible to you." });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsWatchingStartup(false);
     }
   };
 
@@ -327,23 +377,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     );
   }
 
-  if (!startup) {
-    return (
-      <div className="flex min-h-screen flex-col">
-        <PublicHeader />
-        <main className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-           <div className="p-6 bg-slate-50 rounded-full mb-6">
-              <Rocket className="h-12 w-12 text-slate-200" />
-           </div>
-           <h1 className="text-3xl font-black text-slate-900 mb-2">Venture Not Found</h1>
-           <p className="text-slate-500 mb-8 max-w-sm">The startup profile you are looking for might have changed.</p>
-           <Button asChild className="rounded-full px-8"><Link href="/founders">Explore Directory</Link></Button>
-        </main>
-        <PublicFooter />
-      </div>
-    );
-  }
-
   const isOwnStartup = user?.uid === startup.ownerUid;
 
   return (
@@ -366,38 +399,75 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                       "{startup.shortDescription || 'Building the future.'}"
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-3 w-full md:w-auto">
+                  
+                  {/* Investor Action Bar */}
+                  <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                     {!isOwnStartup && (
-                      <>
+                      <div className="flex flex-wrap gap-3 p-2 bg-black/10 backdrop-blur-xl rounded-[2rem] border border-white/10">
+                        {/* Save Action */}
                         <Button 
-                          variant="outline" 
-                          size="icon" 
+                          variant="ghost" 
                           onClick={handleSaveToggle} 
+                          disabled={isSavingStartup}
                           className={cn(
-                            "rounded-2xl h-14 w-14 backdrop-blur-md transition-all",
-                            isSaved ? "bg-white text-primary border-white" : "bg-white/10 hover:bg-white/20 border-white/20 text-white"
+                            "rounded-full h-12 px-6 gap-2 font-black transition-all",
+                            isSaved ? "bg-white text-primary hover:bg-white/90" : "text-white hover:bg-white/10"
                           )}
                         >
-                          <Star className={cn("h-6 w-6", isSaved && "fill-primary")} />
+                          {isSavingStartup ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Heart className={cn("h-4 w-4", isSaved && "fill-primary")} />
+                          )}
+                          {isSaved ? "Saved ✓" : "Save Startup"}
                         </Button>
-                        {existingInterest ? (
-                          <Button disabled className="h-14 px-8 rounded-2xl bg-white/20 text-white border-white/10 backdrop-blur-md opacity-80">
-                            <Check className="h-5 w-5 mr-2" /> Interest Shared
-                          </Button>
-                        ) : (
-                          <Button 
-                            onClick={handleExpressInterest} 
-                            className="h-14 px-10 rounded-2xl bg-white text-primary hover:bg-slate-50 shadow-2xl transition-all font-black" 
-                            disabled={isSubmittingInterest}
-                          >
-                            {isSubmittingInterest ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Heart className="h-5 w-5 mr-2" />}
-                            Express Interest
-                          </Button>
-                        )}
-                      </>
+
+                        {/* Watch Action */}
+                        <Button 
+                          variant="ghost" 
+                          onClick={handleWatchToggle} 
+                          disabled={isWatchingStartup}
+                          className={cn(
+                            "rounded-full h-12 px-6 gap-2 font-black transition-all",
+                            isWatched ? "bg-white text-primary hover:bg-white/90" : "text-white hover:bg-white/10"
+                          )}
+                        >
+                          {isWatchingStartup ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Eye className={cn("h-4 w-4", isWatched && "fill-primary")} />
+                          )}
+                          {isWatched ? "Watching ✓" : "Watch Startup"}
+                        </Button>
+
+                        {/* Interest Action */}
+                        <Button 
+                          onClick={handleExpressInterest} 
+                          disabled={isSubmittingInterest || !!existingInterest}
+                          className={cn(
+                            "rounded-full h-12 px-8 gap-2 font-black transition-all shadow-2xl",
+                            existingInterest 
+                              ? "bg-green-500 text-white hover:bg-green-500 cursor-default" 
+                              : "bg-white text-primary hover:bg-slate-50"
+                          )}
+                        >
+                          {isSubmittingInterest ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Rocket className={cn("h-4 w-4", existingInterest && "fill-white")} />
+                          )}
+                          {existingInterest ? "Interest Sent ✓" : "Express Interest"}
+                        </Button>
+                      </div>
                     )}
-                    <Button variant="outline" size="icon" onClick={copyListingLink} className="rounded-2xl h-14 w-14 bg-white/10 hover:bg-white/20 border-white/20 text-white backdrop-blur-md transition-all">
-                      <Share2 className="h-6 w-6" />
+                    
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      onClick={copyListingLink} 
+                      className="rounded-full h-12 w-12 bg-white/10 hover:bg-white/20 border-white/20 text-white backdrop-blur-md transition-all"
+                    >
+                      <Share2 className="h-5 w-5" />
                     </Button>
                   </div>
                 </div>
