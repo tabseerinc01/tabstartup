@@ -29,7 +29,8 @@ import {
   Eye,
   Calendar,
   Send,
-  Inbox
+  Inbox,
+  Briefcase
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/logo';
@@ -166,6 +167,7 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
       items: [
         { href: '/dashboard/startup', label: 'My Venture', icon: Rocket },
         { href: '/dashboard/fundraising', label: 'Fundraising', icon: HandCoins },
+        { href: '/dashboard/deals', label: 'Funding Deals', icon: Briefcase },
         { href: '/dashboard/founder/mentors', label: 'My Mentors', icon: Users },
         { href: '/dashboard/mentorship/requests', label: 'Mentorship Requests', icon: Inbox },
       ]
@@ -177,6 +179,7 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
       id: 'investor',
       label: 'Investor',
       items: [
+        { href: '/dashboard/deals', label: 'Investment Deals', icon: Briefcase },
         { href: '/dashboard/pitches', label: 'Interests Sent', icon: Send },
         { href: '/dashboard/investor/saved', label: 'Saved Startups', icon: Star },
         { href: '/dashboard/investor/watchlist', label: 'Watchlist', icon: Eye },

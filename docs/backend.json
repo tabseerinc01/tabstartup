@@ -30,6 +30,20 @@
       },
       "required": ["uid", "fullName", "email", "createdAt", "updatedAt"]
     },
+    "DealRoom": {
+      "title": "DealRoom",
+      "type": "object",
+      "description": "A secure workspace for funding negotiations between a founder and investor.",
+      "properties": {
+        "startupId": { "type": "string" },
+        "founderUid": { "type": "string" },
+        "investorUid": { "type": "string" },
+        "status": { "type": "string", "enum": ["Discovery", "Due Diligence", "Negotiation", "Committed", "Closed", "Cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["startupId", "founderUid", "investorUid", "status", "createdAt"]
+    },
     "MentorshipRequest": {
       "title": "MentorshipRequest",
       "type": "object",
@@ -59,30 +73,6 @@
       },
       "required": ["investorUid", "startupId", "createdAt"]
     },
-    "MentorshipSession": {
-      "title": "MentorshipSession",
-      "type": "object",
-      "description": "A scheduled guidance session between a mentor and founder.",
-      "properties": {
-        "mentorUid": { "type": "string" },
-        "founderUid": { "type": "string" },
-        "founderName": { "type": "string" },
-        "scheduledAt": { "type": "string", "format": "date-time" },
-        "status": { "type": "string", "enum": ["scheduled", "completed", "cancelled"] },
-        "notes": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["mentorUid", "founderUid", "status", "scheduledAt"]
-    },
-    "Referral": {
-      "title": "Referral",
-      "type": "object",
-      "properties": {
-        "referrerUid": { "type": "string" },
-        "referredUid": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
     "Startup": {
       "title": "Startup",
       "type": "object",
@@ -92,48 +82,6 @@
         "slug": { "type": "string" },
         "status": { "type": "string", "enum": ["active", "hidden"] },
         "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "VenturePitch": {
-      "title": "VenturePitch",
-      "type": "object",
-      "properties": {
-        "senderUid": { "type": "string" },
-        "recipientUid": { "type": "string" },
-        "status": { "type": "string", "enum": ["pending", "reviewed", "accepted", "rejected"] },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "Contact": {
-      "title": "Contact",
-      "type": "object",
-      "properties": {
-        "ownerUid": { "type": "string" },
-        "contactName": { "type": "string" }
-      }
-    },
-    "Deal": {
-      "title": "Deal",
-      "type": "object",
-      "properties": {
-        "ownerUid": { "type": "string" },
-        "title": { "type": "string" }
-      }
-    },
-    "Invoice": {
-      "title": "Invoice",
-      "type": "object",
-      "properties": {
-        "ownerUid": { "type": "string" },
-        "invoiceNumber": { "type": "string" }
-      }
-    },
-    "Task": {
-      "title": "Task",
-      "type": "object",
-      "properties": {
-        "ownerUid": { "type": "string" },
-        "title": { "type": "string" }
       }
     }
   },
@@ -147,6 +95,10 @@
         "definition": { "entityName": "User", "schema": { "$ref": "#/backend/entities/User" }, "description": "User profile data." }
       },
       {
+        "path": "/dealRooms/{dealId}",
+        "definition": { "entityName": "DealRoom", "schema": { "$ref": "#/backend/entities/DealRoom" }, "description": "Investment workspaces." }
+      },
+      {
         "path": "/mentorshipRequests/{requestId}",
         "definition": { "entityName": "MentorshipRequest", "schema": { "$ref": "#/backend/entities/MentorshipRequest" }, "description": "Inquiries for mentorship." }
       },
@@ -155,20 +107,8 @@
         "definition": { "entityName": "SavedStartup", "schema": { "$ref": "#/backend/entities/SavedStartup" }, "description": "Startups saved by investors." }
       },
       {
-        "path": "/mentorshipSessions/{sessionId}",
-        "definition": { "entityName": "MentorshipSession", "schema": { "$ref": "#/backend/entities/MentorshipSession" }, "description": "Mentorship logs." }
-      },
-      {
-        "path": "/referrals/{referralId}",
-        "definition": { "entityName": "Referral", "schema": { "$ref": "#/backend/entities/Referral" }, "description": "Tracks referrals." }
-      },
-      {
         "path": "/startups/{startupId}",
         "definition": { "entityName": "Startup", "schema": { "$ref": "#/backend/entities/Startup" }, "description": "Venture listings." }
-      },
-      {
-        "path": "/venturePitches/{pitchId}",
-        "definition": { "entityName": "VenturePitch", "schema": { "$ref": "#/backend/entities/VenturePitch" }, "description": "Investment pitches." }
       }
     ]
   }

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -12,7 +13,8 @@ import {
   updateDoc,
   getDocs,
   writeBatch,
-  serverTimestamp
+  serverTimestamp,
+  addDoc
 } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -55,7 +57,6 @@ export default function ConnectionsManagerPage() {
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
   // 1. Unified Connections Queries - Only loading networking connections here
-  // Pitches are now handled in /dashboard/pitches
   const incomingQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'connections'), where('recipientUid', '==', user.uid));
@@ -69,7 +70,7 @@ export default function ConnectionsManagerPage() {
   const { data: incoming, isLoading: isIncomingLoading } = useCollection(incomingQuery);
   const { data: outgoing, isLoading: isOutgoingLoading } = useCollection(outgoingQuery);
 
-  // Auto-clear connection notifications when entering this page
+  // Auto-clear connection notifications
   useEffect(() => {
     if (!firestore || !user?.uid) return;
     
@@ -152,8 +153,30 @@ export default function ConnectionsManagerPage() {
       status,
       updatedAt: serverTimestamp() 
     })
-      .then(() => {
+      .then(async () => {
         if (status === 'accepted') {
+          // --- DEAL ROOM PHASE 1: Automatically create Deal Room for Investor connections ---
+          if (conn.type === 'investor') {
+            const dealRoomData = {
+              startupId: user.uid, // Connection established toward founder (recipient)
+              founderUid: user.uid,
+              investorUid: conn.initiatorUid,
+              status: 'Discovery',
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            };
+            const dealRef = await addDoc(collection(firestore, 'dealRooms'), dealRoomData);
+            
+            // Add timeline event
+            await addDoc(collection(firestore, 'dealRooms', dealRef.id, 'timeline'), {
+              type: 'deal_init',
+              details: 'Investment Deal Room initialized.',
+              createdAt: serverTimestamp()
+            });
+            
+            toast({ title: "Deal Room Active", description: "Venture Deal Room has been initialized." });
+          }
+
           createNotification(firestore, {
             recipientUid: otherUid,
             actorUid: user.uid,
