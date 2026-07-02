@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -204,7 +203,8 @@ export function DashboardSidebar({ className, onNavigate }: { className?: string
       label: 'Community',
       items: [
         { href: '/community', label: 'Community Feed', icon: Globe },
-        { href: '/founders', label: 'Founders', icon: Rocket },
+        { href: '/startups', label: 'Startups', icon: Rocket },
+        { href: '/founders', label: 'Founders', icon: User },
         { href: '/investors', label: 'Investors', icon: ShieldAlert },
         { href: '/mentors', label: 'Mentors', icon: GraduationCap },
       ]

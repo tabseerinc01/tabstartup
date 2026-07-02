@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -370,7 +369,7 @@ export default function DashboardOverviewPage() {
               )}
               {isInvestor && (
                 <Button size="lg" className="rounded-xl font-bold h-12 gap-2 bg-amber-500 hover:bg-amber-600 border-none" asChild>
-                  <Link href="/founders"><Search className="h-4 w-4" /> Discover Startups</Link>
+                  <Link href="/startups"><Search className="h-4 w-4" /> Discover Startups</Link>
                 </Button>
               )}
               <Button size="lg" variant="outline" className="rounded-xl font-bold h-12 gap-2 bg-white/5 border-white/10" asChild>
@@ -419,7 +418,7 @@ export default function DashboardOverviewPage() {
              </div>
              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {[
-                  { label: 'Browse Startups', icon: Rocket, href: '/founders', bg: 'bg-blue-50', color: 'text-blue-600' },
+                  { label: 'Browse Startups', icon: Rocket, href: '/startups', bg: 'bg-blue-50', color: 'text-blue-600' },
                   { label: 'Find Capital', icon: HandCoins, href: '/investors', bg: 'bg-amber-50', color: 'text-amber-600' },
                   { label: 'Expert Mentors', icon: GraduationCap, href: '/mentors', bg: 'bg-purple-50', color: 'text-purple-600' },
                   { label: 'Marketplace', icon: Wrench, href: '/services', bg: 'bg-emerald-50', color: 'text-emerald-600' },
@@ -474,7 +473,7 @@ export default function DashboardOverviewPage() {
                              <Rocket className="h-5 w-5 text-primary" /> Recommended Startups
                            </CardTitle>
                            <Button variant="ghost" size="sm" className="text-[10px] font-black uppercase text-primary" asChild>
-                              <Link href="/founders">Explore All</Link>
+                              <Link href="/startups">Explore All</Link>
                            </Button>
                         </div>
                      </CardHeader>
@@ -518,7 +517,7 @@ export default function DashboardOverviewPage() {
                      </CardHeader>
                      <CardContent className="space-y-3 pb-8">
                         {[
-                          { label: 'Find New Ventures', icon: Search, href: '/founders' },
+                          { label: 'Find New Ventures', icon: Search, href: '/startups' },
                           { label: 'Review Pitches', icon: Zap, href: '/dashboard/pitches' },
                           { label: 'Saved Startups', icon: Star, href: '/dashboard/investor/saved' },
                           { label: 'Investor Messages', icon: MessageSquare, href: '/dashboard/messages' },
@@ -747,7 +746,7 @@ export default function DashboardOverviewPage() {
                           <p className="text-xs text-slate-400 mt-1">Start by networking with the ecosystem.</p>
                        </div>
                        <Button variant="outline" size="sm" className="rounded-xl font-bold h-9" asChild>
-                          <Link href={isInvestor ? "/founders" : "/investors"}>
+                          <Link href={isInvestor ? "/startups" : "/investors"}>
                              {isInvestor ? "Browse Startups" : "Find Investors"}
                           </Link>
                        </Button>

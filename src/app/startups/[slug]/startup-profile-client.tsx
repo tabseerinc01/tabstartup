@@ -48,6 +48,7 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { createNotification } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 
 export default function StartupProfileClient({ slugOrId }: { slugOrId: string }) {
   const { user, isUserLoading: isAuthLoading } = useUser();
@@ -55,6 +56,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const actionParam = searchParams.get('action');
 
   const [startup, setStartup] = useState<any>(null);
   const [founder, setFounder] = useState<any>(null);
@@ -134,7 +136,6 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             setExistingInterest(interestSnap.data());
           }
 
-          // Load Saved & Watched states - Independent records
           const savedQ = query(
             collection(firestore, 'savedStartups'),
             where('investorUid', '==', user.uid),
@@ -171,77 +172,11 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     loadData();
   }, [firestore, slugOrId, user?.uid, router]);
 
-  const handleSaveToggle = async () => {
-    if (!user || !firestore || !startup) {
-      toast({ title: "Login Required" });
-      router.push('/login');
-      return;
-    }
-    setIsSavingStartup(true);
-    try {
-      if (isSaved && savedDocId) {
-        await deleteDoc(doc(firestore, 'savedStartups', savedDocId));
-        setIsSaved(false);
-        setSavedDocId(null);
-        toast({ title: "Removed from Saved" });
-      } else {
-        const docRef = await addDoc(collection(firestore, 'savedStartups'), {
-          investorUid: user.uid,
-          startupId: startup.ownerUid,
-          startupName: startup.name,
-          isWatchlist: false,
-          createdAt: serverTimestamp()
-        });
-        setIsSaved(true);
-        setSavedDocId(docRef.id);
-        toast({ title: "Startup Saved", description: "This venture is now in your saved collection." });
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSavingStartup(false);
-    }
-  };
-
-  const handleWatchToggle = async () => {
-    if (!user || !firestore || !startup) {
-      toast({ title: "Login Required" });
-      router.push('/login');
-      return;
-    }
-    setIsWatchingStartup(true);
-    try {
-      if (isWatched && watchedDocId) {
-        await deleteDoc(doc(firestore, 'savedStartups', watchedDocId));
-        setIsWatched(false);
-        setWatchedDocId(null);
-        toast({ title: "Removed from Watchlist" });
-      } else {
-        const docRef = await addDoc(collection(firestore, 'savedStartups'), {
-          investorUid: user.uid,
-          startupId: startup.ownerUid,
-          startupName: startup.name,
-          isWatchlist: true,
-          createdAt: serverTimestamp()
-        });
-        setIsWatched(true);
-        setWatchedDocId(docRef.id);
-        toast({ title: "Added to Watchlist", description: "You will now see updates from this startup in your dashboard." });
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsWatchingStartup(false);
-    }
-  };
-
   const handleExpressInterest = useCallback(async () => {
     if (!firestore || !startup || isSubmittingInterest || existingInterest) return;
 
     if (!user) {
-      localStorage.setItem('pending_interest_startup_id', startup.id);
-      localStorage.setItem('pending_interest_owner_uid', startup.ownerUid);
-      toast({ title: "Login Required", description: "Login as an investor to express interest." });
+      toast({ title: "Login Required", description: "Login to express interest." });
       const returnUrl = encodeURIComponent(window.location.pathname);
       router.push(`/login?returnTo=${returnUrl}`);
       return;
@@ -254,38 +189,8 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
 
     setIsSubmittingInterest(true);
 
-    let profileToUse = currentUserProfile;
-    if (!profileToUse) {
-      try {
-        const snap = await getDoc(doc(firestore, 'users', user.uid));
-        if (snap.exists()) {
-          profileToUse = snap.data();
-          setCurrentUserProfile(profileToUse);
-        }
-      } catch (e) { console.error("Error fetching user profile:", e); }
-    }
-
-    if (!profileToUse) {
-      toast({ title: "Verification", description: "Please try again in a moment." });
-      setIsSubmittingInterest(false);
-      return;
-    }
-
-    const rolesArr = (profileToUse.roles || (profileToUse.role ? [profileToUse.role] : ['user'])).filter(Boolean);
-    const isInvestor = rolesArr.includes('investor');
-    
-    if (!isInvestor) {
-      toast({ 
-        title: "Investor Role Required", 
-        description: "Please activate the Investor role in your profile settings.", 
-        variant: "destructive" 
-      });
-      setIsSubmittingInterest(false);
-      return;
-    }
-
     const ownerUid = startup.ownerUid;
-    const investorName = profileToUse.fullName || "A Capital Partner";
+    const investorName = currentUserProfile?.fullName || user.displayName || "A Capital Partner";
     
     const basePayload = {
       startupId: ownerUid,
@@ -334,19 +239,66 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   }, [user, firestore, startup, currentUserProfile, isSubmittingInterest, existingInterest, router, toast]);
 
   useEffect(() => {
-    if (!isLoading && user && startup && !hasAttemptedAutoSubmit.current) {
-      const pendingId = localStorage.getItem('pending_interest_startup_id');
-      const actionParam = searchParams.get('action');
-      
-      if (pendingId === startup.id || actionParam === 'pitch') {
-        hasAttemptedAutoSubmit.current = true;
-        localStorage.removeItem('pending_interest_startup_id');
-        localStorage.removeItem('pending_interest_owner_uid');
-        const timer = setTimeout(() => handleExpressInterest(), 1500);
-        return () => clearTimeout(timer);
-      }
+    if (actionParam === 'pitch' && startup && !existingInterest && !isSubmittingInterest && !isLoading) {
+      handleExpressInterest();
     }
-  }, [isLoading, user, startup, handleExpressInterest, searchParams]);
+  }, [actionParam, startup, existingInterest, isSubmittingInterest, isLoading, handleExpressInterest]);
+
+  const handleSaveToggle = async () => {
+    if (!user || !firestore || !startup) { toast({ title: "Login Required" }); router.push('/login'); return; }
+    setIsSavingStartup(true);
+    try {
+      if (isSaved && savedDocId) {
+        await deleteDoc(doc(firestore, 'savedStartups', savedDocId));
+        setIsSaved(false);
+        setSavedDocId(null);
+        toast({ title: "Removed from Saved" });
+      } else {
+        const docRef = await addDoc(collection(firestore, 'savedStartups'), {
+          investorUid: user.uid,
+          startupId: startup.ownerUid,
+          startupName: startup.name,
+          isWatchlist: false,
+          createdAt: serverTimestamp()
+        });
+        setIsSaved(true);
+        setSavedDocId(docRef.id);
+        toast({ title: "Startup Saved" });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSavingStartup(false);
+    }
+  };
+
+  const handleWatchToggle = async () => {
+    if (!user || !firestore || !startup) { toast({ title: "Login Required" }); router.push('/login'); return; }
+    setIsWatchingStartup(true);
+    try {
+      if (isWatched && watchedDocId) {
+        await deleteDoc(doc(firestore, 'savedStartups', watchedDocId));
+        setIsWatched(false);
+        setWatchedDocId(null);
+        toast({ title: "Removed from Watchlist" });
+      } else {
+        const docRef = await addDoc(collection(firestore, 'savedStartups'), {
+          investorUid: user.uid,
+          startupId: startup.ownerUid,
+          startupName: startup.name,
+          isWatchlist: true,
+          createdAt: serverTimestamp()
+        });
+        setIsWatched(true);
+        setWatchedDocId(docRef.id);
+        toast({ title: "Added to Watchlist" });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsWatchingStartup(false);
+    }
+  };
 
   const copyListingLink = () => {
     const identifier = startup?.slug || startup?.id;
@@ -380,7 +332,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             <AlertCircle className="h-16 w-16 text-amber-500 mx-auto mb-6" />
             <h1 className="text-2xl font-black mb-2">Private Listing</h1>
             <p className="text-slate-500 mb-8">This venture profile is currently hidden by the founder.</p>
-            <Button asChild className="rounded-full px-8"><Link href="/founders">Return to Directory</Link></Button>
+            <Button asChild className="rounded-full px-8"><Link href="/startups">Return to Directory</Link></Button>
           </Card>
         </main>
         <PublicFooter />
@@ -411,49 +363,39 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                     </p>
                   </div>
                   
-                  {/* Investor Action Bar */}
+                  {/* Investor Action Bar - Unified Action Hub */}
                   <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                     {!isOwnStartup && (
                       <div className="flex flex-wrap gap-3 p-2 bg-black/10 backdrop-blur-xl rounded-[2rem] border border-white/10 shadow-2xl">
-                        {/* Save Action */}
+                        {/* 🤍 Save Startup */}
                         <Button 
                           variant="ghost" 
                           onClick={handleSaveToggle} 
                           disabled={isSavingStartup}
-                          title={isSaved ? "Remove from Saved" : "Save for Later"}
                           className={cn(
                             "rounded-full h-12 px-6 gap-2 font-black transition-all",
                             isSaved ? "bg-white text-primary hover:bg-white/90" : "text-white hover:bg-white/10"
                           )}
                         >
-                          {isSavingStartup ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Heart className={cn("h-4 w-4", isSaved && "fill-primary")} />
-                          )}
+                          {isSavingStartup ? <Loader2 className="h-4 w-4 animate-spin" /> : <Heart className={cn("h-4 w-4", isSaved && "fill-primary")} />}
                           {isSaved ? "Saved ✓" : "Save Startup"}
                         </Button>
 
-                        {/* Watch Action */}
+                        {/* 👁 Watch Startup */}
                         <Button 
                           variant="ghost" 
                           onClick={handleWatchToggle} 
                           disabled={isWatchingStartup}
-                          title={isWatched ? "Stop Watching" : "Add to Watchlist"}
                           className={cn(
                             "rounded-full h-12 px-6 gap-2 font-black transition-all",
                             isWatched ? "bg-white text-primary hover:bg-white/90" : "text-white hover:bg-white/10"
                           )}
                         >
-                          {isWatchingStartup ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Eye className={cn("h-4 w-4", isWatched && "fill-primary")} />
-                          )}
+                          {isWatchingStartup ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className={cn("h-4 w-4", isWatched && "fill-primary")} />}
                           {isWatched ? "Watching ✓" : "Watch Startup"}
                         </Button>
 
-                        {/* Interest Action */}
+                        {/* 🚀 Express Interest */}
                         <Button 
                           onClick={handleExpressInterest} 
                           disabled={isSubmittingInterest || !!existingInterest}
@@ -464,11 +406,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                               : "bg-white text-primary hover:bg-slate-50"
                           )}
                         >
-                          {isSubmittingInterest ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Rocket className={cn("h-4 w-4", existingInterest && "fill-white")} />
-                          )}
+                          {isSubmittingInterest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className={cn("h-4 w-4", existingInterest && "fill-white")} />}
                           {existingInterest ? "Interest Sent ✓" : "Express Interest"}
                         </Button>
                       </div>

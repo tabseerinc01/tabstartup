@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, deleteDoc, doc, getDocs, limit, orderBy } from 'firebase/firestore';
+import { collection, query, where, deleteDoc, doc, getDocs, limit, orderBy, getDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -73,20 +73,17 @@ export default function WatchlistPage() {
         for (const item of watchlistItems) {
           const startupId = item.startupId;
           
-          // Fetch Startup Details if not already loaded
           if (!newStartups[startupId]) {
             const sSnap = await getDoc(doc(firestore, 'startups', startupId));
             if (sSnap.exists()) {
               const sData = sSnap.data();
               newStartups[startupId] = sData;
 
-              // Fetch Founder Details
               if (sData.ownerUid && !newFounders[sData.ownerUid]) {
                 const fSnap = await getDoc(doc(firestore, 'users', sData.ownerUid));
                 if (fSnap.exists()) newFounders[sData.ownerUid] = fSnap.data();
               }
 
-              // Fetch Latest Activity (Community Posts by Founder)
               const activityQ = query(
                 collection(firestore, 'communityPosts'),
                 where('authorUid', '==', sData.ownerUid),
@@ -99,7 +96,6 @@ export default function WatchlistPage() {
                 newActivities[startupId] = aSnap.docs[0].data();
               }
 
-              // Check if interest sent
               if (user?.uid) {
                 const interestSnap = await getDoc(doc(firestore, 'startups', sData.ownerUid, 'interests', user.uid));
                 newInterests[startupId] = interestSnap.exists();
@@ -207,7 +203,6 @@ export default function WatchlistPage() {
               <Card key={item.id} className="group border-none shadow-sm hover:shadow-xl transition-all duration-500 rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100">
                 <CardContent className="p-0">
                   <div className="flex flex-col lg:flex-row">
-                    {/* Main Content */}
                     <div className="flex-1 p-8 space-y-6">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-center gap-5">
@@ -239,7 +234,6 @@ export default function WatchlistPage() {
                         </div>
                       </div>
 
-                      {/* Activity Snippet */}
                       <div className="bg-slate-50/50 p-5 rounded-[2rem] border border-slate-100 relative group/activity">
                         <div className="flex items-center gap-2 mb-2">
                            <TrendingUp className="h-3.5 w-3.5 text-primary" />
@@ -259,7 +253,6 @@ export default function WatchlistPage() {
                         )}
                       </div>
 
-                      {/* Actions */}
                       <div className="flex flex-wrap items-center gap-4 pt-4">
                         <Button className="rounded-xl h-11 px-8 font-black gap-2 shadow-lg shadow-primary/20" asChild>
                           <Link href={`/startups/${startup?.slug || item.startupId}`}>
@@ -292,7 +285,6 @@ export default function WatchlistPage() {
                       </div>
                     </div>
 
-                    {/* Metadata Side (Desktop) */}
                     <div className="hidden lg:flex w-64 bg-slate-900 text-white p-8 flex-col justify-between border-l border-slate-800">
                        <div className="space-y-6">
                           <div className="space-y-1">
@@ -304,7 +296,9 @@ export default function WatchlistPage() {
                                 <ShieldCheck className="h-4 w-4 text-primary" />
                                 <span className="text-[10px] font-bold text-slate-400 uppercase">Verification Level</span>
                              </div>
-                             <Progress value={startup?.startupVerified ? 100 : 30} className="h-1 bg-white/10" />
+                             <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                                <div className="bg-primary h-full transition-all" style={{ width: startup?.startupVerified ? '100%' : '30%' }} />
+                             </div>
                           </div>
                        </div>
                        <Button variant="outline" className="w-full justify-start h-10 rounded-xl bg-white/5 border-none hover:bg-white/10 text-white text-xs font-bold gap-2" asChild>
@@ -333,13 +327,12 @@ export default function WatchlistPage() {
                 </p>
              </div>
              <Button asChild className="rounded-full px-10 h-14 font-black text-base shadow-xl shadow-primary/20">
-                <Link href="/founders">Discover Active Ventures</Link>
+                <Link href="/startups">Discover Active Ventures</Link>
              </Button>
           </div>
         )}
       </div>
 
-      {/* Page Help / Info */}
       <section className="bg-primary rounded-[2.5rem] p-10 text-white relative overflow-hidden group">
          <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
             <div className="space-y-4">
@@ -359,20 +352,4 @@ export default function WatchlistPage() {
       </section>
     </div>
   );
-}
-
-function Progress({ value, className }: { value: number; className?: string }) {
-  return (
-    <div className={cn("w-full bg-slate-200 rounded-full h-2 overflow-hidden", className)}>
-      <div 
-        className="bg-primary h-full transition-all duration-1000" 
-        style={{ width: `${value}%` }} 
-      />
-    </div>
-  );
-}
-
-async function getDoc(docRef: any) {
-  const { getDoc } = await import('firebase/firestore');
-  return getDoc(docRef);
 }

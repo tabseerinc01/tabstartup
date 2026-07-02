@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
+import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, where, getDocs, limit, doc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -28,17 +28,26 @@ import {
   Briefcase, 
   Star, 
   ArrowRight,
-  LayoutGrid
+  LayoutGrid,
+  Heart,
+  Eye,
+  Zap,
+  Check
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 const STAGES = ["Idea", "Early", "Growth", "Scaling"];
 const INDUSTRIES = ["Fintech", "AgriTech", "SaaS", "E-commerce", "AI", "Healthcare", "EdTech"];
 
 export default function StartupsDirectoryPage() {
+  const { user } = useUser();
   const firestore = useFirestore();
+  const { toast } = useToast();
+  
   const [startups, setStartups] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isActionProcessing, setIsActionProcessing] = useState<string | null>(null);
   
   // Filters
   const [search, setSearch] = useState('');
@@ -46,6 +55,7 @@ export default function StartupsDirectoryPage() {
   const [industryFilter, setIndustryFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
 
+  // 1. Fetch Startups
   useEffect(() => {
     async function loadStartups() {
       if (!firestore) return;
@@ -54,7 +64,7 @@ export default function StartupsDirectoryPage() {
         const q = query(
           collection(firestore, 'startups'),
           where('status', '==', 'active'),
-          limit(50)
+          limit(100)
         );
         const snap = await getDocs(q);
         setStartups(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -66,6 +76,36 @@ export default function StartupsDirectoryPage() {
     }
     loadStartups();
   }, [firestore]);
+
+  // 2. Fetch User Relations (Saved/Watched/Interests)
+  const savedQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'savedStartups'), where('investorUid', '==', user.uid));
+  }, [firestore, user?.uid]);
+  const { data: userSaves } = useCollection(savedQuery);
+
+  const connsQuery = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return query(collection(firestore, 'connections'), where('initiatorUid', '==', user.uid), where('type', '==', 'investor'));
+  }, [firestore, user?.uid]);
+  const { data: userConns } = useCollection(connsQuery);
+
+  const relationsMap = useMemo(() => {
+    const map: Record<string, { savedId?: string, watchedId?: string, interested?: boolean }> = {};
+    
+    userSaves?.forEach(s => {
+      if (!map[s.startupId]) map[s.startupId] = {};
+      if (s.isWatchlist) map[s.startupId].watchedId = s.id;
+      else map[s.startupId].savedId = s.id;
+    });
+
+    userConns?.forEach(c => {
+      if (!map[c.recipientUid]) map[c.recipientUid] = {};
+      map[c.recipientUid].interested = true;
+    });
+
+    return map;
+  }, [userSaves, userConns]);
 
   const filtered = useMemo(() => {
     return startups
@@ -82,6 +122,37 @@ export default function StartupsDirectoryPage() {
         return 0;
       });
   }, [startups, search, stageFilter, industryFilter, sortBy]);
+
+  const handleToggleSave = async (startup: any, isWatchlist: boolean) => {
+    if (!user || !firestore) { toast({ title: "Login Required" }); return; }
+    if (user.uid === startup.ownerUid) return;
+
+    const key = isWatchlist ? 'watchedId' : 'savedId';
+    const existingId = relationsMap[startup.ownerUid]?.[key];
+    
+    setIsActionProcessing(`${startup.id}-${key}`);
+    try {
+      if (existingId) {
+        await deleteDoc(doc(firestore, 'savedStartups', existingId));
+        toast({ title: isWatchlist ? "Removed from Watchlist" : "Removed from Saved" });
+      } else {
+        await addDoc(collection(firestore, 'savedStartups'), {
+          investorUid: user.uid,
+          startupId: startup.ownerUid,
+          startupName: startup.name,
+          isWatchlist,
+          createdAt: serverTimestamp()
+        });
+        toast({ title: isWatchlist ? "Added to Watchlist" : "Startup Saved" });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsActionProcessing(null);
+    }
+  };
+
+  const isInvestor = !!user && relationsMap; // Check role if needed, but directory is public
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
@@ -168,20 +239,28 @@ export default function StartupsDirectoryPage() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {filtered.map((s) => (
-                <Link key={s.id} href={`/startups/${s.slug || s.id}`}>
-                  <Card className="group border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background rounded-[2.5rem] overflow-hidden flex flex-col h-full">
+              {filtered.map((s) => {
+                const relations = relationsMap[s.ownerUid] || {};
+                const startupId = s.slug || s.id;
+                const isOwn = user?.uid === s.ownerUid;
+
+                return (
+                  <Card key={s.id} className="group border-none shadow-lg hover:shadow-2xl transition-all duration-500 bg-background rounded-[2.5rem] overflow-hidden flex flex-col h-full ring-1 ring-slate-100">
                     <CardHeader className="p-8 pb-4">
                       <div className="flex justify-between items-start mb-4">
-                        <div className="p-3 bg-primary/5 rounded-2xl text-primary group-hover:bg-primary group-hover:text-white transition-all">
-                          <Rocket className="h-6 w-6" />
-                        </div>
+                        <Link href={`/startups/${startupId}`}>
+                          <div className="p-3 bg-primary/5 rounded-2xl text-primary group-hover:bg-primary group-hover:text-white transition-all">
+                            <Rocket className="h-6 w-6" />
+                          </div>
+                        </Link>
                         <div className="flex gap-2">
                           {s.featured && <Badge className="bg-amber-500 border-none text-[8px] font-black uppercase">Featured</Badge>}
                           <Badge variant="outline" className="text-[8px] font-black uppercase">{s.stage}</Badge>
                         </div>
                       </div>
-                      <CardTitle className="text-2xl font-black group-hover:text-primary transition-colors">{s.name}</CardTitle>
+                      <Link href={`/startups/${startupId}`}>
+                        <CardTitle className="text-2xl font-black group-hover:text-primary transition-colors">{s.name}</CardTitle>
+                      </Link>
                       <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">
                         <MapPin className="h-3 w-3" /> {s.location || 'Remote'}
                       </div>
@@ -190,18 +269,79 @@ export default function StartupsDirectoryPage() {
                       <p className="text-slate-500 leading-relaxed font-medium line-clamp-3 italic">
                         "{s.shortDescription || 'A visionary startup building for the next generation.'}"
                       </p>
-                      <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
-                         <div className="flex items-center gap-2">
-                           <Badge variant="secondary" className="bg-primary/5 text-primary border-none rounded-lg px-2 h-5 text-[9px] font-black">{s.industry}</Badge>
+                      
+                      <div className="pt-6 border-t border-slate-50 space-y-6">
+                         <div className="flex items-center justify-between">
+                            <Badge variant="secondary" className="bg-primary/5 text-primary border-none rounded-lg px-2 h-5 text-[9px] font-black uppercase">{s.industry}</Badge>
+                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                               Funding: {s.fundingNeed || 'TBD'}
+                            </span>
                          </div>
-                         <div className="flex items-center text-xs font-bold text-primary opacity-0 group-hover:opacity-100 transition-all translate-x-[-10px] group-hover:translate-x-0">
-                           View Profile <ArrowRight className="ml-1 h-3 w-3" />
-                         </div>
+
+                         {/* Quick Actions Bar for Directory */}
+                         {!isOwn && (
+                           <div className="flex items-center gap-2 pt-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => handleToggleSave(s, false)}
+                                disabled={isActionProcessing === `${s.id}-savedId`}
+                                className={cn(
+                                  "rounded-xl h-9 px-3 gap-1.5 text-[10px] font-black uppercase transition-all",
+                                  relations.savedId ? "bg-primary/10 text-primary border-primary/20" : "text-slate-400 hover:text-primary"
+                                )}
+                              >
+                                {isActionProcessing === `${s.id}-savedId` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Heart className={cn("h-3 w-3", relations.savedId && "fill-primary")} />}
+                                {relations.savedId ? "Saved ✓" : "Save"}
+                              </Button>
+                              
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => handleToggleSave(s, true)}
+                                disabled={isActionProcessing === `${s.id}-watchedId`}
+                                className={cn(
+                                  "rounded-xl h-9 px-3 gap-1.5 text-[10px] font-black uppercase transition-all",
+                                  relations.watchedId ? "bg-primary/10 text-primary border-primary/20" : "text-slate-400 hover:text-primary"
+                                )}
+                              >
+                                {isActionProcessing === `${s.id}-watchedId` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className={cn("h-3 w-3", relations.watchedId && "fill-primary")} />}
+                                {relations.watchedId ? "Watching ✓" : "Watch"}
+                              </Button>
+
+                              <Button 
+                                variant={relations.interested ? "secondary" : "default"}
+                                size="sm" 
+                                asChild
+                                className={cn(
+                                  "rounded-xl h-9 px-4 gap-1.5 text-[10px] font-black uppercase ml-auto",
+                                  relations.interested && "bg-green-50 text-green-600 hover:bg-green-50 pointer-events-none"
+                                )}
+                              >
+                                <Link href={`/startups/${startupId}${relations.interested ? '' : '?action=pitch'}`}>
+                                   {relations.interested ? <Check className="h-3 w-3" /> : <Rocket className="h-3 w-3" />}
+                                   {relations.interested ? "Interest Sent ✓" : "Express Interest"}
+                                </Link>
+                              </Button>
+                           </div>
+                         )}
+
+                         {!isOwn && (
+                           <Button className="w-full rounded-xl font-bold h-11 group-hover:bg-primary transition-all" variant="ghost" asChild>
+                              <Link href={`/startups/${startupId}`}>View Full Profile <ArrowRight className="ml-2 h-4 w-4" /></Link>
+                           </Button>
+                         )}
+
+                         {isOwn && (
+                           <Button className="w-full rounded-xl font-bold h-11 border-dashed" variant="outline" asChild>
+                              <Link href="/dashboard/startup">Manage My Venture <Rocket className="ml-2 h-4 w-4" /></Link>
+                           </Button>
+                         )}
                       </div>
                     </CardContent>
                   </Card>
-                </Link>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
