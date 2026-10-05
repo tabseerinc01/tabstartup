@@ -14,6 +14,7 @@ import {
   writeBatch,
   serverTimestamp,
   addDoc,
+  setDoc,
   limit
 } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
@@ -156,30 +157,41 @@ export default function ConnectionsManagerPage() {
       .then(async () => {
         if (status === 'accepted') {
           // --- DEAL ROOM PHASE 1: Automatically create Deal Room for Investor connections ---
-          // IMPLEMENTED FIX: Check for existing Deal Room to prevent duplicates
           if (conn.type === 'investor') {
+            // Uniqueness Identifiers
+            const startupId = user.uid; // Startups are keyed by founder UID
+            const founderUid = user.uid;
+            const investorUid = conn.initiatorUid;
+
+            // Deterministic ID Strategy for Race-Safety
+            const deterministicId = `funding_${startupId}_${investorUid}`;
+            const dealRoomRef = doc(firestore, 'dealRooms', deterministicId);
+
+            // Step 1: Check for existing room (handles historical random IDs and new deterministic IDs)
             const existingDealQ = query(
               collection(firestore, 'dealRooms'),
-              where('startupId', '==', user.uid),
-              where('founderUid', '==', user.uid),
-              where('investorUid', '==', conn.initiatorUid),
-              limit(1)
+              where('startupId', '==', startupId),
+              where('founderUid', '==', founderUid),
+              where('investorUid', '==', investorUid),
+              limit(2)
             );
             const existingDealSnap = await getDocs(existingDealQ);
 
             if (existingDealSnap.empty) {
               const dealRoomData = {
-                startupId: user.uid, // Connection established toward founder (recipient)
-                founderUid: user.uid,
-                investorUid: conn.initiatorUid,
+                startupId,
+                founderUid,
+                investorUid,
                 status: 'Discovery',
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
               };
-              const dealRef = await addDoc(collection(firestore, 'dealRooms'), dealRoomData);
               
-              // Add timeline event
-              await addDoc(collection(firestore, 'dealRooms', dealRef.id, 'timeline'), {
+              // Use setDoc with deterministicId for absolute idempotency
+              await setDoc(dealRoomRef, dealRoomData);
+              
+              // Initialize Timeline
+              await addDoc(collection(firestore, 'dealRooms', deterministicId, 'timeline'), {
                 type: 'deal_init',
                 details: 'Investment Deal Room initialized.',
                 createdAt: serverTimestamp()
@@ -187,7 +199,9 @@ export default function ConnectionsManagerPage() {
               
               toast({ title: "Deal Room Active", description: "Venture Deal Room has been initialized." });
             } else {
-              console.log("Existing Deal Room detected. Skipping duplicate creation.");
+              if (existingDealSnap.size > 1) {
+                console.warn(`Historical duplicate Deal Rooms detected for relationship: ${deterministicId}`);
+              }
               toast({ title: "Deal Room Reused", description: "Collaboration space is already active." });
             }
           }
