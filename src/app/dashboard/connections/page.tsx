@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -14,7 +13,8 @@ import {
   getDocs,
   writeBatch,
   serverTimestamp,
-  addDoc
+  addDoc,
+  limit
 } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -156,25 +156,40 @@ export default function ConnectionsManagerPage() {
       .then(async () => {
         if (status === 'accepted') {
           // --- DEAL ROOM PHASE 1: Automatically create Deal Room for Investor connections ---
+          // IMPLEMENTED FIX: Check for existing Deal Room to prevent duplicates
           if (conn.type === 'investor') {
-            const dealRoomData = {
-              startupId: user.uid, // Connection established toward founder (recipient)
-              founderUid: user.uid,
-              investorUid: conn.initiatorUid,
-              status: 'Discovery',
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp()
-            };
-            const dealRef = await addDoc(collection(firestore, 'dealRooms'), dealRoomData);
-            
-            // Add timeline event
-            await addDoc(collection(firestore, 'dealRooms', dealRef.id, 'timeline'), {
-              type: 'deal_init',
-              details: 'Investment Deal Room initialized.',
-              createdAt: serverTimestamp()
-            });
-            
-            toast({ title: "Deal Room Active", description: "Venture Deal Room has been initialized." });
+            const existingDealQ = query(
+              collection(firestore, 'dealRooms'),
+              where('startupId', '==', user.uid),
+              where('founderUid', '==', user.uid),
+              where('investorUid', '==', conn.initiatorUid),
+              limit(1)
+            );
+            const existingDealSnap = await getDocs(existingDealQ);
+
+            if (existingDealSnap.empty) {
+              const dealRoomData = {
+                startupId: user.uid, // Connection established toward founder (recipient)
+                founderUid: user.uid,
+                investorUid: conn.initiatorUid,
+                status: 'Discovery',
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+              };
+              const dealRef = await addDoc(collection(firestore, 'dealRooms'), dealRoomData);
+              
+              // Add timeline event
+              await addDoc(collection(firestore, 'dealRooms', dealRef.id, 'timeline'), {
+                type: 'deal_init',
+                details: 'Investment Deal Room initialized.',
+                createdAt: serverTimestamp()
+              });
+              
+              toast({ title: "Deal Room Active", description: "Venture Deal Room has been initialized." });
+            } else {
+              console.log("Existing Deal Room detected. Skipping duplicate creation.");
+              toast({ title: "Deal Room Reused", description: "Collaboration space is already active." });
+            }
           }
 
           createNotification(firestore, {
@@ -234,7 +249,7 @@ export default function ConnectionsManagerPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-4xl font-black tracking-tight text-slate-900">Connections</h1>
-          <p className="text-slate-500 font-medium">Manage all professional networking relationships.</p>
+          <p className="text-slate-50 font-medium">Manage all professional networking relationships.</p>
         </div>
         <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-100 overflow-x-auto">
           {(['all', 'investor', 'mentor', 'cofounder', 'service', 'founder'] as ConnType[]).map(t => (
