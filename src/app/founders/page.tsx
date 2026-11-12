@@ -32,14 +32,14 @@ export default function FoundersPage() {
       try {
         // 1. Fetch using multi-role support
         const multiRoleQuery = query(
-          collection(firestore, 'users'),
+          collection(firestore, 'publicProfiles'),
           where('roles', 'array-contains', 'founder'),
           limit(100)
         );
         
         // 2. Fetch using legacy role structure
         const legacyRoleQuery = query(
-          collection(firestore, 'users'),
+          collection(firestore, 'publicProfiles'),
           where('role', '==', 'founder'),
           limit(100)
         );

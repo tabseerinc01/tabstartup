@@ -293,7 +293,7 @@ function SentInterestCard({ interest, onWithdraw, isLoading }: any) {
       if (!firestore || !interest.recipientUid) return;
       const [sSnap, fSnap] = await Promise.all([
         getDoc(doc(firestore, 'startups', interest.recipientUid)),
-        getDoc(doc(firestore, 'users', interest.recipientUid))
+        getDoc(doc(firestore, 'publicProfiles', interest.recipientUid))
       ]);
       if (sSnap.exists()) setStartup(sSnap.data());
       if (fSnap.exists()) setFounder(fSnap.data());

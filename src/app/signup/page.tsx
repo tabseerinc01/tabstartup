@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+
+
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -11,8 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useUser, useFirestore } from '@/firebase';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, getDocs, collection, query, where, addDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
 
 function SignupForm() {
@@ -32,99 +34,125 @@ function SignupForm() {
   const [name, setName] = useState('');
   const [role, setRole] = useState(roleParam || 'founder');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const signupInProgressRef = useRef(false);
 
   useEffect(() => {
-    if (user && !isUserLoading) {
-      const redirectUrl = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
-      router.push(redirectUrl);
-    }
-  }, [user, isUserLoading, router, returnTo]);
+    if (!user || isUserLoading || signupInProgressRef.current) return;
 
-  const generateReferralCode = () => {
-    return 'TAB-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-  };
+    let cancelled = false;
+    const verifyProfile = async () => {
+      try {
+        const profile = await getDoc(doc(firestore, "users", user.uid));
+        if (cancelled || !profile.exists()) return;
+        const destination = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")
+          ? returnTo
+          : "/dashboard";
+        router.replace(destination);
+      } catch (error) {
+        console.error("Signup profile verification failed:", error);
+      }
+    };
+
+    void verifyProfile();
+    return () => { cancelled = true; };
+  }, [user, isUserLoading, firestore, router, returnTo]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (signupInProgressRef.current) return;
+
+    signupInProgressRef.current = true;
     setIsSubmitting(true);
-    
+
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const newUser = userCredential.user;
-      
-      await updateProfile(newUser, { displayName: name });
-
-      const newReferralCode = generateReferralCode();
-      
-      const userData = {
-        uid: newUser.uid,
-        fullName: name,
-        email: email,
-        role: role, 
-        primaryRole: role,
-        roles: [role],
-        plan: "basic",
-        subscriptionStatus: "inactive",
-        referralCode: newReferralCode,
-        referralCount: 0,
-        bonusLimits: {
-          connections: 0,
-          pitches: 0,
-          contacts: 0,
-          deals: 0,
-          tasks: 0,
-          invoices: 0
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
         },
-        headline: "",
-        bio: "",
-        location: "",
-        stage: "",
-        skills: [],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
+        cache: 'no-store',
+        body: JSON.stringify({
+          fullName: name,
+          email,
+          password,
+          role,
+          referralCode: refCode || null
+        })
+      });
 
-      await setDoc(doc(firestore, "users", newUser.uid), userData);
+      const result = await response.json();
 
-      if (refCode) {
-        const referrersQuery = query(
-          collection(firestore, "users"),
-          where("referralCode", "==", refCode)
-        );
-        const referrerSnap = await getDocs(referrersQuery);
-        
-        if (!referrerSnap.empty) {
-          const referrerUid = referrerSnap.docs[0].id;
-          await addDoc(collection(firestore, "referrals"), {
-            referrerUid,
-            referredUid: newUser.uid,
-            referredProfileCompleted: false,
-            rewardGranted: false,
-            createdAt: serverTimestamp()
-          });
-        }
+      if (!response.ok || result.success !== true) {
+        throw new Error(result.error || 'SIGNUP_FAILED');
       }
 
-      toast({ 
-        title: "Account created!", 
-        description: "Welcome to the TabStartup ecosystem." 
+      const credential = await signInWithEmailAndPassword(
+        auth,
+        email.trim().toLowerCase(),
+        password
+      );
+
+      if (credential.user.uid !== result.uid) {
+        throw new Error('SIGNUP_IDENTITY_MISMATCH');
+      }
+
+      const savedProfile = await getDoc(
+        doc(firestore, 'users', credential.user.uid)
+      );
+
+      if (!savedProfile.exists()) {
+        throw new Error('RECOVERY_VERIFICATION_REQUIRED');
+      }
+
+      const destination =
+        returnTo &&
+        returnTo.startsWith('/') &&
+        !returnTo.startsWith('//') &&
+        !returnTo.includes('\\')
+          ? returnTo
+          : '/dashboard';
+
+      toast({
+        title: 'Account created!',
+        description: 'Welcome to the TabStartup ecosystem.'
       });
-    } catch (error: any) {
+
+      router.replace(destination);
+
+    } catch (error: unknown) {
+      const code =
+        error instanceof Error ? error.message : '';
+
+      let message = 'An error occurred during signup.';
+
+      if (code === 'SIGNUP_RATE_LIMIT_EXCEEDED') {
+        message = 'Too many signup attempts. Please wait a few minutes before trying again.';
+      } else if (code === 'SIGNUP_TEMPORARILY_UNAVAILABLE') {
+        message = 'Registration is temporarily unavailable. Please try again later.';
+      } else if (code === 'REQUEST_TOO_LARGE') {
+        message = 'Your registration details exceed the allowed size.';
+      } else if (code === 'INVALID_CONTENT_TYPE') {
+        message = 'Invalid registration request. Please refresh the page and try again.';
+      } else if (code === 'ACCOUNT_ALREADY_EXISTS') {
+        message = 'An account already exists. Please sign in or contact support if your profile is incomplete.';
+      } else if (code === 'RECOVERY_VERIFICATION_REQUIRED') {
+        message = 'Your registration requires secure verification. Please contact TabStartup support.';
+      } else if (code === 'INVALID_SIGNUP_INPUT') {
+        message = 'Please check your registration details and try again.';
+      } else if (code === 'SIGNUP_IDENTITY_MISMATCH') {
+        message = 'Account verification failed. Please contact support.';
+      }
+
+      toast({
+        variant: 'destructive',
+        title: 'Signup failed',
+        description: message
+      });
+
+    } finally {
+      signupInProgressRef.current = false;
       setIsSubmitting(false);
-      let message = "An error occurred during signup.";
-      if (error.code === 'auth/email-already-in-use') {
-        message = "An account already exists with this email.";
-      } else if (error.code === 'auth/weak-password') {
-        message = "Password should be at least 6 characters.";
-      } else if (error.code === 'auth/invalid-email') {
-        message = "Please enter a valid email address.";
-      }
-      
-      toast({ 
-        variant: "destructive",
-        title: "Signup failed", 
-        description: message 
-      });
     }
   };
 

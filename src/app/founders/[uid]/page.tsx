@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useFirestore, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { doc, collection, addDoc, getDoc, getDocs, query, where, limit, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, addDoc, getDoc, getDocs, query, where, limit, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Card, CardContent } from '@/components/ui/card';
@@ -55,7 +55,7 @@ export default function FounderPublicProfilePage() {
   const [founder, setFounder] = useState<any>(null);
   const [startup, setStartup] = useState<any>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
-  const [existingConnection, setExistingConnection] = useState<any>(null);
+  const [existingConnections, setExistingConnections] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [interestMessage, setInterestMessage] = useState('');
@@ -71,7 +71,7 @@ export default function FounderPublicProfilePage() {
       try {
         // Load Profile & Startup
         const [founderSnap, startupSnap] = await Promise.all([
-          getDoc(doc(firestore, 'users', uid as string)),
+          getDoc(doc(firestore, 'publicProfiles', uid as string)),
           getDoc(doc(firestore, 'startups', uid as string))
         ]);
 
@@ -96,13 +96,13 @@ export default function FounderPublicProfilePage() {
           const connQ = query(
             collection(firestore, 'connections'),
             where('initiatorUid', '==', user.uid),
-            where('recipientUid', '==', uid as string),
-            limit(1)
+            where('recipientUid', '==', uid as string)
           );
           const connSnap = await getDocs(connQ);
-          if (!connSnap.empty) {
-            setExistingConnection(connSnap.docs[0].data());
-          }
+          setExistingConnections(connSnap.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+          })));
         }
       } catch (error: any) {
         console.error("Error loading founder profile:", error);
@@ -133,6 +133,15 @@ export default function FounderPublicProfilePage() {
     
     if (user.uid === uid) return;
 
+    if (existingConnections.some(conn => conn.type === type)) {
+      toast({
+        title: "Connection Already Exists",
+        description: "You have already sent a connection request to this founder.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (isLimitReached) {
       toast({ 
         title: "Limit Reached", 
@@ -154,7 +163,16 @@ export default function FounderPublicProfilePage() {
     };
 
     try {
-      await addDoc(collection(firestore, 'connections'), connData);
+      if (type === 'investor') {
+        const connectionId = `investor_${user.uid}_${uid}`;
+        const connectionRef = doc(firestore, 'connections', connectionId);
+
+        await runTransaction(firestore, async (transaction) => {
+          transaction.set(connectionRef, connData);
+        });
+      } else {
+        await addDoc(collection(firestore, 'connections'), connData);
+      }
 
       createNotification(firestore, {
         recipientUid: uid as string,
@@ -167,15 +185,25 @@ export default function FounderPublicProfilePage() {
       });
 
       toast({ title: "Request Sent", description: "The founder has been notified." });
-      setExistingConnection(connData);
+      setExistingConnections(prev => [...prev, connData]);
       setInterestMessage('');
       setIsDialogOpen(false);
-    } catch (error) {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: 'connections',
-        operation: 'create',
-        requestResourceData: connData
-      }));
+    } catch (error: any) {
+      console.error('Connection request failed:', error);
+
+      if (error?.code === 'permission-denied') {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: 'connections',
+          operation: 'create',
+          requestResourceData: connData
+        }));
+      } else {
+        toast({
+          title: "Request Failed",
+          description: error?.message || "Unable to send connection request.",
+          variant: "destructive"
+        });
+      }
     } finally {
       setIsSendingRequest(false);
     }
@@ -350,9 +378,9 @@ export default function FounderPublicProfilePage() {
                               className="w-full rounded-2xl h-12 font-bold" 
                               variant="secondary"
                               onClick={() => handleSendRequest('cofounder')}
-                              disabled={isSendingRequest || (existingConnection?.type === 'cofounder')}
+                              disabled={isSendingRequest || existingConnections.some(conn => conn.type === 'cofounder')}
                             >
-                                {existingConnection?.type === 'cofounder' ? 'Request Sent' : 'Connect as Co-founder'}
+                                {existingConnections.some(conn => conn.type === 'cofounder') ? 'Request Sent' : 'Connect as Co-founder'}
                             </Button>
                           </CardContent>
                         </Card>

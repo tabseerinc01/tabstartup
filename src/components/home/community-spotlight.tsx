@@ -23,14 +23,14 @@ export function CommunitySpotlight() {
       try {
         // 1. Fetch using multi-role support
         const multiRoleQuery = query(
-          collection(firestore, 'users'),
+          collection(firestore, 'publicProfiles'),
           where('roles', 'array-contains', 'founder'),
           limit(12)
         );
         
         // 2. Legacy check
         const legacyRoleQuery = query(
-          collection(firestore, 'users'),
+          collection(firestore, 'publicProfiles'),
           where('role', '==', 'founder'),
           limit(12)
         );

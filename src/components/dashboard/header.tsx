@@ -204,7 +204,12 @@ export function DashboardHeader() {
                       <DropdownMenuItem 
                         key={n.id} 
                         className={`p-4 cursor-pointer focus:bg-muted/50 rounded-xl mb-1 flex items-start gap-3 transition-colors ${!n.read ? 'bg-primary/[0.03] border-l-4 border-l-primary' : 'opacity-70'}`}
-                        onClick={() => markAsRead(n.id)}
+                        onClick={() => {
+                          markAsRead(n.id);
+                          if (n.targetType === 'connection') {
+                            router.push('/dashboard/connections');
+                          }
+                        }}
                       >
                         <div className={`mt-1 h-8 w-8 shrink-0 rounded-full flex items-center justify-center ${!n.read ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
                            <Inbox className="h-4 w-4" />

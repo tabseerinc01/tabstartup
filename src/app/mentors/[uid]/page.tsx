@@ -38,7 +38,7 @@ export default function MentorPublicProfilePage() {
       if (!firestore || !uid) return;
       setIsLoading(true);
       try {
-        const snap = await getDoc(doc(firestore, 'users', uid));
+        const snap = await getDoc(doc(firestore, 'publicProfiles', uid));
         if (snap.exists()) {
           setMentor({ id: snap.id, ...snap.data() });
         }

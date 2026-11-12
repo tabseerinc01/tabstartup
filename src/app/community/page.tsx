@@ -222,7 +222,7 @@ export default function CommunityFeedPage() {
 
   // Moderation Handlers
   const handleToggleHide = (post: any) => {
-    if (!firestore || !isAdmin) return;
+    if (!firestore || !user || !isAdmin) return;
     const newStatus = post.status === 'hidden' ? 'active' : 'hidden';
     
     updateDoc(doc(firestore, 'communityPosts', post.id), {
@@ -238,7 +238,7 @@ export default function CommunityFeedPage() {
       if (post.authorUid !== user?.uid) {
         createNotification(firestore, {
           recipientUid: post.authorUid,
-          actorUid: user?.uid || 'admin',
+          actorUid: user.uid,
           type: 'moderation',
           title: newStatus === 'hidden' ? 'Post Hidden by Admin' : 'Post Restored',
           message: newStatus === 'hidden' 
@@ -258,7 +258,7 @@ export default function CommunityFeedPage() {
   };
 
   const handleDeletePost = (post: any) => {
-    if (!firestore || !isAdmin) return;
+    if (!firestore || !user || !isAdmin) return;
     if (!confirm("Are you sure you want to permanently delete this post?")) return;
 
     deleteDoc(doc(firestore, 'communityPosts', post.id)).then(() => {
@@ -268,7 +268,7 @@ export default function CommunityFeedPage() {
       if (post.authorUid !== user?.uid) {
         createNotification(firestore, {
           recipientUid: post.authorUid,
-          actorUid: user?.uid || 'admin',
+          actorUid: user.uid,
           type: 'moderation',
           title: 'Post Deleted by Admin',
           message: 'Your post was deleted because it violated community standards.',

@@ -142,7 +142,7 @@ function MessagesInboxContent() {
       if (uidsToFetch.size > 0) {
         const newProfiles = { ...profiles };
         for (const uid of Array.from(uidsToFetch)) {
-          const userSnap = await getDoc(doc(firestore!, 'users', uid));
+          const userSnap = await getDoc(doc(firestore!, 'publicProfiles', uid));
           if (userSnap.exists()) {
             newProfiles[uid] = userSnap.data();
           }

@@ -17,10 +17,24 @@ async function getStartupData(identifier: string) {
         structuredQuery: {
           from: [{ collectionId: "startups" }],
           where: {
-            fieldFilter: {
-              field: { fieldPath: "slug" },
-              op: "EQUAL",
-              value: { stringValue: identifier }
+            compositeFilter: {
+              op: "AND",
+              filters: [
+                {
+                  fieldFilter: {
+                    field: { fieldPath: "slug" },
+                    op: "EQUAL",
+                    value: { stringValue: identifier }
+                  }
+                },
+                {
+                  fieldFilter: {
+                    field: { fieldPath: "status" },
+                    op: "EQUAL",
+                    value: { stringValue: "active" }
+                  }
+                }
+              ]
             }
           },
           limit: 1
@@ -69,7 +83,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const startup = await getStartupData(slug);
   
-  if (!startup || startup.status === 'hidden') {
+  if (!startup || startup.status !== 'active') {
     return { title: 'Venture Profile | TabStartup' };
   }
 

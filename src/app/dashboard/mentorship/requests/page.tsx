@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, updateDoc, doc, getDoc, serverTimestamp, addDoc } from 'firebase/firestore';
+import { collection, query, where, updateDoc, doc, getDoc, serverTimestamp, addDoc, runTransaction } from 'firebase/firestore';
 import { 
   GraduationCap, 
   Loader2, 
@@ -58,35 +58,88 @@ export default function MentorshipRequestsPage() {
     setIsActionLoading(id);
 
     const request = [...(rawIncoming || []), ...(rawOutgoing || [])].find(r => r.id === id);
-    if (!request) return;
+    if (!request) {
+      setIsActionLoading(null);
+      return;
+    }
+
+    const isMentor = request.mentorUid === user.uid;
+    const isFounder = request.founderUid === user.uid;
+
+    if (
+      request.status !== 'Pending' ||
+      (status === 'Cancelled' && !isFounder) ||
+      (status !== 'Cancelled' && !isMentor)
+    ) {
+      toast({
+        title: 'Action Not Allowed',
+        variant: 'destructive'
+      });
+      setIsActionLoading(null);
+      return;
+    }
 
     try {
-      await updateDoc(doc(firestore, 'mentorshipRequests', id), {
-        status,
-        updatedAt: serverTimestamp()
+      const requestRef = doc(firestore, 'mentorshipRequests', id);
+      const mentorshipRef = doc(firestore, 'activeMentorships', 'mentorship_' + id);
+      const timelineRef = doc(mentorshipRef, 'timeline', 'initial_start');
+
+      await runTransaction(firestore, async (transaction) => {
+        const requestSnap = await transaction.get(requestRef);
+
+        if (!requestSnap.exists()) {
+          throw new Error('Mentorship request not found');
+        }
+
+        const current = requestSnap.data();
+
+        if (current.status !== 'Pending') {
+          throw new Error('Request is no longer pending');
+        }
+
+        if (status === 'Cancelled') {
+          if (current.founderUid !== user.uid) {
+            throw new Error('Unauthorized cancellation');
+          }
+        } else if (current.mentorUid !== user.uid) {
+          throw new Error('Unauthorized mentor action');
+        }
+
+        if (status === 'Accepted') {
+          const existing = await transaction.get(mentorshipRef);
+
+          if (existing.exists()) {
+            throw new Error('Active mentorship already exists');
+          }
+
+          transaction.set(mentorshipRef, {
+            mentorUid: current.mentorUid,
+            founderUid: current.founderUid,
+            startupId: current.startupId,
+            requestId: id,
+            status: 'Onboarding',
+            startedAt: serverTimestamp(),
+            lastActivityAt: serverTimestamp()
+          });
+
+          transaction.set(timelineRef, {
+            type: 'start',
+            details: 'Mentorship relationship established.',
+            createdAt: serverTimestamp()
+          });
+        }
+
+        transaction.update(requestRef, {
+          status,
+          updatedAt: serverTimestamp()
+        });
       });
 
-      // Phase 2: Create Active Mentorship on Acceptance
       if (status === 'Accepted') {
-        const mentorshipData = {
-          mentorUid: request.mentorUid,
-          founderUid: request.founderUid,
-          startupId: request.startupId,
-          requestId: id,
-          status: 'Onboarding',
-          startedAt: serverTimestamp(),
-          lastActivityAt: serverTimestamp()
-        };
-        const mRef = await addDoc(collection(firestore, 'activeMentorships'), mentorshipData);
-        
-        // Add Initial Timeline Event
-        await addDoc(collection(firestore, 'activeMentorships', mRef.id, 'timeline'), {
-          type: 'start',
-          details: 'Mentorship relationship established.',
-          createdAt: serverTimestamp()
+        toast({
+          title: 'Mentorship Activated',
+          description: 'Relationship moved to Active Workspace.'
         });
-
-        toast({ title: "Mentorship Activated", description: "Relationship moved to Active Workspace." });
       }
 
       // Notify the other party
@@ -211,7 +264,7 @@ function RequestCard({ req, mode, onAction, isLoading }: any) {
     async function loadData() {
       if (!firestore || !otherUid) return;
       const [uSnap, sSnap] = await Promise.all([
-        getDoc(doc(firestore, 'users', otherUid)),
+        getDoc(doc(firestore, 'publicProfiles', otherUid)),
         req.startupId ? getDoc(doc(firestore, 'startups', req.startupId)) : Promise.resolve(null)
       ]);
       if (uSnap.exists()) setOtherUser(uSnap.data());

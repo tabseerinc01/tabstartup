@@ -44,7 +44,7 @@ export default function MentorsPage() {
       setIsLoading(true);
       try {
         const q = query(
-          collection(firestore, 'users'),
+          collection(firestore, 'publicProfiles'),
           where('roles', 'array-contains', 'mentor'),
           limit(100)
         );

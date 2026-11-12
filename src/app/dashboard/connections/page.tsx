@@ -15,6 +15,7 @@ import {
   serverTimestamp,
   addDoc,
   setDoc,
+  runTransaction,
   limit
 } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
@@ -90,7 +91,7 @@ export default function ConnectionsManagerPage() {
           snap.docs.forEach(d => {
             batch.update(d.ref, { read: true });
           });
-          batch.commit();
+          await batch.commit();
         }
       } catch (e) {
         console.warn("Could not auto-clear notifications", e);
@@ -126,7 +127,7 @@ export default function ConnectionsManagerPage() {
         .filter(uid => !profiles[uid])
         .map(async (uid) => {
           try {
-            const snap = await getDoc(doc(firestore, 'users', uid));
+            const snap = await getDoc(doc(firestore, 'publicProfiles', uid));
             return snap.exists() ? { uid, data: snap.data() } : null;
           } catch (e) { return null; }
         });
@@ -145,68 +146,114 @@ export default function ConnectionsManagerPage() {
     loadProfiles();
   }, [firestore, allConns, user?.uid, profiles]);
 
+
+  const acceptInvestorConnectionAtomic = async (conn: any) => {
+    if (!firestore || !user) {
+      throw new Error('Authentication required.');
+    }
+
+    const founderUid = user.uid;
+    const investorUid = conn.initiatorUid;
+    const startupId = founderUid;
+    const dealId = `funding_${startupId}_${investorUid}`;
+
+    const connectionRef = doc(firestore, 'connections', conn.id);
+    const dealRef = doc(firestore, 'dealRooms', dealId);
+
+    return runTransaction(firestore, async (transaction) => {
+      const connectionSnap = await transaction.get(connectionRef);
+      const dealSnap = await transaction.get(dealRef);
+
+      if (!connectionSnap.exists()) {
+        throw new Error('Connection not found.');
+      }
+
+      const current = connectionSnap.data();
+
+      if (
+        current.status !== 'pending' ||
+        current.type !== 'investor' ||
+        current.recipientUid !== founderUid ||
+        current.initiatorUid !== investorUid
+      ) {
+        throw new Error('Connection is not eligible for acceptance.');
+      }
+
+      if (dealSnap.exists()) {
+        const existing = dealSnap.data();
+
+        if (
+          existing.founderUid !== founderUid ||
+          existing.investorUid !== investorUid ||
+          existing.startupId !== startupId ||
+          (existing.connectionId != null &&
+            existing.connectionId !== conn.id)
+        ) {
+          throw new Error('Existing Deal Room identity mismatch.');
+        }
+
+        transaction.update(connectionRef, {
+          status: 'accepted',
+          updatedAt: serverTimestamp()
+        });
+
+        return { created: false };
+      }
+
+      transaction.update(connectionRef, {
+        status: 'accepted',
+        updatedAt: serverTimestamp()
+      });
+
+      transaction.set(dealRef, {
+        startupId,
+        founderUid,
+        investorUid,
+        connectionId: conn.id,
+        status: 'Discovery',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      transaction.set(
+        doc(firestore, 'dealRooms', dealId, 'timeline', 'deal_init'),
+        {
+          type: 'deal_init',
+          details: 'Investment Deal Room initialized.',
+          createdAt: serverTimestamp()
+        }
+      );
+
+      return { created: true };
+    });
+  };
+
   const handleStatus = (conn: any, status: 'accepted' | 'rejected') => {
     if (!firestore || !user || isActionLoading) return;
+
+    if (conn.recipientUid !== user.uid || conn.status !== 'pending') {
+      toast({
+        title: 'Action Not Allowed',
+        description: 'Only the recipient can respond to a pending connection.',
+        variant: 'destructive'
+      });
+      return;
+    }
     setIsActionLoading(conn.id);
     const otherUid = conn.initiatorUid === user.uid ? conn.recipientUid : conn.initiatorUid;
 
-    updateDoc(doc(firestore, 'connections', conn.id), { 
-      status,
-      updatedAt: serverTimestamp() 
-    })
-      .then(async () => {
+    const action =
+      status === 'accepted' && conn.type === 'investor'
+        ? acceptInvestorConnectionAtomic(conn)
+        : updateDoc(doc(firestore, 'connections', conn.id), {
+            status,
+            updatedAt: serverTimestamp()
+          });
+
+    action
+      .then(() => {
         if (status === 'accepted') {
-          // --- DEAL ROOM PHASE 1: Automatically create Deal Room for Investor connections ---
-          if (conn.type === 'investor') {
-            // Uniqueness Identifiers
-            const startupId = user.uid; // Startups are keyed by founder UID
-            const founderUid = user.uid;
-            const investorUid = conn.initiatorUid;
-
-            // Deterministic ID Strategy for Race-Safety
-            const deterministicId = `funding_${startupId}_${investorUid}`;
-            const dealRoomRef = doc(firestore, 'dealRooms', deterministicId);
-
-            // Step 1: Check for existing room (handles historical random IDs and new deterministic IDs)
-            const existingDealQ = query(
-              collection(firestore, 'dealRooms'),
-              where('startupId', '==', startupId),
-              where('founderUid', '==', founderUid),
-              where('investorUid', '==', investorUid),
-              limit(2)
-            );
-            const existingDealSnap = await getDocs(existingDealQ);
-
-            if (existingDealSnap.empty) {
-              const dealRoomData = {
-                startupId,
-                founderUid,
-                investorUid,
-                status: 'Discovery',
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp()
-              };
-              
-              // Use setDoc with deterministicId for absolute idempotency
-              await setDoc(dealRoomRef, dealRoomData);
-              
-              // Initialize Timeline
-              await addDoc(collection(firestore, 'dealRooms', deterministicId, 'timeline'), {
-                type: 'deal_init',
-                details: 'Investment Deal Room initialized.',
-                createdAt: serverTimestamp()
-              });
-              
-              toast({ title: "Deal Room Active", description: "Venture Deal Room has been initialized." });
-            } else {
-              if (existingDealSnap.size > 1) {
-                console.warn(`Historical duplicate Deal Rooms detected for relationship: ${deterministicId}`);
-              }
-              toast({ title: "Deal Room Reused", description: "Collaboration space is already active." });
-            }
-          }
-
-          createNotification(firestore, {
+      createNotification(firestore, {
             recipientUid: otherUid,
             actorUid: user.uid,
             type: 'connection',
@@ -230,11 +277,20 @@ export default function ConnectionsManagerPage() {
         }
       })
       .catch((e) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({
-          path: `connections/${conn.id}`,
-          operation: 'update',
-          requestResourceData: { status }
-        }));
+        if (e?.code === 'permission-denied') {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: `connections/${conn.id}`,
+            operation: 'update',
+            requestResourceData: { status }
+          }));
+        } else {
+          console.error('Connection status update failed:', e);
+          toast({
+            title: 'Connection Update Failed',
+            description: e instanceof Error ? e.message : 'Please try again.',
+            variant: 'destructive'
+          });
+        }
       })
       .finally(() => {
         setIsActionLoading(null);

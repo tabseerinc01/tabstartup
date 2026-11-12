@@ -31,7 +31,14 @@ export default function ReferralManagementPage() {
           limit(100)
         );
         const snap = await getDocs(q);
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const list = snap.docs.map(d => ({
+          ...d.data(),
+          id: d.id
+        })) as Array<{
+          id: string;
+          referredProfileCompleted?: boolean;
+          rewardGranted?: boolean;
+        }>;
         setReferrals(list);
 
         setStats({

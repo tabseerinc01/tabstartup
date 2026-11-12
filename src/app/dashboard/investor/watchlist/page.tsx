@@ -110,7 +110,7 @@ export default function WatchlistPage() {
               newStartups[startupId] = sData;
 
               if (sData.ownerUid && !newFounders[sData.ownerUid]) {
-                const fSnap = await getDoc(doc(firestore, 'users', sData.ownerUid));
+                const fSnap = await getDoc(doc(firestore, 'publicProfiles', sData.ownerUid));
                 if (fSnap.exists()) newFounders[sData.ownerUid] = fSnap.data();
               }
 

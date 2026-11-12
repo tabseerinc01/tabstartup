@@ -36,7 +36,7 @@ export default function InvestorsPage() {
   const [focusFilter, setFocusFilter] = useState('all');
   const [stageFilter, setStageFilter] = useState<string>('All');
   const [sortBy, setSortBy] = useState('newest');
-  
+
   const firestore = useFirestore();
 
   useEffect(() => {
@@ -45,12 +45,12 @@ export default function InvestorsPage() {
       setIsLoading(true);
       try {
         const multiRoleQuery = query(
-          collection(firestore, 'users'), 
-          where('roles', 'array-contains', 'investor'), 
+          collection(firestore, 'publicProfiles'),
+          where('roles', 'array-contains', 'investor'),
           limit(100)
         );
         const legacyRoleQuery = query(
-          collection(firestore, 'users'),
+          collection(firestore, 'publicProfiles'),
           where('role', '==', 'investor'),
           limit(100)
         );
@@ -83,17 +83,17 @@ export default function InvestorsPage() {
       const name = (inv.fullName || '').toLowerCase();
       const headline = (inv.investorHeadline || inv.headline || '').toLowerCase();
       const searchTerm = search.toLowerCase();
-      
+
       const matchesSearch = name.includes(searchTerm) || headline.includes(searchTerm);
-      
-      const matchesStage = stageFilter === 'All' 
-        ? true 
-        : Array.isArray(inv.preferredStage) 
+
+      const matchesStage = stageFilter === 'All'
+        ? true
+        : Array.isArray(inv.preferredStage)
           ? inv.preferredStage.some((s: string) => s.toLowerCase() === stageFilter.toLowerCase())
           : (inv.preferredStage || '').toLowerCase().includes(stageFilter.toLowerCase());
 
-      const matchesFocus = focusFilter === 'all' 
-        ? true 
+      const matchesFocus = focusFilter === 'all'
+        ? true
         : Array.isArray(inv.investmentFocus)
           ? inv.investmentFocus.some((f: string) => f.toLowerCase() === focusFilter.toLowerCase())
           : (inv.investmentFocus || '').toLowerCase().includes(focusFilter.toLowerCase());
@@ -137,7 +137,7 @@ export default function InvestorsPage() {
                   />
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Preferred Stage</Label>
                 <Select value={stageFilter} onValueChange={setStageFilter}>
@@ -220,7 +220,7 @@ function InvestorCard({ investor }: { investor: any }) {
           </CardDescription>
         </div>
       </CardHeader>
-      
+
       <CardContent className="flex flex-col flex-1 px-8 pb-8 space-y-6">
         <div className="flex items-center gap-2 text-xs text-muted-foreground font-bold uppercase tracking-tight">
           <MapPin className="h-3 w-3" /> {investor.location || 'Global'}

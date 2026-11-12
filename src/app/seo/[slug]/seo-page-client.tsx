@@ -101,9 +101,9 @@ export default function SEOPageClient({ slug, initialPageData }: SEOPageClientPr
         // 3. Fetch ecosystem stats
         const [sCount, fCount, iCount, cCount] = await Promise.all([
           getCountFromServer(query(collection(firestore, 'startups'), where('status', '==', 'active'))),
-          getCountFromServer(query(collection(firestore, 'users'), where('role', '==', 'founder'))),
-          getCountFromServer(query(collection(firestore, 'users'), where('role', '==', 'investor'))),
-          getCountFromServer(query(collection(firestore, 'users'), where('lookingForCofounder', '==', true)))
+          getCountFromServer(query(collection(firestore, 'publicProfiles'), where('role', '==', 'founder'))),
+          getCountFromServer(query(collection(firestore, 'publicProfiles'), where('role', '==', 'investor'))),
+          getCountFromServer(query(collection(firestore, 'publicProfiles'), where('lookingForCofounder', '==', true)))
         ]);
 
         setStats({

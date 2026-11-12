@@ -1,5 +1,7 @@
-
 'use client';
+
+import Image from 'next/image';
+
 
 import { useParams, useRouter } from 'next/navigation';
 import { doc, getDoc, collection, addDoc, query, where, getDocs, limit, serverTimestamp } from 'firebase/firestore';
@@ -48,7 +50,7 @@ export default function InvestorPublicProfilePage() {
       if (!firestore || !uid) return;
       setIsLoading(true);
       try {
-        const snap = await getDoc(doc(firestore, 'users', uid));
+        const snap = await getDoc(doc(firestore, 'publicProfiles', uid));
         if (snap.exists()) {
           setInvestor({ id: snap.id, ...snap.data() });
         }

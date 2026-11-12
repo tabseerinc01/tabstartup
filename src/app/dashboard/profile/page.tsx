@@ -1,6 +1,8 @@
 
 'use client';
 
+import { mutateOwnProfile } from '@/lib/profile-mutation-client';
+
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,6 +57,7 @@ export default function ProfilePage() {
     whyBuilding: '',
     lookingFor: '',
     linkedinUrl: '',
+    website: '',
     ticketSize: '',
     isOpenToPitches: false,
     investmentFocus: '',
@@ -115,6 +118,7 @@ export default function ProfilePage() {
             whyBuilding: profile.whyBuilding || '',
             lookingFor: profile.lookingFor || '',
             linkedinUrl: profile.linkedinUrl || profile.socialLinks?.linkedin || '',
+            website: profile.website || profile.socialLinks?.website || '',
             ticketSize: profile.ticketSize || '',
             isOpenToPitches: profile.isOpenToPitches || false,
             investmentFocus: Array.isArray(profile.investmentFocus) ? profile.investmentFocus.join(', ') : '',
@@ -144,6 +148,7 @@ export default function ProfilePage() {
     loadProfile();
   }, [firestore, user?.uid]);
 
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isCover = false) => {
     const file = e.target.files?.[0];
     if (!file || !user || !storage || !firestore) return;
@@ -163,10 +168,9 @@ export default function ProfilePage() {
       });
 
       const field = isCover ? 'coverImageUrl' : 'imageUrl';
-      await setDoc(doc(firestore, 'users', user.uid), {
+      await mutateOwnProfile(user, 'update', {
         [field]: downloadURL,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      });
 
       setFormData(prev => ({ ...prev, [field]: downloadURL }));
       toast({ title: isCover ? "Cover Updated" : "Photo Updated" });
@@ -199,10 +203,10 @@ export default function ProfilePage() {
         cofounderSkills: cofounderSkillsArray,
         mentorSkills: mentorSkillsArray,
         isMentor: userRoles.includes('mentor'),
-        updatedAt: serverTimestamp(),
       };
 
-      await setDoc(doc(firestore, 'users', user.uid), updatedData, { merge: true });
+      const { isMentor, ...profileFields } = updatedData;
+      await mutateOwnProfile(user, 'update', profileFields);
 
       // Robust Qualification Check
       const isProfileComplete = !!(
@@ -250,13 +254,12 @@ export default function ProfilePage() {
     if (!firestore || !user?.uid || isActivatingRole) return;
     
     setIsActivatingRole(roleId);
-    const updatePayload = {
-      roles: arrayUnion(roleId),
-      updatedAt: serverTimestamp()
-    };
+
 
     try {
-      await setDoc(doc(firestore, 'users', user.uid), updatePayload, { merge: true });
+      await mutateOwnProfile(user, 'activate-role', {
+        role: roleId,
+      });
       setUserRoles(prev => [...new Set([...prev, roleId])]);
       toast({ title: "Role Activated", description: `You have successfully joined the ecosystem as a ${roleId}.` });
     } catch (error: any) {

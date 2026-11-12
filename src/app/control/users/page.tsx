@@ -14,26 +14,7 @@ import {
   arrayRemove,
   deleteDoc
 } from 'firebase/firestore';
-import { 
-  UserCog, 
-  Loader2, 
-  Mail, 
-  ShieldAlert, 
-  Eye, 
-  Activity, 
-  Rocket, 
-  Zap, 
-  ShieldCheck, 
-  Search,
-  Filter,
-  MoreVertical,
-  Trash2,
-  Ban,
-  CheckCircle2,
-  ExternalLink,
-  MessageSquare,
-  Users
-} from 'lucide-react';
+import { UserCog, Loader2, Mail, ShieldAlert, Eye, Activity, Rocket, Zap, ShieldCheck, Search, Filter, MoreVertical, Trash2, Ban, CheckCircle2, ExternalLink, MessageSquare, Users, CheckSquare } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -121,10 +102,33 @@ export default function UserManagementPage() {
     const isSuspending = targetUser.status !== 'suspended';
     
     try {
-      await updateDoc(doc(firestore, 'users', targetUser.id), {
-        status: isSuspending ? 'suspended' : 'active',
-        updatedAt: serverTimestamp()
+      const token = await currentAdmin.getIdToken();
+
+      const response = await fetch('/api/control/users/suspension', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token,
+        },
+        body: JSON.stringify({
+          uid: targetUser.id,
+          suspended: isSuspending,
+        }),
+        cache: 'no-store',
       });
+
+      if (!response.ok) {
+        throw new Error('Suspension operation failed');
+      }
+
+      const result = await response.json();
+
+      if (
+        result.success !== true ||
+        result.status !== (isSuspending ? 'suspended' : 'active')
+      ) {
+        throw new Error('Invalid suspension response');
+      }
 
       await logAdminAction(firestore, currentAdmin.uid, isSuspending ? 'suspend_user' : 'unsuspend_user', targetUser.id);
       
@@ -145,10 +149,36 @@ export default function UserManagementPage() {
 
     const isRemoving = (currentRoles || []).includes(roleToToggle);
     try {
-      await updateDoc(doc(firestore, 'users', targetUserId), {
-        roles: isRemoving ? arrayRemove(roleToToggle) : arrayUnion(roleToToggle),
-        updatedAt: serverTimestamp()
+      const token = await currentAdmin.getIdToken();
+
+      const response = await fetch('/api/control/users/professional-role', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token,
+        },
+        body: JSON.stringify({
+          uid: targetUserId,
+          role: roleToToggle,
+          enabled: !isRemoving,
+        }),
+        cache: 'no-store',
       });
+
+      const result = await response.json();
+
+      if (response.status === 409) {
+        toast({
+          title: "Role removal restricted",
+          description: "A member must retain at least one professional role.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!response.ok || result.success !== true) {
+        throw new Error('Role operation failed');
+      }
 
       await logAdminAction(firestore, currentAdmin.uid, 'update_role', targetUserId);
       fetchData();
@@ -297,7 +327,7 @@ export default function UserManagementPage() {
                                </DropdownMenuItem>
                                <DropdownMenuSeparator />
                                <DropdownMenuLabel>Modify Roles</DropdownMenuLabel>
-                               {['founder', 'investor', 'mentor', 'admin'].map(r => (
+                               {['founder', 'investor', 'mentor'].map(r => (
                                  <DropdownMenuItem key={r} onClick={() => handleToggleRole(u.id, r, roles)} className="gap-2 cursor-pointer text-[10px] uppercase font-bold">
                                     {roles.includes(r) ? <><ShieldCheck className="h-3 w-3 text-green-500" /> {r}</> : <><ShieldAlert className="h-3 w-3 text-slate-300" /> {r}</>}
                                  </DropdownMenuItem>

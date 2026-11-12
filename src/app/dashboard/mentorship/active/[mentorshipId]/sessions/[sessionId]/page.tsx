@@ -71,8 +71,8 @@ export default function MentorshipSessionDetailsPage() {
     async function loadProfiles() {
       if (!firestore || !session) return;
       const [mSnap, fSnap, sSnap] = await Promise.all([
-        getDoc(doc(firestore, 'users', session.mentorUid)),
-        getDoc(doc(firestore, 'users', session.founderUid)),
+        getDoc(doc(firestore, 'publicProfiles', session.mentorUid)),
+        getDoc(doc(firestore, 'publicProfiles', session.founderUid)),
         getDoc(doc(firestore, 'startups', session.startupId))
       ]);
       setProfiles({

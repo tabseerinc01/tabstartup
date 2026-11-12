@@ -1,5 +1,7 @@
-
 'use client';
+
+import { Badge } from '@/components/ui/badge';
+
 
 import { useState, useEffect, useMemo } from 'react';
 import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';

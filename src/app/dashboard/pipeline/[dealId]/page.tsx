@@ -213,7 +213,6 @@ export default function DealDetailsPage() {
               initialData={{
                 contactId: deal.contactId,
                 contactName: deal.contactName,
-                title: `Invoice for ${deal.title}`,
                 amount: deal.value,
                 currency: deal.currency,
                 description: `Billing for project: ${deal.title}`

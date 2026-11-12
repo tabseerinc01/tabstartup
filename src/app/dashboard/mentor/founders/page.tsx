@@ -36,7 +36,7 @@ export default function ActiveFoundersPage() {
       
       for (const m of mentorships) {
         if (!newProfiles[m.founderUid]) {
-          const uSnap = await getDoc(doc(firestore, 'users', m.founderUid));
+          const uSnap = await getDoc(doc(firestore, 'publicProfiles', m.founderUid));
           if (uSnap.exists()) newProfiles[m.founderUid] = uSnap.data();
         }
         if (m.startupId && !newStartups[m.startupId]) {

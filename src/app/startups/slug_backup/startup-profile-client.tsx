@@ -3,17 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFirestore, useUser } from '@/firebase';
-import { 
-  doc, 
-  collection, 
-  addDoc, 
-  getDoc, 
-  getDocs,
-  query,
-  where,
-  limit,
-  serverTimestamp 
-} from 'firebase/firestore';
+import { doc, collection, addDoc, getDoc, getDocs, query, where, limit, serverTimestamp, setDoc } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
 import { Card, CardContent } from '@/components/ui/card';
@@ -120,7 +110,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
 
         // Load Founder Profile
         if (ownerUid) {
-          const founderSnap = await getDoc(doc(firestore, 'users', ownerUid));
+          const founderSnap = await getDoc(doc(firestore, 'publicProfiles', ownerUid));
           if (founderSnap.exists()) {
             setFounder(founderSnap.data());
           }

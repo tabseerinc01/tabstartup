@@ -33,7 +33,7 @@ export default function MyMentorsPage() {
       
       for (const m of mentorships) {
         if (!newProfiles[m.mentorUid]) {
-          const uSnap = await getDoc(doc(firestore, 'users', m.mentorUid));
+          const uSnap = await getDoc(doc(firestore, 'publicProfiles', m.mentorUid));
           if (uSnap.exists()) newProfiles[m.mentorUid] = uSnap.data();
         }
       }

@@ -10,8 +10,8 @@ import {
   PointerSensor, 
   useSensor, 
   useSensors, 
-  DragStart,
-  DragEnd,
+  DragStartEvent,
+  DragEndEvent,
   defaultDropAnimationSideEffects,
   useDroppable
 } from '@dnd-kit/core';
@@ -99,11 +99,11 @@ export function KanbanBoard({ deals, onMoveDeal, onDeleteDeal }: {
     return deals.find(d => d.id === activeId);
   }, [deals, activeId]);
 
-  function handleDragStart(event: DragStart) {
+  function handleDragStart(event: DragStartEvent) {
     setActiveId(event.active.id as string);
   }
 
-  function handleDragEnd(event: DragEnd) {
+  function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     
     if (!over) {

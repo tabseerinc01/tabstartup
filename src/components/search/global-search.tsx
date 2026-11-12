@@ -87,8 +87,8 @@ export function GlobalSearch() {
         // For MVP, we fetch a small subset and filter.
         
         const [sSnap, uSnap, pSnap] = await Promise.all([
-          getDocs(query(collection(firestore, 'startups'), limit(20))),
-          getDocs(query(collection(firestore, 'users'), limit(50))),
+          getDocs(query(collection(firestore, 'startups'), where('status', '==', 'active'), limit(20))),
+          getDocs(query(collection(firestore, 'publicProfiles'), limit(50))),
           getDocs(query(collection(firestore, 'communityPosts'), where('status', '==', 'active'), limit(20)))
         ]);
 

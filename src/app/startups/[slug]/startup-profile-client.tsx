@@ -14,7 +14,8 @@ import {
   limit,
   serverTimestamp,
   setDoc,
-  deleteDoc
+  deleteDoc,
+  runTransaction
 } from 'firebase/firestore';
 import { PublicHeader } from '@/components/public/header';
 import { PublicFooter } from '@/components/public/footer';
@@ -62,6 +63,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   const [founder, setFounder] = useState<any>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [existingInterest, setExistingInterest] = useState<any>(null);
+  const [isInterestReady, setIsInterestReady] = useState(false);
   
   // Save State
   const [isSaved, setIsSaved] = useState(false);
@@ -77,9 +79,11 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
   const [isWatchingStartup, setIsWatchingStartup] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   
-  const hasAttemptedAutoSubmit = useRef(false);
+  const hasAttemptedAutoSubmit = useRef<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadData() {
       if (!firestore || !slugOrId) return;
       
@@ -89,14 +93,17 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         const slugQuery = query(
           collection(firestore, 'startups'),
           where('slug', '==', slugOrId),
+          where('status', '==', 'active'),
           limit(1)
         );
         const slugSnap = await getDocs(slugQuery);
+        if (cancelled) return;
         
         if (!slugSnap.empty) {
           startupDoc = { id: slugSnap.docs[0].id, ...slugSnap.docs[0].data() };
         } else {
           const idSnap = await getDoc(doc(firestore, 'startups', slugOrId));
+          if (cancelled) return;
           if (idSnap.exists()) {
             startupDoc = { id: idSnap.id, ...idSnap.data() };
             if (startupDoc.slug && startupDoc.slug !== slugOrId) {
@@ -113,13 +120,15 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         const ownerUid = startupDoc.ownerUid;
         setStartup(startupDoc);
 
-        const founderSnap = await getDoc(doc(firestore, 'users', ownerUid));
+        const founderSnap = await getDoc(doc(firestore, 'publicProfiles', ownerUid));
+        if (cancelled) return;
         if (founderSnap.exists()) {
           setFounder(founderSnap.data());
         }
 
         if (user?.uid) {
           const profileSnap = await getDoc(doc(firestore, 'users', user.uid));
+          if (cancelled) return;
           if (profileSnap.exists()) {
             const profileData = profileSnap.data();
             setCurrentUserProfile(profileData);
@@ -131,17 +140,20 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             }
           }
 
-          // Check for existing interest/pitch
-          const pitchQ = query(
-            collection(firestore, 'venturePitches'),
-            where('senderUid', '==', user.uid),
-            where('recipientUid', '==', ownerUid),
-            limit(1)
+          // Check existing Investor Connection
+          const connectionId = `investor_${user.uid}_${ownerUid}`;
+          const connectionSnap = await getDoc(
+            doc(firestore, 'connections', connectionId)
           );
-          const pitchSnap = await getDocs(pitchQ);
-          if (!pitchSnap.empty) {
-            setExistingInterest(pitchSnap.docs[0].data());
+
+          if (cancelled) return;
+
+          if (connectionSnap.exists()) {
+            setExistingInterest(connectionSnap.data());
+          } else {
+            setExistingInterest(null);
           }
+          setIsInterestReady(true);
 
           // Check Saved/Watched status
           const savedQ = query(
@@ -150,6 +162,7 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
             where('startupId', '==', ownerUid)
           );
           const savedSnap = await getDocs(savedQ);
+          if (cancelled) return;
           
           let foundSave = false;
           let foundWatch = false;
@@ -173,15 +186,32 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       } catch (error) {
         console.error("Startup Loading Error:", error);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
+    setIsInterestReady(false);
+    setExistingInterest(null);
+    setStartup(null);
+    setFounder(null);
+    setCurrentUserProfile(null);
+    setIsHidden(false);
+    setIsSaved(false);
+    setSavedDocId(null);
+    setIsWatched(false);
+    setWatchedDocId(null);
+    setIsLoading(true);
     loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [firestore, slugOrId, user?.uid, router]);
 
   const handleExpressInterest = useCallback(async () => {
-    if (!firestore || !startup || isSubmittingInterest || existingInterest) return;
+    if (!startup || isSubmittingInterest) return;
 
     if (!user) {
       toast({ title: "Login Required", description: "Login to express interest." });
@@ -189,6 +219,8 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
       router.push(`/login?returnTo=${returnUrl}`);
       return;
     }
+
+    if (!firestore || !isInterestReady || existingInterest) return;
 
     if (user.uid === startup.ownerUid) {
       toast({ title: "Action Denied", description: "You cannot pitch your own startup.", variant: "destructive" });
@@ -200,47 +232,96 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
     const ownerUid = startup.ownerUid;
     const investorName = currentUserProfile?.fullName || user.displayName || "A Capital Partner";
     
-    const pitchData = {
-      senderUid: user.uid,
-      senderName: investorName,
-      recipientUid: ownerUid,
-      startupId: ownerUid,
-      startupName: startup.name,
-      pitchMessage: `Investor expressed interest via public profile.`,
-      status: 'pending',
-      createdAt: serverTimestamp(),
-    };
+    const connectionId = `investor_${user.uid}_${ownerUid}`;
+    const connectionRef = doc(firestore, 'connections', connectionId);
 
     try {
-      const docRef = await addDoc(collection(firestore, 'venturePitches'), pitchData);
-      setExistingInterest(pitchData);
-      toast({ title: "Interest Shared", description: "The founder has been notified." });
-      
-      createNotification(firestore, {
+      const connectionData = {
+        initiatorUid: user.uid,
+        recipientUid: ownerUid,
+        type: 'investor',
+        status: 'pending',
+        message: 'Interested in your startup venture.',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      const existingSnap = await getDoc(connectionRef);
+
+      if (existingSnap.exists()) {
+        setExistingInterest(existingSnap.data());
+        toast({
+          title: "Interest Already Exists",
+          description: "Your connection request is already recorded."
+        });
+        return;
+      }
+
+      await setDoc(connectionRef, connectionData);
+
+      setExistingInterest(connectionData);
+
+      toast({
+        title: "Interest Shared",
+        description: "Your connection request has been submitted."
+      });
+
+      void Promise.resolve().then(() => createNotification(firestore, {
         recipientUid: ownerUid,
         actorUid: user.uid,
-        type: 'venture_pitch',
+        type: 'connection',
         title: '🚀 Venture Interest',
         message: `${investorName} expressed interest in your startup.`,
-        targetId: docRef.id,
-        targetType: 'venture_pitch'
+        targetId: connectionId,
+        targetType: 'connection'
+      })).catch(notificationError => {
+        console.error('Interest notification failed:', notificationError);
       });
     } catch (error) {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: 'venturePitches',
-        operation: 'create',
-        requestResourceData: pitchData
-      }));
+      console.error('Express Interest failed:', error);
+
+      try {
+        const latestSnap = await getDoc(connectionRef);
+
+        if (latestSnap.exists()) {
+          setExistingInterest(latestSnap.data());
+          toast({
+            title: 'Interest Already Recorded',
+            description: 'Your connection request is already recorded.'
+          });
+          return;
+        }
+      } catch (lookupError) {
+        console.error('Connection recovery lookup failed:', lookupError);
+      }
+
+      toast({
+        title: 'Request Not Submitted',
+        description: 'Unable to submit your interest. Please try again.',
+        variant: 'destructive'
+      });
     } finally {
       setIsSubmittingInterest(false);
     }
-  }, [user, firestore, startup, currentUserProfile, isSubmittingInterest, existingInterest, router, toast]);
+  }, [user, firestore, startup, currentUserProfile, isInterestReady, isSubmittingInterest, existingInterest, router, toast]);
 
   useEffect(() => {
-    if (actionParam === 'pitch' && startup && !existingInterest && !isSubmittingInterest && !isLoading) {
-      handleExpressInterest();
+    if (
+      actionParam === 'pitch' &&
+      startup &&
+      user &&
+      !existingInterest &&
+      !isSubmittingInterest &&
+      !isLoading &&
+      isInterestReady &&
+      hasAttemptedAutoSubmit.current !==
+        `${user.uid}_${startup.ownerUid}`
+    ) {
+      hasAttemptedAutoSubmit.current =
+        `${user.uid}_${startup.ownerUid}`;
+      void handleExpressInterest();
     }
-  }, [actionParam, startup, existingInterest, isSubmittingInterest, isLoading, handleExpressInterest]);
+  }, [actionParam, startup, user, existingInterest, isInterestReady, isSubmittingInterest, isLoading, handleExpressInterest]);
 
   const handleSaveToggle = async () => {
     if (!user || !firestore || !startup) { toast({ title: "Login Required" }); router.push('/login'); return; }
@@ -418,16 +499,24 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
                         {/* 🚀 Express Interest */}
                         <Button 
                           onClick={handleExpressInterest} 
-                          disabled={isSubmittingInterest || !!existingInterest}
+                          disabled={isSubmittingInterest || (!!user && (!isInterestReady || !!existingInterest))}
                           className={cn(
                             "rounded-full h-12 px-8 gap-2 font-black transition-all",
-                            existingInterest 
-                              ? "bg-green-500 text-white hover:bg-green-500 cursor-default" 
+                            existingInterest?.status === 'accepted'
+                              ? "bg-green-500 text-white hover:bg-green-500 cursor-default"
+                              : existingInterest
+                              ? "bg-slate-500 text-white hover:bg-slate-500 cursor-default"
                               : "bg-white text-primary hover:bg-slate-50"
                           )}
                         >
                           {isSubmittingInterest ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className={cn("h-4 w-4", existingInterest && "fill-white")} />}
-                          {existingInterest ? "Interest Sent ✓" : "Express Interest"}
+                          {existingInterest?.status === 'accepted'
+                            ? "Connected ✓"
+                            : existingInterest?.status === 'rejected'
+                            ? "Interest Declined"
+                            : existingInterest?.status === 'pending'
+                            ? "Interest Pending"
+                            : "Express Interest"}
                         </Button>
                       </div>
                     )}

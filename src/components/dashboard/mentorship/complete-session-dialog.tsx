@@ -36,7 +36,7 @@ export function CompleteSessionDialog({ session }: { session: any }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firestore || isSaving) return;
+    if (!firestore || !user || user.uid !== session.mentorUid || isSaving) return;
 
     setIsSaving(true);
     const updateData = {
@@ -52,7 +52,7 @@ export function CompleteSessionDialog({ session }: { session: any }) {
       // Notify Founder
       createNotification(firestore, {
         recipientUid: session.founderUid,
-        actorUid: session.mentorUid,
+        actorUid: user.uid,
         type: 'connection',
         title: 'Session Summary Ready',
         message: `Your session summary for "${session.title}" is now available.`,

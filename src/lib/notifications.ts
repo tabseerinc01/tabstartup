@@ -11,7 +11,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 
 export type NotificationType = 'like' | 'comment' | 'pitch' | 'connection' | 'system' | 'message' | 'cofounder_interest' | 'investor_interest' | 'rejection' | 'moderation' | 'venture_pitch';
-export type NotificationTargetType = 'post' | 'pitch' | 'chat' | 'user' | 'venture_pitch';
+export type NotificationTargetType = 'post' | 'pitch' | 'chat' | 'user' | 'venture_pitch' | 'connection';
 
 interface CreateNotificationParams {
   recipientUid: string;

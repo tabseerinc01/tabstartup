@@ -1,37 +1,13 @@
-
 'use client';
+
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useFirestore, useUser, useDoc, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { 
-  doc, 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  addDoc, 
-  updateDoc, 
-  serverTimestamp,
-  getDoc 
-} from 'firebase/firestore';
-import { 
-  Loader2, 
-  GraduationCap, 
-  Rocket, 
-  MessageSquare, 
-  ArrowLeft, 
-  CheckCircle2, 
-  Clock, 
-  Plus, 
-  Lock, 
-  Users, 
-  History,
-  Send,
-  Zap,
-  LayoutGrid,
-  Calendar
-} from 'lucide-react';
+import { doc, collection, query, where, orderBy, addDoc, updateDoc, serverTimestamp, getDoc, limit, writeBatch } from 'firebase/firestore';
+import { Loader2, GraduationCap, Rocket, MessageSquare, ArrowLeft, CheckCircle2, Clock, Plus, Lock, Users, History, Send, Zap, LayoutGrid, Calendar, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -72,8 +48,8 @@ export default function MentorshipWorkspacePage() {
     async function loadProfiles() {
       if (!firestore || !mentorship) return;
       const [mSnap, fSnap, sSnap] = await Promise.all([
-        getDoc(doc(firestore, 'users', mentorship.mentorUid)),
-        getDoc(doc(firestore, 'users', mentorship.founderUid)),
+        getDoc(doc(firestore, 'publicProfiles', mentorship.mentorUid)),
+        getDoc(doc(firestore, 'publicProfiles', mentorship.founderUid)),
         getDoc(doc(firestore, 'startups', mentorship.startupId))
       ]);
       setProfiles({
@@ -115,18 +91,25 @@ export default function MentorshipWorkspacePage() {
 
   const handleUpdateStatus = async (newStatus: string) => {
     if (!firestore || !mentorshipId || isStatusUpdating || !isMentor) return;
+    if (!PROGRESS_STAGES.includes(newStatus)) return;
     setIsStatusUpdating(true);
     try {
-      await updateDoc(doc(firestore, 'activeMentorships', mentorshipId as string), {
+      const batch = writeBatch(firestore);
+      const mentorshipRef = doc(firestore, 'activeMentorships', mentorshipId as string);
+      const timelineRef = doc(collection(mentorshipRef, 'timeline'));
+
+      batch.update(mentorshipRef, {
         status: newStatus,
         lastActivityAt: serverTimestamp()
       });
 
-      await addDoc(collection(firestore, 'activeMentorships', mentorshipId as string, 'timeline'), {
+      batch.set(timelineRef, {
         type: 'status_change',
         details: `Mentorship progress updated to ${newStatus}.`,
         createdAt: serverTimestamp()
       });
+
+      await batch.commit();
 
       createNotification(firestore, {
         recipientUid: mentorship.founderUid,
@@ -160,15 +143,26 @@ export default function MentorshipWorkspacePage() {
     };
 
     try {
-      await addDoc(collection(firestore, 'activeMentorships', mentorshipId as string, 'notes'), noteData);
-      
-      if (noteType === 'shared') {
-        await addDoc(collection(firestore, 'activeMentorships', mentorshipId as string, 'timeline'), {
-          type: 'note',
-          details: `${isMentor ? 'Mentor' : 'Founder'} added a shared note.`,
+      const batch = writeBatch(firestore);
+      const mentorshipRef = doc(firestore, "activeMentorships", mentorshipId as string);
+      const noteRef = doc(collection(mentorshipRef, "notes"));
+
+      batch.set(noteRef, noteData);
+
+      if (noteType === "shared") {
+        const timelineRef = doc(collection(mentorshipRef, "timeline"));
+        batch.set(timelineRef, {
+          type: "note",
+          details: isMentor
+            ? "Mentor added a shared note."
+            : "Founder added a shared note.",
           createdAt: serverTimestamp()
         });
+      }
 
+      await batch.commit();
+
+      if (noteType === "shared") {
         const targetUid = isMentor ? mentorship.founderUid : mentorship.mentorUid;
         createNotification(firestore, {
           recipientUid: targetUid,

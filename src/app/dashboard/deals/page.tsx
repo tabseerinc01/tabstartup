@@ -8,14 +8,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { 
-  Briefcase, 
-  Loader2, 
-  Rocket, 
-  ShieldCheck, 
-  ArrowRight, 
-  TrendingUp, 
-  Clock, 
+import {
+  Briefcase,
+  Users,
+  Loader2,
+  Rocket,
+  ShieldCheck,
+  ArrowRight,
+  TrendingUp,
+  Clock,
   Calendar,
   MessageSquare,
   ChevronRight
@@ -31,76 +32,88 @@ export default function MyDealsPage() {
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [startups, setStartups] = useState<Record<string, any>>({});
 
-  const dealsQuery = useMemoFirebase(() => {
+  const founderQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
-    
-    // Multi-role logic for querying deals
-    const role = user.displayName?.includes('Investor') ? 'investorUid' : 'founderUid';
-    // We try both as we don't strictly know role from token alone without extra lookup
-    // Simple approach for MVP: query based on both possibilities if role isn't clear,
-    // or better: since we have profile data, we use that.
     return query(
       collection(firestore, 'dealRooms'),
-      where(pathnameIncludes('investor') ? 'investorUid' : 'founderUid', '==', user.uid)
+      where('founderUid', '==', user.uid)
     );
   }, [firestore, user?.uid]);
 
-  // Robust path-agnostic role detection
-  const dealsQueryFinal = useMemoFirebase(() => {
+  const investorQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
       collection(firestore, 'dealRooms'),
-      where('participants', 'array-contains', user.uid)
+      where('investorUid', '==', user.uid)
     );
   }, [firestore, user?.uid]);
-  
-  // Correction: DealRoom has explicit founderUid and investorUid. 
-  // We'll use two separate queries and merge, or use one if we can identify role.
-  const [isInvestor, setIsInvestor] = useState(false);
-  useEffect(() => {
-    async function checkRole() {
-      if(!user?.uid || !firestore) return;
-      const snap = await getDoc(doc(firestore, 'users', user.uid));
-      if(snap.exists()) {
-        const roles = snap.data().roles || [snap.data().role];
-        setIsInvestor(roles.includes('investor'));
-      }
+
+  const { data: founderDeals, isLoading: founderLoading } =
+    useCollection(founderQuery);
+
+  const { data: investorDeals, isLoading: investorLoading } =
+    useCollection(investorQuery);
+
+  const deals = useMemo(() => {
+    const unique = new Map<string, any>();
+
+    for (const deal of [...(founderDeals || []), ...(investorDeals || [])]) {
+      unique.set(deal.id, deal);
     }
-    checkRole();
-  }, [user?.uid, firestore]);
 
-  const q = useMemoFirebase(() => {
-    if (!firestore || !user?.uid) return null;
-    return query(
-      collection(firestore, 'dealRooms'),
-      where(isInvestor ? 'investorUid' : 'founderUid', '==', user.uid)
-    );
-  }, [firestore, user?.uid, isInvestor]);
+    return Array.from(unique.values());
+  }, [founderDeals, investorDeals]);
 
-  const { data: deals, isLoading } = useCollection(q);
+  const isLoading = founderLoading || investorLoading;
 
   useEffect(() => {
+    let cancelled = false;
+
     async function hydrate() {
-      if (!firestore || !deals) return;
-      const newProfiles = { ...profiles };
-      const newStartups = { ...startups };
-      
-      for (const d of deals) {
-        const otherUid = isInvestor ? d.founderUid : d.investorUid;
-        if (!newProfiles[otherUid]) {
-          const snap = await getDoc(doc(firestore, 'users', otherUid));
-          if (snap.exists()) newProfiles[otherUid] = snap.data();
+      if (!firestore || !user?.uid || deals.length === 0) return;
+
+      const newProfiles: Record<string, any> = {};
+      const newStartups: Record<string, any> = {};
+
+      try {
+        for (const d of deals) {
+          if (cancelled) return;
+
+          const otherUid =
+            d.founderUid === user.uid
+              ? d.investorUid
+              : d.founderUid;
+
+          if (otherUid && !newProfiles[otherUid]) {
+            const snap = await getDoc(doc(firestore, 'publicProfiles', otherUid));
+            if (snap.exists()) newProfiles[otherUid] = snap.data();
+          }
+
+          if (d.startupId && !newStartups[d.startupId]) {
+            const snap = await getDoc(
+              doc(firestore, 'startups', d.startupId)
+            );
+            if (snap.exists()) newStartups[d.startupId] = snap.data();
+          }
         }
-        if (!newStartups[d.startupId]) {
-          const snap = await getDoc(doc(firestore, 'startups', d.startupId));
-          if (snap.exists()) newStartups[d.startupId] = snap.data();
+
+        if (!cancelled) {
+          setProfiles(newProfiles);
+          setStartups(newStartups);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Deal Room profile loading failed:', error);
         }
       }
-      setProfiles(newProfiles);
-      setStartups(newStartups);
     }
+
     hydrate();
-  }, [deals, firestore, isInvestor]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deals, firestore, user?.uid]);
 
   if (isLoading) {
     return (
@@ -126,7 +139,7 @@ export default function MyDealsPage() {
       <div className="grid gap-6">
         {deals && deals.length > 0 ? (
           deals.map((deal) => {
-            const otherUid = isInvestor ? deal.founderUid : deal.investorUid;
+            const otherUid = deal.founderUid === user?.uid ? deal.investorUid : deal.founderUid;
             const otherUser = profiles[otherUid];
             const startup = startups[deal.startupId];
             const name = otherUser?.fullName || "Ecosystem Partner";
@@ -154,7 +167,7 @@ export default function MyDealsPage() {
                             </div>
                             <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-tight">
                                <span className="flex items-center gap-1.5">
-                                 {isInvestor ? <Users className="h-3.5 w-3.5 text-primary" /> : <ShieldCheck className="h-3.5 w-3.5 text-amber-500" />}
+                                 {deal.investorUid === user?.uid ? <Users className="h-3.5 w-3.5 text-primary" /> : <ShieldCheck className="h-3.5 w-3.5 text-amber-500" />}
                                  {name}
                                </span>
                                <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" /> Updated {formatDistanceToNow(lastUpdate, { addSuffix: true })}</span>

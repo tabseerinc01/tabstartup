@@ -38,7 +38,8 @@ import {
   Send,
   Trash2,
   ExternalLink,
-  Target
+  Target,
+  X
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
@@ -79,8 +87,8 @@ export default function DealRoomPage() {
     async function loadProfiles() {
       if (!firestore || !deal) return;
       const [fSnap, iSnap, sSnap] = await Promise.all([
-        getDoc(doc(firestore, 'users', deal.founderUid)),
-        getDoc(doc(firestore, 'users', deal.investorUid)),
+        getDoc(doc(firestore, 'publicProfiles', deal.founderUid)),
+        getDoc(doc(firestore, 'publicProfiles', deal.investorUid)),
         getDoc(doc(firestore, 'startups', deal.startupId))
       ]);
       setProfiles({
@@ -206,7 +214,7 @@ export default function DealRoomPage() {
                 <DealDocuments dealId={deal.id} user={user} isFounder={isFounder} />
              </TabsContent>
              <TabsContent value="checklist">
-                <DealChecklist dealId={deal.id} user={user} isFounder={isFounder} isInvestor={isInvestor} />
+                <DealChecklist dealId={deal.id} deal={deal} user={user} isFounder={isFounder} isInvestor={isInvestor} />
              </TabsContent>
              <TabsContent value="timeline">
                 <DealTimeline dealId={deal.id} />
@@ -322,6 +330,7 @@ function DealNotes({ dealId, user }: any) {
 
 function DealDocuments({ dealId, user, isFounder }: any) {
   const firestore = useFirestore();
+  const { toast } = useToast();
   const [isAdding, setIsAdding] = useState(false);
   const [docData, setDocData] = useState({ name: '', url: '', type: 'Pitch Deck' });
 
@@ -404,7 +413,7 @@ function DealDocuments({ dealId, user, isFounder }: any) {
   );
 }
 
-function DealChecklist({ dealId, user, isFounder, isInvestor }: any) {
+function DealChecklist({ dealId, deal, user, isFounder, isInvestor }: any) {
   const firestore = useFirestore();
   const [newItem, setNewItem] = useState('');
 

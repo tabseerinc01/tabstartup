@@ -64,7 +64,7 @@ export default function ChatPage() {
         // Find other participant
         const otherUid = chatData.participants.find((id: string) => id !== user.uid);
         if (otherUid) {
-          const otherSnap = await getDoc(doc(firestore, 'users', otherUid));
+          const otherSnap = await getDoc(doc(firestore, 'publicProfiles', otherUid));
           if (otherSnap.exists()) {
             setOtherUser(otherSnap.data());
           }

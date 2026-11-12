@@ -24,7 +24,7 @@ export default function CofoundersPage() {
       setIsLoading(true);
       try {
         const q = query(
-          collection(firestore, 'users'),
+          collection(firestore, 'publicProfiles'),
           where('lookingForCofounder', '==', true),
           limit(50)
         );
