@@ -89,7 +89,7 @@ export function CommunitySpotlight() {
           <div className="relative h-48 w-full bg-muted">
             <Image 
               src={founder.imageUrl || `https://picsum.photos/seed/${founder.id}/400/400`} 
-              alt={founder.fullName || founder.name} 
+              alt={founder.fullName || founder.name || 'Founder profile'}
               fill 
               className="object-cover group-hover:scale-105 transition-transform duration-500" 
             />

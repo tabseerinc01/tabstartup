@@ -36,6 +36,7 @@ export default function ProfilePage() {
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -90,22 +91,33 @@ export default function ProfilePage() {
     async function loadProfile() {
       if (!firestore || !user?.uid) return;
       setIsLoading(true);
+      setProfileLoaded(false);
       try {
-        const [snap, startupSnap] = await Promise.all([
-          getDoc(doc(firestore, 'users', user.uid)),
-          getDoc(doc(firestore, 'startups', user.uid))
-        ]);
+        const snap = await getDoc(
+          doc(firestore, 'users', user.uid)
+        );
 
-        if (startupSnap.exists()) {
-          setStartup(startupSnap.data());
+        setStartup(null);
+
+        try {
+          const startupSnap = await getDoc(
+            doc(firestore, 'startups', user.uid)
+          );
+
+          if (startupSnap.exists()) {
+            setStartup(startupSnap.data());
+          }
+        } catch (startupError) {
+          console.warn('Startup data unavailable:', startupError);
         }
 
         if (snap.exists()) {
           const profile = snap.data();
+          setProfileLoaded(true);
           const roles = Array.isArray(profile.roles) ? profile.roles : (profile.role ? [profile.role] : ['founder']);
           setUserRoles(roles);
           setFormData({
-            fullName: profile.fullName || '',
+            fullName: profile.fullName?.trim() || user.displayName?.trim() || '',
             imageUrl: profile.imageUrl || '',
             coverImageUrl: profile.coverImageUrl || '',
             headline: profile.headline || '',
@@ -186,6 +198,15 @@ export default function ProfilePage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !firestore || isUploading) return;
+
+    if (!profileLoaded) {
+      toast({
+        title: "Profile not loaded",
+        description: "Please refresh the page before saving.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     setIsSaving(true);
     try {

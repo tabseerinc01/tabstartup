@@ -179,7 +179,7 @@ function MentorCard({ mentor }: { mentor: any }) {
     <Card className="flex flex-col h-full hover:shadow-2xl transition-all border-none bg-background shadow-xl rounded-[2.5rem] overflow-hidden group">
       <CardHeader className="pb-4 pt-8 px-8 flex flex-row gap-4 items-start">
         <Avatar className="h-20 w-20 border-4 border-primary/5 rounded-2xl shadow-lg">
-          <AvatarImage src={avatarUrl} alt={name} className="object-cover" />
+          <AvatarImage src={avatarUrl} alt={name || 'Mentor profile'} className="object-cover" />
           <AvatarFallback className="rounded-2xl text-2xl font-bold">{initials}</AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">

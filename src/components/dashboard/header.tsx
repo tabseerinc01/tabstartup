@@ -257,7 +257,7 @@ export function DashboardHeader() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={avatarUrl} alt={displayName} />
+                <AvatarImage src={avatarUrl} alt={displayName || 'User profile'} />
                 <AvatarFallback>{displayName.charAt(0)}</AvatarFallback>
               </Avatar>
             </Button>

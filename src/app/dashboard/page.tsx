@@ -195,16 +195,35 @@ export default function DashboardOverviewPage() {
     async function loadIdentity() {
       if (!firestore || !user?.uid) return;
       try {
-        const [profileSnap, startupSnap] = await Promise.all([
-          getDoc(doc(firestore, 'users', user.uid)),
-          getDoc(doc(firestore, 'startups', user.uid))
-        ]);
+        const profileSnap = await getDoc(
+          doc(firestore, 'users', user.uid)
+        );
 
-        if (profileSnap.exists()) setProfile(profileSnap.data());
-        if (startupSnap.exists()) {
-          setStartup(startupSnap.data());
-          const viewsSnap = await getCountFromServer(collection(firestore, 'startups', user.uid, 'views'));
-          setStartupViews(viewsSnap.data().count);
+        setProfile(profileSnap.exists() ? profileSnap.data() : null);
+        setStartup(null);
+        setStartupViews(0);
+
+        try {
+          const startupResults = await getDocs(query(
+            collection(firestore, 'startups'),
+            where('ownerUid', '==', user.uid)
+          ));
+
+          const startupSnap = startupResults.docs.find(
+            d => d.id === user.uid
+          );
+
+          if (startupSnap) {
+            setStartup(startupSnap.data());
+
+            const viewsSnap = await getCountFromServer(
+              collection(firestore, 'startups', startupSnap.id, 'views')
+            );
+
+            setStartupViews(viewsSnap.data().count);
+          }
+        } catch (startupError) {
+          console.warn('Dashboard startup loading:', startupError);
         }
       } catch (e) {
         console.error("Identity Loading Error:", e);

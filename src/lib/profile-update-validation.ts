@@ -58,7 +58,13 @@ export function validateProfileUpdate(
   }
 
   for (const [key, value] of Object.entries(data)) {
-    if (stringFields.has(key)) {
+    if (key === 'fullName') {
+      const fullName = cleanString(value, 120).trim();
+
+      if (!fullName) return invalid();
+
+      result[key] = fullName;
+    } else if (stringFields.has(key)) {
       result[key] = cleanString(value);
     } else if (arrayFields.has(key)) {
       if (!Array.isArray(value) || value.length > 100) {

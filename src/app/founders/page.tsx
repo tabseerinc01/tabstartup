@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { mockFounders } from '@/lib/mock-data';
-import { MapPin, Search, Filter, Loader2, Linkedin, MessageSquare, Calendar, CheckCircle2, Rocket, Briefcase, HandCoins, Info, LayoutGrid, Users, ArrowRight, ExternalLink } from 'lucide-react';
+import { MapPin, Search, Filter, Loader2, Linkedin, MessageSquare, Calendar, CheckCircle2, Rocket, Briefcase, HandCoins, Info, LayoutGrid, Users, ExternalLink } from 'lucide-react';
 import Image from 'next/image';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { PublicHeader } from '@/components/public/header';
@@ -202,7 +202,7 @@ export default function FoundersPage() {
 }
 
 function FounderCard({ founder }: { founder: any }) {
-  const displayName = founder.fullName || founder.name;
+  const displayName = founder.fullName || founder.name || 'Founder';
   const imageId = founder.uid || founder.id || 'user';
   const startup = founder.startup;
   const startupIdentifier = startup?.slug || founder.uid || founder.id;
@@ -242,7 +242,16 @@ function FounderCard({ founder }: { founder: any }) {
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-1">
+        <Button className="w-full rounded-xl gap-2" asChild>
+          <Link href={`/founders/${founder.uid || founder.id}`}>
+            <Users className="h-4 w-4" />
+            View Founder Profile
+          </Link>
+        </Button>
         <div className="border-t pt-4 space-y-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Startup Information
+          </p>
           {startup ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -266,6 +275,12 @@ function FounderCard({ founder }: { founder: any }) {
                   <span>{startup.fundingNeed || "TBD"}</span>
                 </div>
               </div>
+              <Button variant="outline" className="w-full rounded-xl gap-2" asChild>
+                <Link href={`/startups/${startupIdentifier}`}>
+                  <Rocket className="h-4 w-4" />
+                  View Startup Details
+                </Link>
+              </Button>
             </div>
           ) : (
             <div className="py-6 flex flex-col items-center justify-center text-muted-foreground bg-muted/20 rounded-xl border border-dashed">
@@ -278,7 +293,7 @@ function FounderCard({ founder }: { founder: any }) {
         <div className="mt-auto pt-4 flex gap-2">
           <Dialog>
             <DialogTrigger asChild>
-              <Button className="flex-1 rounded-xl">View Details</Button>
+              <Button variant="ghost" className="flex-1 rounded-xl text-muted-foreground">Quick View</Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[700px] max-h-[90vh] p-0 overflow-hidden rounded-3xl">
               <DialogHeader className="sr-only">
@@ -353,13 +368,7 @@ function FounderCard({ founder }: { founder: any }) {
                 <Linkedin className="h-4 w-4" />
               </a>
             </Button>
-          ) : (
-            <Button variant="outline" size="icon" className="rounded-xl" asChild title="View Public Profile">
-              <Link href={`/founders/${founder.uid || founder.id}`}>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          )}
+          ) : null}
         </div>
       </CardContent>
     </Card>

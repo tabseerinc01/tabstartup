@@ -69,18 +69,28 @@ export default function FounderPublicProfilePage() {
       if (!firestore || !uid) return;
       setIsLoading(true);
       try {
-        // Load Profile & Startup
-        const [founderSnap, startupSnap] = await Promise.all([
-          getDoc(doc(firestore, 'publicProfiles', uid as string)),
-          getDoc(doc(firestore, 'startups', uid as string))
-        ]);
+        // Load public founder independently of optional startup
+        setFounder(null);
+        setStartup(null);
 
-        if (founderSnap.exists()) {
-          setFounder({ id: founderSnap.id, ...founderSnap.data() });
-        }
+        const founderSnap = await getDoc(
+          doc(firestore, 'publicProfiles', uid as string)
+        );
 
-        if (startupSnap.exists()) {
-          setStartup({ id: startupSnap.id, ...startupSnap.data() });
+        if (!founderSnap.exists()) return;
+
+        setFounder({ id: founderSnap.id, ...founderSnap.data() });
+
+        try {
+          const startupSnap = await getDoc(
+            doc(firestore, 'startups', uid as string)
+          );
+
+          if (startupSnap.exists()) {
+            setStartup({ id: startupSnap.id, ...startupSnap.data() });
+          }
+        } catch (startupError) {
+          console.warn('Startup data unavailable:', startupError);
         }
 
         // Load Contextual Auth Data
@@ -108,7 +118,7 @@ export default function FounderPublicProfilePage() {
         console.error("Error loading founder profile:", error);
         if (error.code === 'permission-denied') {
           errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: `users/${uid}`,
+            path: `publicProfiles/${uid}`,
             operation: 'get',
           }));
         }
@@ -235,7 +245,7 @@ export default function FounderPublicProfilePage() {
   }
 
   const isOwnProfile = user?.uid === uid;
-  const displayName = founder.fullName || founder.name;
+  const displayName = founder.fullName || founder.name || 'Founder';
   
   const strength = calculateProfileStrength(founder, startup);
   const trustScore = calculateTrustScore(founder, startup);

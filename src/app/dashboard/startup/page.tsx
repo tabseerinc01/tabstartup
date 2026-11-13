@@ -30,7 +30,7 @@ import {
   Zap
 } from 'lucide-react';
 import { useUser, useFirestore } from '@/firebase';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, getDocs, collection, query, where, serverTimestamp } from 'firebase/firestore';
 import { slugify } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -68,16 +68,30 @@ export default function StartupPage() {
       if (!firestore || !user?.uid) return;
       setIsLoading(true);
       try {
-        const [snap, userSnap] = await Promise.all([
-          getDoc(doc(firestore, 'startups', user.uid)),
-          getDoc(doc(firestore, 'users', user.uid))
-        ]);
+        setStartupData(null);
+        setIsEditing(false);
+        setUserPlan('basic');
+
+        const userSnap = await getDoc(
+          doc(firestore, 'users', user.uid)
+        );
+
+        const startupQuery = await getDocs(
+          query(
+            collection(firestore, 'startups'),
+            where('ownerUid', '==', user.uid)
+          )
+        );
+
+        const snap = startupQuery.docs.find(
+          item => item.id === user.uid
+        );
 
         if (userSnap.exists()) {
           setUserPlan(userSnap.data().plan || 'basic');
         }
 
-        if (snap.exists()) {
+        if (snap) {
           const data = snap.data();
           setStartupData(data);
           setStartup({
@@ -103,6 +117,11 @@ export default function StartupPage() {
         }
       } catch (error) {
         console.error("Error loading startup:", error);
+        toast({
+          variant: "destructive",
+          title: "Unable to load venture",
+          description: "Please refresh the page and try again."
+        });
       } finally {
         setIsLoading(false);
       }
