@@ -5,6 +5,10 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from '@/firebase/admin';
 import { buildPublicProfile } from '@/lib/public-profile';
 import type { ValidatedSignup } from '@/lib/signup-validation';
+import {
+  ACCOUNT_IDENTITIES_COLLECTION,
+  ACCOUNT_IDENTITY_SCHEMA_VERSION,
+} from '@/lib/account-identity';
 
 function generateReferralCode(): string {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -25,6 +29,10 @@ export async function createSignupProfile(
 
   const { adminDb } = getFirebaseAdmin();
 
+  const identityRef = adminDb
+    .collection(ACCOUNT_IDENTITIES_COLLECTION)
+    .doc(uid);
+
   const userRef = adminDb.collection('users').doc(uid);
   const publicRef = adminDb.collection('publicProfiles').doc(uid);
   const referralRef = adminDb.collection('referrals').doc(`referral_${uid}`);
@@ -38,6 +46,7 @@ export async function createSignupProfile(
 
     try {
       return await adminDb.runTransaction(async transaction => {
+        const identitySnap = await transaction.get(identityRef);
         const userSnap = await transaction.get(userRef);
         const publicSnap = await transaction.get(publicRef);
         const codeSnap = await transaction.get(codeRef);
@@ -47,7 +56,11 @@ export async function createSignupProfile(
           throw new Error('PROFILE_ALREADY_EXISTS');
         }
 
-        if (publicSnap.exists || existingReferral.exists) {
+        if (
+          identitySnap.exists ||
+          publicSnap.exists ||
+          existingReferral.exists
+        ) {
           throw new Error('RECOVERY_VERIFICATION_REQUIRED');
         }
 
@@ -121,6 +134,15 @@ export async function createSignupProfile(
         };
 
         const projection = buildPublicProfile(uid, userData);
+
+        transaction.create(identityRef, {
+          uid,
+          email: input.email,
+          status: 'active',
+          schemaVersion: ACCOUNT_IDENTITY_SCHEMA_VERSION,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
 
         transaction.create(userRef, userData);
 
