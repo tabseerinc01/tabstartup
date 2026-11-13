@@ -1,10 +1,18 @@
 import 'server-only';
 
+import {
+  hasActiveStartupProfile,
+} from '@/lib/legacy-startup-profile';
+
 import { randomInt } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from '@/firebase/admin';
 import { buildPublicProfile } from '@/lib/public-profile';
 import type { ValidatedSignup } from '@/lib/signup-validation';
+
+import {
+  isGlobalAccountEligible,
+} from '@/services/account-suspension-guard.service';
 import {
   ACCOUNT_IDENTITIES_COLLECTION,
   ACCOUNT_IDENTITY_SCHEMA_VERSION,
@@ -84,6 +92,10 @@ export async function createSignupProfile(
             if (
               typeof ownerUid === 'string' &&
               ownerUid &&
+              ownerUid.length <= 128 &&
+              ownerUid.trim() === ownerUid &&
+              ownerUid !== '.' &&
+              ownerUid !== '..' &&
               !ownerUid.includes('/') &&
               ownerUid !== uid
             ) {
@@ -91,9 +103,23 @@ export async function createSignupProfile(
                 adminDb.collection('users').doc(ownerUid)
               );
 
+              const referrerIdentitySnap =
+                await transaction.get(
+                  adminDb
+                    .collection(ACCOUNT_IDENTITIES_COLLECTION)
+                    .doc(ownerUid)
+                );
+
               if (
                 referrerSnap.exists &&
-                referrerSnap.data()?.status !== 'suspended' &&
+                isGlobalAccountEligible(
+                  ownerUid,
+                  referrerIdentitySnap
+                ) &&
+                hasActiveStartupProfile(
+                  ownerUid,
+                  referrerSnap.data()
+                ) &&
                 referrerSnap.data()?.referralCode === input.referralCode
               ) {
                 referrerUid = ownerUid;

@@ -39,6 +39,18 @@ async function main() {
     await env.withSecurityRulesDisabled(async context => {
       const db = context.firestore();
 
+      for (const [uid, role] of [
+        [founderUid, 'founder'],
+        [investorUid, 'investor']
+      ]) {
+        await setDoc(doc(db, 'users', uid), {
+          uid,
+          role,
+          roles: [role],
+          status: 'active'
+        });
+      }
+
       await setDoc(doc(db, 'connections', connectionId), {
         initiatorUid: investorUid,
         recipientUid: founderUid,
@@ -229,6 +241,18 @@ async function main() {
     ));
 
     const unrelatedUid = 'test_unrelated_user_f2319';
+    await env.withSecurityRulesDisabled(async context => {
+      await setDoc(
+        doc(context.firestore(), 'users', unrelatedUid),
+        {
+          uid: unrelatedUid,
+          role: 'founder',
+          roles: ['founder'],
+          status: 'active'
+        }
+      );
+    });
+
     const unrelatedDb = env.authenticatedContext(unrelatedUid).firestore();
 
     await assertFails(getDoc(

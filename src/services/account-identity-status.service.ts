@@ -1,7 +1,12 @@
 import 'server-only';
 
+import {
+  resolveLegacyStartupStatus,
+} from '@/lib/legacy-startup-profile';
+
 import { FieldValue } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from '@/firebase/admin';
+import { buildPublicProfile } from '@/lib/public-profile';
 
 import {
   ACCOUNT_IDENTITIES_COLLECTION,
@@ -53,6 +58,10 @@ export async function setGlobalAccountStatus(
     .collection('users')
     .doc(uid);
 
+  const publicRef = adminDb
+    .collection('publicProfiles')
+    .doc(uid);
+
   return adminDb.runTransaction(async transaction => {
     const identitySnap = await transaction.get(identityRef);
     const startupSnap = await transaction.get(startupRef);
@@ -84,27 +93,55 @@ export async function setGlobalAccountStatus(
         ? 'suspended'
         : 'active';
 
-    if (previousStatus === status) {
-      return {
-        uid,
-        previousStatus,
+    const changed = previousStatus !== status;
+
+    if (changed) {
+      transaction.update(identityRef, {
         status,
-        effectiveStatus,
-        changed: false,
-      };
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     }
 
-    transaction.update(identityRef, {
-      status,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    const startup = startupSnap.data();
+
+    // Reconcile visibility even when the requested
+    // global status is already set.
+    if (
+      effectiveStatus === 'suspended' ||
+      !startupSnap.exists ||
+      !startup ||
+      resolveLegacyStartupStatus(
+        uid,
+        startup
+      ) !== 'active'
+    ) {
+      transaction.delete(publicRef);
+    } else {
+      const projection = buildPublicProfile(
+        uid,
+        startup
+      );
+
+      if (
+        Array.isArray(projection.roles) &&
+        projection.roles.length > 0
+      ) {
+        transaction.set(publicRef, {
+          ...projection,
+          createdAt: startup.createdAt ?? null,
+          isVerified: startup.isVerified === true,
+        });
+      } else {
+        transaction.delete(publicRef);
+      }
+    }
 
     return {
       uid,
       previousStatus,
       status,
       effectiveStatus,
-      changed: true,
+      changed,
     };
   });
 }

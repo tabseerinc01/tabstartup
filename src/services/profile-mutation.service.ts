@@ -1,7 +1,19 @@
 import 'server-only';
 
+import {
+  hasActiveStartupProfile,
+} from '@/lib/legacy-startup-profile';
+
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from '@/firebase/admin';
+
+import {
+  ACCOUNT_IDENTITIES_COLLECTION,
+} from '@/lib/account-identity';
+
+import {
+  assertGlobalAccountNotSuspended,
+} from '@/services/account-suspension-guard.service';
 import { buildPublicProfile } from '@/lib/public-profile';
 import { validateProfileUpdate } from '@/lib/profile-update-validation';
 
@@ -17,11 +29,23 @@ export async function updateOwnProfile(
 
   const { adminDb } = getFirebaseAdmin();
 
+  const identityRef = adminDb
+    .collection(ACCOUNT_IDENTITIES_COLLECTION)
+    .doc(uid);
+
   const userRef = adminDb.collection('users').doc(uid);
   const publicRef = adminDb.collection('publicProfiles').doc(uid);
 
   return adminDb.runTransaction(async transaction => {
+    const identitySnap =
+      await transaction.get(identityRef);
+
     const userSnap = await transaction.get(userRef);
+
+    assertGlobalAccountNotSuspended(
+      uid,
+      identitySnap
+    );
 
     if (!userSnap.exists) {
       throw new Error('USER_NOT_FOUND');
@@ -33,12 +57,55 @@ export async function updateOwnProfile(
       throw new Error('USER_SUSPENDED');
     }
 
+    if (
+      !hasActiveStartupProfile(
+        uid,
+        current
+      )
+    ) {
+      throw new Error('INVALID_STARTUP_PROFILE');
+    }
+
     const merged = {
       ...current,
       ...updates,
     };
 
     const projection = buildPublicProfile(uid, merged);
+
+    const profileComplete = [
+      merged.fullName,
+      merged.bio,
+      merged.location,
+    ].every(
+      value =>
+        typeof value === 'string' &&
+        value.trim().length > 0
+    ) && hasActiveStartupProfile(uid, merged);
+
+    const referralSnap = profileComplete
+      ? await transaction.get(
+          adminDb.collection('referrals')
+            .where('referredUid', '==', uid)
+            .limit(2)
+        )
+      : null;
+
+    if (
+      referralSnap &&
+      referralSnap.size === 1
+    ) {
+      const referral = referralSnap.docs[0];
+
+      if (
+        referral.data().referredUid === uid &&
+        referral.data().referredProfileCompleted === false
+      ) {
+        transaction.update(referral.ref, {
+          referredProfileCompleted: true,
+        });
+      }
+    }
 
     transaction.update(userRef, {
       ...updates,
@@ -84,11 +151,23 @@ export async function activateOwnProfessionalRole(
 
   const { adminDb } = getFirebaseAdmin();
 
+  const identityRef = adminDb
+    .collection(ACCOUNT_IDENTITIES_COLLECTION)
+    .doc(uid);
+
   const userRef = adminDb.collection('users').doc(uid);
   const publicRef = adminDb.collection('publicProfiles').doc(uid);
 
   return adminDb.runTransaction(async transaction => {
+    const identitySnap =
+      await transaction.get(identityRef);
+
     const userSnap = await transaction.get(userRef);
+
+    assertGlobalAccountNotSuspended(
+      uid,
+      identitySnap
+    );
 
     if (!userSnap.exists) {
       throw new Error('USER_NOT_FOUND');
@@ -98,6 +177,15 @@ export async function activateOwnProfessionalRole(
 
     if (current.status === 'suspended') {
       throw new Error('USER_SUSPENDED');
+    }
+
+    if (
+      !hasActiveStartupProfile(
+        uid,
+        current
+      )
+    ) {
+      throw new Error('INVALID_STARTUP_PROFILE');
     }
 
     const existingRoles = Array.isArray(current.roles)

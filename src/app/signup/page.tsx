@@ -17,6 +17,15 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
 
+import {
+  fetchAccountAccess,
+} from '@/lib/account-access-client';
+
+import {
+  sanitizeAccountReturnTo,
+  resolveAccountLoginDestination,
+} from '@/lib/safe-account-redirect';
+
 function SignupForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -26,7 +35,9 @@ function SignupForm() {
   const { user, isUserLoading } = useUser();
   
   const roleParam = searchParams.get('role');
-  const returnTo = searchParams.get('returnTo');
+  const returnTo = sanitizeAccountReturnTo(
+    searchParams.get('returnTo')
+  );
   const refCode = searchParams.get('ref')?.toUpperCase();
   
   const [email, setEmail] = useState('');
@@ -42,12 +53,19 @@ function SignupForm() {
     let cancelled = false;
     const verifyProfile = async () => {
       try {
-        const profile = await getDoc(doc(firestore, "users", user.uid));
-        if (cancelled || !profile.exists()) return;
-        const destination = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")
-          ? returnTo
-          : "/dashboard";
-        router.replace(destination);
+        const account = await fetchAccountAccess(user);
+
+        if (cancelled) return;
+
+        const destination =
+          resolveAccountLoginDestination(
+            account,
+            returnTo
+          );
+
+        router.replace(
+          destination || '/login'
+        );
       } catch (error) {
         console.error("Signup profile verification failed:", error);
       }
@@ -105,13 +123,21 @@ function SignupForm() {
         throw new Error('RECOVERY_VERIFICATION_REQUIRED');
       }
 
+      const account = await fetchAccountAccess(
+        credential.user
+      );
+
+      if (!account.portals.startup.allowed) {
+        throw new Error(
+          'RECOVERY_VERIFICATION_REQUIRED'
+        );
+      }
+
       const destination =
-        returnTo &&
-        returnTo.startsWith('/') &&
-        !returnTo.startsWith('//') &&
-        !returnTo.includes('\\')
-          ? returnTo
-          : '/dashboard';
+        resolveAccountLoginDestination(
+          account,
+          returnTo
+        ) || '/login';
 
       toast({
         title: 'Account created!',

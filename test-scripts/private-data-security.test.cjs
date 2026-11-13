@@ -40,6 +40,15 @@ const {
     await env.withSecurityRulesDisabled(async ctx => {
       const db = ctx.firestore();
 
+      for (const uid of ['owner', 'attacker']) {
+        await setDoc(doc(db, 'users', uid), {
+          uid,
+          role: 'founder',
+          roles: ['founder'],
+          status: 'active'
+        });
+      }
+
       await setDoc(doc(db, 'deals', 'deal1'), {
         ownerUid: 'owner',
         title: 'Private Deal'

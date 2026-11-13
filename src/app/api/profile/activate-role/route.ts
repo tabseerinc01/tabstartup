@@ -78,6 +78,8 @@ export async function POST(request: Request) {
       INVALID_ROLE: 400,
       USER_NOT_FOUND: 404,
       USER_SUSPENDED: 403,
+      INVALID_STARTUP_PROFILE: 403,
+      INVALID_ACCOUNT_IDENTITY: 403,
     };
 
     if (Object.prototype.hasOwnProperty.call(statuses, message)) {

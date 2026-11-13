@@ -1,5 +1,9 @@
 import 'server-only';
 
+import {
+  resolveLegacyStartupStatus,
+} from '@/lib/legacy-startup-profile';
+
 import { getFirebaseAdmin } from '@/firebase/admin';
 
 import {
@@ -94,7 +98,10 @@ export async function resolveAccountIdentity(
   if (startupSnap.exists) {
     const startup = startupSnap.data();
 
-    if (startup?.status === 'suspended') {
+    const legacyStatus =
+      resolveLegacyStartupStatus(uid, startup);
+
+    if (legacyStatus === 'suspended') {
       return {
         uid,
         status: 'suspended',
@@ -103,7 +110,7 @@ export async function resolveAccountIdentity(
       };
     }
 
-    if (startup?.status === 'active') {
+    if (legacyStatus === 'active') {
       return {
         uid,
         status: 'active',

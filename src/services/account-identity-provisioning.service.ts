@@ -1,5 +1,9 @@
 import 'server-only';
 
+import {
+  resolveLegacyStartupStatus,
+} from '@/lib/legacy-startup-profile';
+
 import { FieldValue } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from '@/firebase/admin';
 
@@ -68,18 +72,22 @@ export async function provisionLegacyAccountIdentity(
 
     const startup = startupSnap.data();
 
-    if (!startup || startup.uid !== uid) {
+    if (
+      !startup ||
+      (
+        startup.uid !== undefined &&
+        startup.uid !== uid
+      )
+    ) {
       throw new Error('INVALID_STARTUP_PROFILE');
     }
 
-    if (
-      startup.status !== 'active' &&
-      startup.status !== 'suspended'
-    ) {
+    const legacyStatus =
+      resolveLegacyStartupStatus(uid, startup);
+
+    if (!legacyStatus) {
       throw new Error('INVALID_LEGACY_ACCOUNT_STATUS');
     }
-
-    const legacyStatus: AccountStatus = startup.status;
 
     if (identitySnap.exists) {
       const identity = identitySnap.data();

@@ -9,8 +9,57 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Global identity validation.
+    // Legacy accounts may not have a global identity yet.
+
+    function hasValidGlobalAccount() {
+      let path = /databases/$(database)/documents/accountIdentities/$(request.auth.uid);
+
+      return !exists(path) || (
+        get(path).data.get('uid', '') == request.auth.uid
+        && get(path).data.get('schemaVersion', 0) == 1
+        && get(path).data.get('status', '') == 'active'
+      );
+    }
+
+    function hasActiveLegacyStatus() {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+
+      return !exists(path) || (
+        get(path).data.get('uid', request.auth.uid) == request.auth.uid
+        && get(path).data.get('status', 'active') == 'active'
+      );
+    }
+
+    function isAccountActive() {
+      return isSignedIn()
+        && hasValidGlobalAccount()
+        && hasActiveLegacyStatus();
+    }
+
+    function hasStartupProfile() {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+
+      return exists(path)
+        && (
+          get(path).data.get(
+            'roles',
+            [get(path).data.get('role', '')]
+          ) is list
+        )
+        && get(path).data.get(
+          'roles',
+          [get(path).data.get('role', '')]
+        ).hasAny(['founder', 'investor', 'mentor']);
+    }
+
+    function hasStartupAccess() {
+      return isAccountActive()
+        && hasStartupProfile();
+    }
+
     function isHardcodedAdmin() {
-      return isSignedIn() && (
+      return isAccountActive() && (
         request.auth.uid == 'T2JnkPYdsoZGO8krUqcP3T5bvg62' ||
         (request.auth.token.get('email_verified', false) == true && request.auth.token.get('email', '') == 'shahmubaruk05@gmail.com')
       );
@@ -18,7 +67,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isHardcodedAdmin() || (
-        isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+        isAccountActive() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') in ['admin', 'super_admin'] ||
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('roles', []).hasAny(['admin', 'super_admin'])
         )
@@ -26,12 +75,12 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return hasStartupAccess() && request.auth.uid == userId;
     }
 
     function isDealParticipant(dealId) {
       let deal = get(/databases/$(database)/documents/dealRooms/$(dealId)).data;
-      return isSignedIn() && (deal.founderUid == request.auth.uid || deal.investorUid == request.auth.uid);
+      return hasStartupAccess() && (deal.founderUid == request.auth.uid || deal.investorUid == request.auth.uid);
     }
 
     // --- Collection Rules ---
@@ -50,6 +99,13 @@ service cloud.firestore {
     // Global Account Identity.
     // Trusted server-side access only.
     match /accountIdentities/{userId} {
+      allow read, write: if false;
+    }
+
+    // Event Organizer profiles.
+    // Access is managed by trusted server-side APIs.
+
+    match /eventOrganizerProfiles/{userId} {
       allow read, write: if false;
     }
 
@@ -72,21 +128,21 @@ service cloud.firestore {
 
     match /dealRooms/{dealId} {
       allow get: if isHardcodedAdmin()
-        || (isSignedIn() && resource != null && (
+        || (hasStartupAccess() && resource != null && (
           resource.data.get('founderUid', '') == request.auth.uid
           || resource.data.get('investorUid', '') == request.auth.uid
         ))
-        || (isSignedIn()
+        || (hasStartupAccess()
           && !exists(/databases/$(database)/documents/dealRooms/$(dealId))
           && dealId.matches('^funding_' + request.auth.uid + '_[^/]+$'));
 
       allow list: if isHardcodedAdmin()
-        || (isSignedIn() && (
+        || (hasStartupAccess() && (
           resource.data.get('founderUid', '') == request.auth.uid
           || resource.data.get('investorUid', '') == request.auth.uid
         ));
 
-      allow create: if isSignedIn()
+      allow create: if hasStartupAccess()
         && request.resource.data.keys().hasOnly([
           'startupId', 'founderUid', 'investorUid',
           'connectionId', 'status', 'createdAt', 'updatedAt'
@@ -109,7 +165,7 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.recipientUid == request.auth.uid
         && get(/databases/$(database)/documents/connections/$(request.resource.data.connectionId)).data.initiatorUid == request.resource.data.investorUid;
       allow update: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && (
           resource.data.founderUid == request.auth.uid ||
           resource.data.investorUid == request.auth.uid
@@ -136,7 +192,7 @@ service cloud.firestore {
           && isDealParticipant(dealId);
 
         allow create: if (evtId != 'deal_init' && isDealParticipant(dealId)) || (
-          isSignedIn()
+          hasStartupAccess()
           && evtId == 'deal_init'
           && request.resource.data.keys().hasOnly([
             'type', 'details', 'createdAt'
@@ -158,12 +214,12 @@ service cloud.firestore {
 
     match /mentorshipRequests/{requestId} {
       allow get, list: if isHardcodedAdmin() ||
-        (isSignedIn() && (
+        (hasStartupAccess() && (
           resource.data.get('founderUid', '') == request.auth.uid ||
           resource.data.get('mentorUid', '') == request.auth.uid
         ));
 
-      allow create: if isSignedIn()
+      allow create: if hasStartupAccess()
         && request.resource.data.keys().hasAll([
           'mentorUid', 'founderUid', 'startupId',
           'subject', 'message', 'goals',
@@ -179,7 +235,7 @@ service cloud.firestore {
         && request.resource.data.mentorUid != request.auth.uid
         && request.resource.data.status == 'Pending';
 
-      allow update: if isSignedIn()
+      allow update: if hasStartupAccess()
         && resource.data.status == 'Pending'
         && request.resource.data.diff(resource.data)
           .affectedKeys().hasOnly(['status', 'updatedAt'])
@@ -207,8 +263,8 @@ service cloud.firestore {
     }
 
     match /activeMentorships/{mentorshipId} {
-      allow read: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('mentorUid', '') == request.auth.uid || resource.data.get('founderUid', '') == request.auth.uid));
-      allow create: if isSignedIn()
+      allow read: if isHardcodedAdmin() || (hasStartupAccess() && (resource.data.get('mentorUid', '') == request.auth.uid || resource.data.get('founderUid', '') == request.auth.uid));
+      allow create: if hasStartupAccess()
         && mentorshipId == "mentorship_" + request.resource.data.requestId
         && request.resource.data.mentorUid == request.auth.uid
         && request.resource.data.status == "Onboarding"
@@ -228,7 +284,7 @@ service cloud.firestore {
           /databases/$(database)/documents/mentorshipRequests/$(request.resource.data.requestId)
         ).data.startupId == request.resource.data.startupId;
       allow update: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && resource.data.mentorUid == request.auth.uid
         && request.resource.data.status in [
           "Onboarding", "Discovery", "Growth Planning",
@@ -239,18 +295,18 @@ service cloud.firestore {
       );
       
       match /notes/{noteId} {
-        allow read: if isHardcodedAdmin() || (isSignedIn() && (
+        allow read: if isHardcodedAdmin() || (hasStartupAccess() && (
           (resource.data.type == 'shared' && (get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.founderUid == request.auth.uid)) ||
           (resource.data.type == 'private' && get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid)
         ));
-        allow create: if isSignedIn() && (
+        allow create: if hasStartupAccess() && (
           (request.resource.data.type == 'shared' && (get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.founderUid == request.auth.uid)) ||
           (request.resource.data.type == 'private' && get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid)
         );
       }
       
       match /timeline/{itemId} {
-        allow create: if isSignedIn()
+        allow create: if hasStartupAccess()
           && itemId == "initial_start"
           && mentorshipId.matches("^mentorship_[^/]+$")
           && !exists(/databases/$(database)/documents/activeMentorships/$(mentorshipId))
@@ -267,8 +323,8 @@ service cloud.firestore {
           ).data.status == "Pending"
           && request.resource.data.type == "start"
           && request.resource.data.details == "Mentorship relationship established.";
-        allow read: if isSignedIn() && (get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.founderUid == request.auth.uid);
-        allow create: if isSignedIn()
+        allow read: if hasStartupAccess() && (get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.founderUid == request.auth.uid);
+        allow create: if hasStartupAccess()
           && itemId != "initial_start"
           && request.resource.data.keys().hasOnly(["type", "details", "createdAt"])
           && request.resource.data.keys().hasAll(["type", "details", "createdAt"])
@@ -305,8 +361,8 @@ service cloud.firestore {
     }
 
     match /mentorshipSessions/{sessionId} {
-      allow read: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('mentorUid', '') == request.auth.uid || resource.data.get('founderUid', '') == request.auth.uid));
-      allow create: if isSignedIn()
+      allow read: if isHardcodedAdmin() || (hasStartupAccess() && (resource.data.get('mentorUid', '') == request.auth.uid || resource.data.get('founderUid', '') == request.auth.uid));
+      allow create: if hasStartupAccess()
         && request.resource.data.keys().hasAll([
           "mentorshipId", "mentorUid", "founderUid", "startupId",
           "title", "agenda", "scheduledAt", "estimatedDuration",
@@ -326,7 +382,7 @@ service cloud.firestore {
         && request.resource.data.status == "Scheduled"
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
-      allow update: if isSignedIn()
+      allow update: if hasStartupAccess()
         && resource.data.mentorUid == request.auth.uid
         && resource.data.status == "Scheduled"
         && request.resource.data.status == "Completed"
@@ -341,11 +397,11 @@ service cloud.firestore {
         ])
         && request.resource.data.completedAt == request.time
         && request.resource.data.updatedAt == request.time;
-      allow delete: if isHardcodedAdmin() || (isSignedIn() && resource.data.mentorUid == request.auth.uid);
+      allow delete: if isHardcodedAdmin() || (hasStartupAccess() && resource.data.mentorUid == request.auth.uid);
 
       match /actionItems/{itemId} {
-        allow read: if isSignedIn() && (get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.founderUid == request.auth.uid);
-        allow create: if isSignedIn()
+        allow read: if hasStartupAccess() && (get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.founderUid == request.auth.uid);
+        allow create: if hasStartupAccess()
           && (
             get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.mentorUid == request.auth.uid ||
             get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.founderUid == request.auth.uid
@@ -358,7 +414,7 @@ service cloud.firestore {
           && request.resource.data.title.size() <= 500
           && request.resource.data.status == "Pending"
           && request.resource.data.createdAt == request.time;
-        allow update: if isSignedIn()
+        allow update: if hasStartupAccess()
           && (
             get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.mentorUid == request.auth.uid ||
             get(/databases/$(database)/documents/mentorshipSessions/$(sessionId)).data.founderUid == request.auth.uid
@@ -373,15 +429,15 @@ service cloud.firestore {
 
     match /savedStartups/{saveId} {
       allow read: if isHardcodedAdmin();
-      allow list: if isSignedIn() && resource.data.get('investorUid', '') == request.auth.uid;
-      allow get: if isSignedIn() && resource.data.get('investorUid', '') == request.auth.uid;
-      allow create: if isSignedIn() && request.resource.data.investorUid == request.auth.uid;
+      allow list: if hasStartupAccess() && resource.data.get('investorUid', '') == request.auth.uid;
+      allow get: if hasStartupAccess() && resource.data.get('investorUid', '') == request.auth.uid;
+      allow create: if hasStartupAccess() && request.resource.data.investorUid == request.auth.uid;
       allow update: if false;
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.investorUid == request.auth.uid);
+      allow delete: if isAdmin() || (hasStartupAccess() && resource.data.investorUid == request.auth.uid);
     }
 
     match /referralCodes/{code} {
-      allow get: if isSignedIn();
+      allow get: if hasStartupAccess();
       allow list: if false;
 
       allow create: if false;
@@ -391,43 +447,29 @@ service cloud.firestore {
 
     match /referrals/{referralId} {
       allow get: if isHardcodedAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && (
           resource.data.get('referrerUid', '') == request.auth.uid
           || resource.data.get('referredUid', '') == request.auth.uid
         )
       );
-      allow list: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('referrerUid', '') == request.auth.uid || resource.data.get('referredUid', '') == request.auth.uid));
+      allow list: if isHardcodedAdmin() || (hasStartupAccess() && (resource.data.get('referrerUid', '') == request.auth.uid || resource.data.get('referredUid', '') == request.auth.uid));
       allow create: if false;
 
-      allow update: if isAdmin() || (
-        isSignedIn()
-        && resource.data.referredUid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['referredProfileCompleted'])
-        && resource.data.referredProfileCompleted == false
-        && request.resource.data.referredProfileCompleted == true
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('fullName', '') is string
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('fullName', '').size() > 0
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('bio', '') is string
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('bio', '').size() > 0
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('location', '') is string
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('location', '').size() > 0
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('roles', []).size() > 0
-      );
+      allow update: if isAdmin();
     }
 
     match /venturePitches/{pitchId} {
       allow get: if isAdmin() || (
-        isSignedIn() && (
+        hasStartupAccess() && (
           resource.data.senderUid == request.auth.uid ||
           resource.data.recipientUid == request.auth.uid
         )
       );
-      allow list: if isHardcodedAdmin() || (isSignedIn() && (resource.data.get('senderUid', '') == request.auth.uid || resource.data.get('recipientUid', '') == request.auth.uid));
-      allow create: if isSignedIn() && request.resource.data.senderUid == request.auth.uid;
+      allow list: if isHardcodedAdmin() || (hasStartupAccess() && (resource.data.get('senderUid', '') == request.auth.uid || resource.data.get('recipientUid', '') == request.auth.uid));
+      allow create: if hasStartupAccess() && request.resource.data.senderUid == request.auth.uid;
       allow update: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && (
           resource.data.recipientUid == request.auth.uid ||
           resource.data.senderUid == request.auth.uid
@@ -439,39 +481,39 @@ service cloud.firestore {
     }
 
     match /contacts/{contactId} {
-      allow get: if isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid;
-      allow list: if isHardcodedAdmin() || (isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow get: if hasStartupAccess() && resource.data.get('ownerUid', '') == request.auth.uid;
+      allow list: if isHardcodedAdmin() || (hasStartupAccess() && resource.data.get('ownerUid', '') == request.auth.uid);
+      allow create: if hasStartupAccess() && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerUid == resource.data.ownerUid
       );
       allow delete: if isAdmin() || (
-        isSignedIn() && resource.data.ownerUid == request.auth.uid
+        hasStartupAccess() && resource.data.ownerUid == request.auth.uid
       );
     }
     
     match /deals/{dealId} {
-      allow get: if isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid;
-      allow list: if isHardcodedAdmin() || (isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow get: if hasStartupAccess() && resource.data.get('ownerUid', '') == request.auth.uid;
+      allow list: if isHardcodedAdmin() || (hasStartupAccess() && resource.data.get('ownerUid', '') == request.auth.uid);
+      allow create: if hasStartupAccess() && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerUid == resource.data.ownerUid
       );
       allow delete: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && resource.data.ownerUid == request.auth.uid
       );
       match /notes/{noteId} { allow read, write: if isAdmin() || (
-          isSignedIn()
+          hasStartupAccess()
           && exists(/databases/$(database)/documents/deals/$(dealId))
           && get(/databases/$(database)/documents/deals/$(dealId)).data.ownerUid == request.auth.uid
         ); }
       match /activities/{activityId} { allow read, write: if isAdmin() || (
-          isSignedIn()
+          hasStartupAccess()
           && exists(/databases/$(database)/documents/deals/$(dealId))
           && get(/databases/$(database)/documents/deals/$(dealId)).data.ownerUid == request.auth.uid
         ); }
@@ -479,26 +521,26 @@ service cloud.firestore {
 
     match /invoices/{invoiceId} {
       allow get: if true; 
-      allow list: if isHardcodedAdmin() || (isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
-      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
+      allow list: if isHardcodedAdmin() || (hasStartupAccess() && resource.data.get('ownerUid', '') == request.auth.uid);
+      allow create: if hasStartupAccess() && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isAdmin() || (hasStartupAccess() && resource.data.ownerUid == request.auth.uid);
     }
 
     match /tasks/{taskId} {
-      allow get: if isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid;
-      allow list: if isHardcodedAdmin() || (isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow get: if hasStartupAccess() && resource.data.get('ownerUid', '') == request.auth.uid;
+      allow list: if isHardcodedAdmin() || (hasStartupAccess() && resource.data.get('ownerUid', '') == request.auth.uid);
+      allow create: if hasStartupAccess() && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerUid == resource.data.ownerUid
       );
       allow delete: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && resource.data.ownerUid == request.auth.uid
       );
       match /activities/{activityId} { allow read, write: if isAdmin() || (
-          isSignedIn()
+          hasStartupAccess()
           && exists(/databases/$(database)/documents/tasks/$(taskId))
           && get(/databases/$(database)/documents/tasks/$(taskId)).data.ownerUid == request.auth.uid
         ); }
@@ -506,7 +548,7 @@ service cloud.firestore {
 
     match /connections/{connectionId} {
       allow get: if isHardcodedAdmin()
-        || (isSignedIn() && (
+        || (hasStartupAccess() && (
           (connectionId.matches('^investor_' + request.auth.uid + '_.*$')
             && (!exists(/databases/$(database)/documents/connections/$(connectionId))
               || resource.data.get('initiatorUid', '') == request.auth.uid))
@@ -515,12 +557,12 @@ service cloud.firestore {
         ));
 
       allow list: if isHardcodedAdmin()
-        || (isSignedIn() && (
+        || (hasStartupAccess() && (
           resource.data.get('initiatorUid', '') == request.auth.uid
           || resource.data.get('recipientUid', '') == request.auth.uid
         ));
 
-      allow create: if isSignedIn()
+      allow create: if hasStartupAccess()
         && request.resource.data.get('initiatorUid', '') == request.auth.uid
         && request.resource.data.get('recipientUid', '') is string
         && request.resource.data.get('recipientUid', '') != ''
@@ -546,7 +588,7 @@ service cloud.firestore {
         && request.resource.data.get('updatedAt', null) == request.time;
 
       allow update: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && resource.data.get('recipientUid', '') == request.auth.uid
         && resource.data.get('status', '') == 'pending'
         && request.resource.data.get('status', '') in ['accepted', 'rejected']
@@ -586,7 +628,7 @@ service cloud.firestore {
       );
 
       allow delete: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && resource.data.get('initiatorUid', '') == request.auth.uid
         && resource.data.get('status', '') == 'pending'
       );
@@ -596,19 +638,19 @@ service cloud.firestore {
       allow get: if isAdmin()
         || resource.data.get('status', '') == 'active'
         || (
-          isSignedIn()
+          hasStartupAccess()
           && resource.data.ownerUid == request.auth.uid
         );
-      allow list: if isHardcodedAdmin() || resource.data.get('status', '') == 'active' || (isSignedIn() && resource.data.get('ownerUid', '') == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow list: if isHardcodedAdmin() || resource.data.get('status', '') == 'active' || (hasStartupAccess() && resource.data.get('ownerUid', '') == request.auth.uid);
+      allow create: if hasStartupAccess() && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerUid == resource.data.ownerUid
       );
       match /views/{viewId} {
         allow read: if isAdmin() || (
-          isSignedIn()
+          hasStartupAccess()
           && get(/databases/$(database)/documents/startups/$(startupId)).data.ownerUid == request.auth.uid
         );
         allow write: if false;
@@ -616,7 +658,7 @@ service cloud.firestore {
 
       match /interests/{interestId} {
         allow read: if isAdmin() || (
-          isSignedIn()
+          hasStartupAccess()
           && (
             request.auth.uid == interestId
             || get(/databases/$(database)/documents/startups/$(startupId)).data.ownerUid == request.auth.uid
@@ -628,29 +670,41 @@ service cloud.firestore {
     
     match /communityPosts/{postId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
-      allow update, delete: if isSignedIn() && (resource.data.authorUid == request.auth.uid || isAdmin());
+      allow create: if hasStartupAccess() && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if isAdmin() || (
+        hasStartupAccess()
+        && resource.data.authorUid == request.auth.uid
+      );
     }
 
     match /communityPostLikes/{likeId} {
       allow read: if true;
-      allow create: if isSignedIn()
+      allow create: if hasStartupAccess()
         && request.resource.data.userUid == request.auth.uid;
       allow update: if false;
-      allow delete: if isSignedIn()
+      allow delete: if hasStartupAccess()
         && resource.data.userUid == request.auth.uid;
     }
 
     match /communityComments/{commentId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.authorUid == request.auth.uid;
-      allow update, delete: if isSignedIn() && (resource.data.authorUid == request.auth.uid || isAdmin());
+      allow create: if hasStartupAccess() && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if isAdmin() || (
+        hasStartupAccess()
+        && resource.data.authorUid == request.auth.uid
+      );
     }
 
     match /notifications/{notificationId} {
-      allow list: if isSignedIn() && resource.data.get('recipientUid', '') == request.auth.uid;
-      allow get: if isAdmin() || (isSignedIn() && resource.data.recipientUid == request.auth.uid);
-      allow create: if isSignedIn()
+      allow list: if hasStartupAccess() && resource.data.get('recipientUid', '') == request.auth.uid;
+      allow get: if isAdmin() || (hasStartupAccess() && resource.data.recipientUid == request.auth.uid);
+      allow create: if (
+          hasStartupAccess() ||
+          (
+            isAdmin() &&
+            request.resource.data.type == "moderation"
+          )
+        )
         && request.resource.data.keys().hasAll([
           "recipientUid", "actorUid", "type", "title",
           "message", "read", "createdAt"
@@ -675,24 +729,24 @@ service cloud.firestore {
         && request.resource.data.read == false
         && request.resource.data.createdAt == request.time;
       allow update: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && resource.data.recipientUid == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read"])
         && request.resource.data.read is bool
       );
       allow delete: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && resource.data.recipientUid == request.auth.uid
       );
     }
 
     match /chats/{chatId} {
       allow read: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && request.auth.uid in resource.data.get('participants', [])
       );
 
-      allow create: if isSignedIn()
+      allow create: if hasStartupAccess()
         && request.resource.data.keys().hasOnly([
           'participants', 'createdAt', 'updatedAt', 'lastMessage'
         ])
@@ -710,7 +764,7 @@ service cloud.firestore {
         && request.resource.data.lastMessage == '';
 
       allow update: if isAdmin() || (
-        isSignedIn()
+        hasStartupAccess()
         && request.auth.uid in resource.data.get('participants', [])
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['lastMessage', 'updatedAt'])
@@ -720,13 +774,13 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         allow read: if isAdmin() || (
-          isSignedIn()
+          hasStartupAccess()
           && request.auth.uid in get(
             /databases/$(database)/documents/chats/$(chatId)
           ).data.get('participants', [])
         );
 
-        allow create: if isSignedIn()
+        allow create: if hasStartupAccess()
           && request.auth.uid in get(
             /databases/$(database)/documents/chats/$(chatId)
           ).data.get('participants', [])

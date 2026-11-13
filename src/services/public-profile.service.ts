@@ -1,7 +1,19 @@
 import 'server-only';
 
+import {
+  resolveLegacyStartupStatus,
+} from '@/lib/legacy-startup-profile';
+
 import { getFirebaseAdmin } from '@/firebase/admin';
 import { buildPublicProfile } from '@/lib/public-profile';
+
+import {
+  ACCOUNT_IDENTITIES_COLLECTION,
+} from '@/lib/account-identity';
+
+import {
+  isGlobalAccountEligible,
+} from '@/services/account-suspension-guard.service';
 
 export async function syncPublicProfile(uid: string) {
   if (!uid || uid.includes('/')) {
@@ -10,10 +22,17 @@ export async function syncPublicProfile(uid: string) {
 
   const { adminDb } = getFirebaseAdmin();
 
+  const identityRef = adminDb
+    .collection(ACCOUNT_IDENTITIES_COLLECTION)
+    .doc(uid);
+
   const userRef = adminDb.collection('users').doc(uid);
   const publicRef = adminDb.collection('publicProfiles').doc(uid);
 
   return adminDb.runTransaction(async transaction => {
+    const identitySnap =
+      await transaction.get(identityRef);
+
     const userSnap = await transaction.get(userRef);
 
     if (!userSnap.exists) {
@@ -23,7 +42,13 @@ export async function syncPublicProfile(uid: string) {
 
     const data = userSnap.data()!;
 
-    if (data.status === 'suspended') {
+    if (
+      resolveLegacyStartupStatus(
+        uid,
+        data
+      ) !== 'active' ||
+      !isGlobalAccountEligible(uid, identitySnap)
+    ) {
       transaction.delete(publicRef);
       return { status: 'removed' as const };
     }
@@ -62,10 +87,17 @@ export async function setUserSuspension(
 
   const { adminDb } = getFirebaseAdmin();
 
+  const identityRef = adminDb
+    .collection(ACCOUNT_IDENTITIES_COLLECTION)
+    .doc(uid);
+
   const userRef = adminDb.collection('users').doc(uid);
   const publicRef = adminDb.collection('publicProfiles').doc(uid);
 
   return adminDb.runTransaction(async transaction => {
+    const identitySnap =
+      await transaction.get(identityRef);
+
     const snapshot = await transaction.get(userRef);
 
     if (!snapshot.exists) {
@@ -80,7 +112,14 @@ export async function setUserSuspension(
       updatedAt: new Date(),
     });
 
-    if (suspended) {
+    if (
+      suspended ||
+      resolveLegacyStartupStatus(
+        uid,
+        { ...data, status }
+      ) !== 'active' ||
+      !isGlobalAccountEligible(uid, identitySnap)
+    ) {
       transaction.delete(publicRef);
     } else {
       const projection = buildPublicProfile(uid, data);
@@ -120,10 +159,17 @@ export async function setUserProfessionalRole(
 
   const { adminDb } = getFirebaseAdmin();
 
+  const identityRef = adminDb
+    .collection(ACCOUNT_IDENTITIES_COLLECTION)
+    .doc(uid);
+
   const userRef = adminDb.collection('users').doc(uid);
   const publicRef = adminDb.collection('publicProfiles').doc(uid);
 
   return adminDb.runTransaction(async transaction => {
+    const identitySnap =
+      await transaction.get(identityRef);
+
     const snapshot = await transaction.get(userRef);
 
     if (!snapshot.exists) {
@@ -179,7 +225,13 @@ export async function setUserProfessionalRole(
 
     transaction.update(userRef, updates);
 
-    if (data.status === 'suspended') {
+    if (
+      resolveLegacyStartupStatus(
+        uid,
+        data
+      ) !== 'active' ||
+      !isGlobalAccountEligible(uid, identitySnap)
+    ) {
       transaction.delete(publicRef);
     } else {
       transaction.set(publicRef, {

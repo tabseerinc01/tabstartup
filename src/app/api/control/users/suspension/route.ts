@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getFirebaseAdmin } from '@/firebase/admin';
+
+import {
+  resolveAccountAuthorization,
+} from '@/services/account-authorization.service';
 import { setUserSuspension } from '@/services/public-profile.service';
 
 export const runtime = 'nodejs';
@@ -16,7 +20,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { adminAuth, adminDb } = getFirebaseAdmin();
+    const { adminAuth } = getFirebaseAdmin();
 
     let decoded;
 
@@ -32,29 +36,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const adminSnap = await adminDb
-      .collection('users')
-      .doc(decoded.uid)
-      .get();
+    const account = await resolveAccountAuthorization(
+      decoded.uid,
+      {
+        email: decoded.email,
+        emailVerified: decoded.email_verified === true,
+      }
+    );
 
-    const profile = adminSnap.data();
-
-    const roles = Array.isArray(profile?.roles)
-      ? profile.roles
-      : [];
-
-    const isAdmin =
-      decoded.uid === 'T2JnkPYdsoZGO8krUqcP3T5bvg62' ||
-      (
-        decoded.email_verified === true &&
-        decoded.email === 'shahmubaruk05@gmail.com'
-      ) ||
-      ['admin', 'super_admin'].includes(profile?.role) ||
-      roles.some(role =>
-        ['admin', 'super_admin'].includes(role)
-      );
-
-    if (!isAdmin || profile?.status === 'suspended') {
+    if (!account.isAdmin) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }

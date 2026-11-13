@@ -40,6 +40,30 @@ const {
       const db = ctx.firestore();
 
       const fixtures = {
+        'users/founder': {
+          uid: 'founder',
+          role: 'founder',
+          roles: ['founder'],
+          status: 'active'
+        },
+        'users/investor': {
+          uid: 'investor',
+          role: 'investor',
+          roles: ['investor'],
+          status: 'active'
+        },
+        'users/attacker': {
+          uid: 'attacker',
+          role: 'founder',
+          roles: ['founder'],
+          status: 'active'
+        },
+        'users/hiddenOwner': {
+          uid: 'hiddenOwner',
+          role: 'founder',
+          roles: ['founder'],
+          status: 'active'
+        },
         'venturePitches/pitch1': {
           senderUid: 'founder',
           recipientUid: 'investor',

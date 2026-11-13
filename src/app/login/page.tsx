@@ -10,7 +10,17 @@ import { Label } from '@/components/ui/label';
 import { Logo } from '@/components/logo';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth, useUser } from '@/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import {
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
+
+import { usePortalAccess } from '@/hooks/use-portal-access';
+
+import {
+  sanitizeAccountReturnTo,
+  resolveAccountLoginDestination,
+} from '@/lib/safe-account-redirect';
 import { Loader2 } from 'lucide-react';
 
 function LoginFormContent() {
@@ -24,15 +34,37 @@ function LoginFormContent() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const returnTo = searchParams.get('returnTo');
+  const returnTo = sanitizeAccountReturnTo(
+    searchParams.get('returnTo')
+  );
+
+  const access = usePortalAccess(
+    user,
+    isUserLoading,
+    'startup'
+  );
+
+  const destination = access.account
+    ? resolveAccountLoginDestination(
+        access.account,
+        returnTo
+      )
+    : null;
 
   useEffect(() => {
-    if (user && !isUserLoading) {
-      // Decode returnTo to handle special characters correctly
-      const redirectUrl = returnTo ? decodeURIComponent(returnTo) : '/dashboard';
-      router.push(redirectUrl);
+    if (
+      user &&
+      !isUserLoading &&
+      destination
+    ) {
+      router.replace(destination);
     }
-  }, [user, isUserLoading, router, returnTo]);
+  }, [
+    user,
+    isUserLoading,
+    router,
+    destination,
+  ]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,11 +99,99 @@ function LoginFormContent() {
       });
   };
 
-  if (isUserLoading) {
+  if (
+    isUserLoading ||
+    (
+      user &&
+      (
+        access.status === 'loading' ||
+        destination
+      )
+    )
+  ) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  if (user) {
+    const account = access.account;
+    const suspended =
+      account?.status === 'suspended';
+
+    const eventOrganizerAvailable =
+      account?.portals.event_organizer.allowed === true;
+
+    const startupAvailable =
+      account?.portals.startup.allowed === true;
+
+    return (
+      <Card className="w-full max-w-md rounded-2xl">
+        <CardHeader>
+          <CardTitle>
+            {suspended
+              ? 'Account Suspended'
+              : access.status === 'error'
+                ? 'Account Access Unavailable'
+                : eventOrganizerAvailable
+                  ? 'Choose Your Portal'
+                  : 'Account Access Required'}
+          </CardTitle>
+
+          <CardDescription>
+            {suspended
+              ? 'Please contact support regarding your account.'
+              : access.status === 'error'
+                ? 'Your account access could not be verified.'
+                : eventOrganizerAvailable
+                  ? 'Select an available portal to continue.'
+                  : 'Your account requires profile setup or recovery. Please contact support.'}
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="flex flex-col gap-3">
+          {startupAvailable && (
+            <Button
+              onClick={() => router.replace('/dashboard')}
+            >
+              Startup Dashboard
+            </Button>
+          )}
+
+          {eventOrganizerAvailable && (
+            <Button variant="outline" disabled>
+              Event Organizer Dashboard — Coming Soon
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            onClick={access.retry}
+          >
+            Retry Access
+          </Button>
+
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              try {
+                await signOut(auth);
+                setIsSubmitting(false);
+              } catch {
+                toast({
+                  variant: 'destructive',
+                  title: 'Sign out failed',
+                  description: 'Please try again.',
+                });
+              }
+            }}
+          >
+            Sign Out
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -117,10 +237,7 @@ function LoginFormContent() {
           <p className="text-sm text-muted-foreground w-full text-center">
             Don't have an account? <Link href={`/signup${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`} className="text-primary font-bold hover:underline">Sign up</Link>
           </p>
-          <div className="h-px w-full bg-slate-100 my-2" />
-          <Button variant="ghost" asChild size="sm" className="w-full rounded-xl text-slate-400">
-            <Link href="/dashboard">Preview Dashboard (Demo)</Link>
-          </Button>
+
         </CardFooter>
       </Card>
     </div>

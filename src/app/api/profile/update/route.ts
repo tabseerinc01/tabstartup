@@ -73,7 +73,11 @@ export async function POST(request: Request) {
       );
     }
 
-    if (message === 'USER_SUSPENDED') {
+    if (
+      message === 'USER_SUSPENDED' ||
+      message === 'INVALID_STARTUP_PROFILE' ||
+      message === 'INVALID_ACCOUNT_IDENTITY'
+    ) {
       return NextResponse.json(
         { error: message },
         { status: 403 }
