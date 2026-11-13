@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { Logo } from '@/components/logo';
 
 export function AdminSidebar() {
   const pathname = usePathname();
@@ -44,6 +45,9 @@ export function AdminSidebar() {
   return (
     <aside className="hidden md:flex flex-col w-64 border-r bg-slate-950 text-slate-100 h-screen sticky top-0">
       <div className="p-6 border-b border-slate-800">
+        <div className="bg-white rounded-xl px-3 py-2 mb-4">
+          <Logo />
+        </div>
         <div className="flex items-center gap-2 mb-2">
            <div className="p-1.5 bg-destructive rounded-lg">
              <ShieldAlert className="h-5 w-5 text-white" />
