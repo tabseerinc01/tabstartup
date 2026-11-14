@@ -15,7 +15,8 @@ import {
   CreditCard,
   Gift,
   BarChart3,
-  History
+  History,
+  CalendarDays
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ export function AdminSidebar() {
     { href: '/control', label: 'Admin Overview', icon: LayoutDashboard, exact: true },
     { href: '/control/users', label: 'Manage Users', icon: Users },
     { href: '/control/startups', label: 'Startups', icon: Rocket },
+    { href: '/control/events', label: 'Events', icon: CalendarDays },
     { href: '/control/subscriptions', label: 'Subscriptions', icon: CreditCard },
     { href: '/control/referrals', label: 'Referral Mgmt', icon: Gift },
     { href: '/control/analytics', label: 'Platform Analytics', icon: BarChart3 },
