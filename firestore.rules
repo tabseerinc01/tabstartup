@@ -109,6 +109,165 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+
+    // =====================================================
+    // TABSTARTUP EVENT MANAGEMENT — RELEASE A
+    // =====================================================
+    //
+    // Canonical event records are server-only.
+    // Public visitors read allowlisted projections.
+    //
+    // Firebase Admin SDK bypasses these rules.
+    // Server authorization must be enforced separately.
+
+    function isDiscoverablePublicEvent(data) {
+      return data.schemaVersion == 1
+        && data.visibility == 'public'
+        && data.status in [
+          'published',
+          'ongoing',
+          'completed'
+        ];
+    }
+
+    // Public event projections.
+    //
+    // Collection queries must include constraints
+    // satisfying the visibility, schema and status rules.
+
+    match /publicEvents/{eventId} {
+      allow get: if
+        isDiscoverablePublicEvent(resource.data)
+        && resource.data.eventId == eventId;
+
+      allow list: if
+        isDiscoverablePublicEvent(resource.data);
+
+      allow create, update, delete: if false;
+    }
+
+    // Public ticket projections.
+    //
+    // A ticket may only be read while its parent
+    // event has a discoverable public projection.
+
+    function hasDiscoverablePublicEvent(eventId) {
+      return eventId is string
+        && eventId.size() > 0
+        && eventId.size() <= 128
+        && exists(
+          /databases/$(database)/documents/publicEvents/$(eventId)
+        )
+        && isDiscoverablePublicEvent(
+          get(
+            /databases/$(database)/documents/publicEvents/$(eventId)
+          ).data
+        )
+        && get(
+          /databases/$(database)/documents/publicEvents/$(eventId)
+        ).data.eventId == eventId;
+    }
+
+    match /publicEventTicketTypes/{ticketProjectionId} {
+      allow get, list: if
+        resource.data.schemaVersion == 1
+        && hasDiscoverablePublicEvent(
+          resource.data.eventId
+        );
+
+      allow create, update, delete: if false;
+    }
+
+    // =====================================================
+    // PRIVATE EVENT BUSINESS COLLECTIONS
+    // =====================================================
+
+    match /events/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /eventSlugs/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /eventPrivateDetails/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /eventTicketTypes/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /eventTicketInventory/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /eventRegistrations/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /eventOrders/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /eventReservations/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /eventTickets/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /eventCheckIns/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /eventAuditLogs/{document=**} {
+      allow read, write: if false;
+    }
+
+    // =====================================================
+    // SHARED PLATFORM PAYMENT COLLECTIONS
+    // =====================================================
+    //
+    // Applies to Event Ticketing, Subscriptions,
+    // Premium Services and future paid products.
+    //
+    // No direct client access, including Admin clients.
+    // Financial mutations require trusted server services.
+
+    match /paymentOrders/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /payments/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /paymentManualSubmissions/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /paymentTransactionClaims/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /paymentWebhookEvents/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /paymentRefunds/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /paymentAuditLogs/{document=**} {
+      allow read, write: if false;
+    }
+
+    // =====================================================
+    // END EVENT AND PAYMENT SECURITY RULES
+    // =====================================================
+
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();

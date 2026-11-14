@@ -13,6 +13,25 @@ import type { Timestamp } from 'firebase-admin/firestore';
 
 export const PAYMENT_SCHEMA_VERSION = 1 as const;
 
+/**
+ * Shared financial collections.
+ *
+ * All paid TabStartup products use this
+ * financial namespace.
+ *
+ * Product-specific orders remain separate
+ * from authoritative payment records.
+ */
+export const PAYMENT_COLLECTIONS = {
+  orders: 'paymentOrders',
+  payments: 'payments',
+  manualSubmissions: 'paymentManualSubmissions',
+  transactionClaims: 'paymentTransactionClaims',
+  webhookEvents: 'paymentWebhookEvents',
+  refunds: 'paymentRefunds',
+  auditLogs: 'paymentAuditLogs',
+} as const;
+
 export const SUPPORTED_PAYMENT_CURRENCIES = [
   'USD',
   'BDT',

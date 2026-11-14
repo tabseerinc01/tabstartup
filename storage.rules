@@ -18,6 +18,99 @@ service firebase.storage {
     }
 
     // অন্য সব পাথের জন্য ডিফল্ট ডিনাই
+
+    // =====================================================
+    // TABSTARTUP EVENT ASSETS - RELEASE A
+    // =====================================================
+    //
+    // All asset mutations are server-only.
+    // Firebase Admin SDK bypasses Storage Rules.
+    //
+    // Private assets must never use publicly
+    // accessible download-token URLs.
+
+    function isValidEventAssetId(value) {
+      return value.size() > 0
+        && value.size() <= 128
+        && value.matches('^[A-Za-z0-9_-]+$');
+    }
+
+    function isValidEventAssetCategory(category) {
+      return category in [
+        'banners',
+        'speakers',
+        'sponsors'
+      ];
+    }
+
+    function isValidPublicEventAssetName(fileName) {
+      return fileName.size() <= 128
+        && fileName.matches(
+          '^[A-Za-z0-9_-]+[.](jpg|png|webp)$'
+        );
+    }
+
+    function isEventAssetMimeConsistent(fileName) {
+      return (
+        fileName.matches('^[A-Za-z0-9_-]+[.]jpg$')
+        && resource.contentType == 'image/jpeg'
+      ) || (
+        fileName.matches('^[A-Za-z0-9_-]+[.]png$')
+        && resource.contentType == 'image/png'
+      ) || (
+        fileName.matches('^[A-Za-z0-9_-]+[.]webp$')
+        && resource.contentType == 'image/webp'
+      );
+    }
+
+    function isValidPublicEventAsset(category) {
+      return resource.size > 0
+        && resource.contentType in [
+          'image/jpeg',
+          'image/png',
+          'image/webp'
+        ]
+        && (
+          (
+            category == 'banners'
+            && resource.size <= 5 * 1024 * 1024
+          )
+          ||
+          (
+            category in ['speakers', 'sponsors']
+            && resource.size <= 2 * 1024 * 1024
+          )
+        );
+    }
+
+    // Draft and private event assets.
+    // No direct client access.
+
+    match /event-assets/private/{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Public event assets.
+    // Individual image reads only.
+    // No listing or client-side mutations.
+
+    match /event-assets/public/{eventId}/{category}/{fileName} {
+      allow get: if
+        isValidEventAssetId(eventId)
+        && isValidEventAssetCategory(category)
+        && isValidPublicEventAssetName(fileName)
+        && isEventAssetMimeConsistent(fileName)
+        && isValidPublicEventAsset(category);
+
+      allow list: if false;
+
+      allow create, update, delete: if false;
+    }
+
+    // =====================================================
+    // END EVENT ASSET RULES
+    // =====================================================
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

@@ -21,8 +21,19 @@ export const EVENT_SCHEMA_VERSION = 1 as const;
 export const PLATFORM_EVENT_ORGANIZER_ID =
   'tabstartup' as const;
 
+/**
+ * Event-specific business collections.
+ *
+ * Financial records use PAYMENT_COLLECTIONS
+ * from the shared payment architecture.
+ *
+ * Public collections contain allowlisted
+ * projections only, never canonical records.
+ */
 export const EVENT_COLLECTIONS = {
   events: 'events',
+  publicEvents: 'publicEvents',
+  publicTicketTypes: 'publicEventTicketTypes',
   slugs: 'eventSlugs',
   privateDetails: 'eventPrivateDetails',
   ticketTypes: 'eventTicketTypes',
@@ -30,11 +41,8 @@ export const EVENT_COLLECTIONS = {
   registrations: 'eventRegistrations',
   orders: 'eventOrders',
   reservations: 'eventReservations',
-  payments: 'eventPayments',
-  paymentWebhookEvents: 'eventPaymentWebhookEvents',
   tickets: 'eventTickets',
   checkIns: 'eventCheckIns',
-  refunds: 'eventRefunds',
   auditLogs: 'eventAuditLogs',
 } as const;
 
