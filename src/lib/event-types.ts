@@ -39,6 +39,7 @@ export const EVENT_COLLECTIONS = {
   ticketTypes: 'eventTicketTypes',
   inventory: 'eventTicketInventory',
   registrations: 'eventRegistrations',
+  registrationRequests: 'eventRegistrationRequests',
   orders: 'eventOrders',
   reservations: 'eventReservations',
   tickets: 'eventTickets',
@@ -362,12 +363,32 @@ export type EventOrderPayment =
       totalAmountMinor: number;
     } & ActivePaymentMethod);
 
+export interface EventTermsAcceptance {
+  acceptedAt: Timestamp;
+  termsHash: string;
+  refundPolicyHash: string;
+}
+
 export interface EventOrderBase {
   orderId: string;
   eventId: string;
 
   purchaserUid: string | null;
   purchaserEmail: string;
+
+  /**
+   * Required for newly persisted registration orders.
+   * Optional in the shared base for foundation compatibility.
+   */
+  paymentOrderId?: string | null;
+
+  /**
+   * Private guest ownership proof.
+   * Never expose in API responses.
+   */
+  guestSessionHash?: string | null;
+  registrationRequestId?: string;
+  termsAcceptance?: EventTermsAcceptance;
 
   items: EventOrderItem[];
 
@@ -391,6 +412,47 @@ export type EventOrder =
   EventOrderBase &
   EventOrderPayment &
   EventOwnership;
+
+/**
+ * New registration orders must persist their
+ * financial linkage and accepted terms.
+ */
+export type PersistedEventOrder =
+  EventOrder & {
+    registrationRequestId: string;
+    guestSessionHash: string | null;
+    termsAcceptance: EventTermsAcceptance;
+  } & (
+    | {
+        paymentRequired: false;
+        paymentOrderId: null;
+      }
+    | {
+        paymentRequired: true;
+        paymentOrderId: string;
+      }
+  );
+
+/**
+ * Server-only request identity record.
+ * Never return this document directly to clients.
+ */
+export interface EventRegistrationRequest {
+  requestId: string;
+
+  eventId: string;
+  orderId: string;
+
+  purchaserUid: string | null;
+
+  requestHash: string;
+
+  registrationIds: string[];
+
+  schemaVersion: typeof EVENT_SCHEMA_VERSION;
+
+  createdAt: Timestamp;
+}
 
 export type EventReservationStatus =
   | 'active'
@@ -477,6 +539,10 @@ export type EventAuditAction =
   | 'event_approved'
   | 'event_rejected'
   | 'event_published'
+  | 'event_registration_opened'
+  | 'event_registration_paused'
+  | 'event_registration_resumed'
+  | 'event_registration_closed'
   | 'event_unpublished'
   | 'event_cancelled'
   | 'event_archived'

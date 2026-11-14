@@ -1,6 +1,14 @@
 import 'server-only';
 
 import {
+  isEventRegistrationEnabled,
+} from '@/lib/event-registration-access';
+
+import {
+  isValidInventoryCounters,
+} from '@/lib/event-validation';
+
+import {
   Timestamp,
   type Transaction,
 } from 'firebase-admin/firestore';
@@ -62,6 +70,9 @@ export type EventManagementErrorCode =
   | 'EVENT_DATA_INVALID'
   | 'EVENT_PRIVATE_DETAILS_MISSING'
   | 'EVENT_STATUS_CONFLICT'
+  | 'INVALID_REGISTRATION_STATUS'
+  | 'REGISTRATION_CONTROL_DISABLED'
+  | 'REGISTRATION_WINDOW_UNAVAILABLE'
   | 'EVENT_ACCOUNT_CHANGED'
   | 'EVENT_PUBLICATION_NOT_READY'
   | 'EVENT_TICKET_DATA_INVALID'
@@ -1211,5 +1222,377 @@ export async function publishOfficialEvent(
     tx.create(auditRef, audit);
 
     return published;
+  });
+}
+
+
+/**
+ * Manage registration for a published official event.
+ *
+ * Canonical status, public event, public tickets and
+ * audit log are updated in one transaction.
+ *
+ * Existing orders, payments, registrations and
+ * inventory counters are never modified here.
+ */
+export async function updateOfficialEventRegistration(
+  idToken: string,
+  eventId: string,
+  input: unknown,
+  expectedUpdatedAtMs: number
+): Promise<EventRecord> {
+  validateEventId(eventId);
+
+  const context = await requireEventAdmin(
+    idToken,
+    'event:manage_tickets'
+  );
+
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input)
+  ) {
+    throw new EventManagementError(
+      'INVALID_REGISTRATION_STATUS'
+    );
+  }
+
+  const body =
+    input as Record<string, unknown>;
+
+  const target = body.registrationStatus;
+
+  if (
+    Object.keys(body).length !== 1 ||
+    (
+      target !== 'open' &&
+      target !== 'paused' &&
+      target !== 'closed'
+    )
+  ) {
+    throw new EventManagementError(
+      'INVALID_REGISTRATION_STATUS'
+    );
+  }
+
+  const { adminDb } = getFirebaseAdmin();
+
+  const eventRef = adminDb
+    .collection(EVENT_COLLECTIONS.events)
+    .doc(eventId);
+
+  const publicRef = adminDb
+    .collection(EVENT_COLLECTIONS.publicEvents)
+    .doc(eventId);
+
+  const auditRef = adminDb
+    .collection(EVENT_COLLECTIONS.auditLogs)
+    .doc();
+
+  const publicTicketCollection = adminDb
+    .collection(EVENT_COLLECTIONS.publicTicketTypes);
+
+  return adminDb.runTransaction(async tx => {
+    await assertCurrentEventAdmin(
+      tx,
+      context,
+      idToken
+    );
+
+    const [
+      eventSnapshot,
+      publicSnapshot,
+    ] = await tx.getAll(
+      eventRef,
+      publicRef
+    );
+
+    if (!eventSnapshot.exists) {
+      throw new EventManagementError(
+        'EVENT_NOT_FOUND'
+      );
+    }
+
+    const current =
+      eventSnapshot.data() as EventRecord;
+
+    assertManagedEvent(
+      context,
+      eventId,
+      current,
+      'event:manage_tickets'
+    );
+
+    assertExpectedEventVersion(
+      current,
+      expectedUpdatedAtMs
+    );
+
+    if (
+      current.status !== 'published' &&
+      current.status !== 'ongoing'
+    ) {
+      throw new EventManagementError(
+        'EVENT_STATUS_CONFLICT'
+      );
+    }
+
+    if (current.visibility !== 'public') {
+      throw new EventManagementError(
+        'EVENT_VISIBILITY_NOT_SUPPORTED'
+      );
+    }
+
+    if (
+      !publicSnapshot.exists ||
+      publicSnapshot.data()?.eventId !== eventId ||
+      publicSnapshot.data()?.slug !== current.slug
+    ) {
+      throw new EventManagementError(
+        'EVENT_DATA_INVALID'
+      );
+    }
+
+    const previous =
+      current.registrationStatus;
+
+    const allowed =
+      (
+        previous === 'not_open' &&
+        (
+          target === 'open' ||
+          target === 'closed'
+        )
+      ) ||
+      (
+        previous === 'open' &&
+        (
+          target === 'paused' ||
+          target === 'closed'
+        )
+      ) ||
+      (
+        previous === 'paused' &&
+        (
+          target === 'open' ||
+          target === 'closed'
+        )
+      );
+
+    if (!allowed) {
+      throw new EventManagementError(
+        'EVENT_STATUS_CONFLICT'
+      );
+    }
+
+    const nowMs = Date.now();
+
+    if (target === 'open') {
+      if (!isEventRegistrationEnabled()) {
+        throw new EventManagementError(
+          'REGISTRATION_CONTROL_DISABLED'
+        );
+      }
+
+      const eventEnd =
+        current.endsAt?.toMillis();
+
+      const registrationStart =
+        current.registrationOpensAt?.toMillis()
+          ?? null;
+
+      const registrationEnd =
+        current.registrationClosesAt?.toMillis()
+          ?? null;
+
+      if (
+        !Number.isFinite(eventEnd) ||
+        eventEnd <= nowMs ||
+        (
+          registrationStart !== null &&
+          (
+            !Number.isFinite(registrationStart) ||
+            registrationStart >= eventEnd
+          )
+        ) ||
+        (
+          registrationEnd !== null &&
+          (
+            !Number.isFinite(registrationEnd) ||
+            registrationEnd <= nowMs ||
+            registrationEnd > eventEnd
+          )
+        ) ||
+        (
+          registrationStart !== null &&
+          registrationEnd !== null &&
+          registrationStart >= registrationEnd
+        )
+      ) {
+        throw new EventManagementError(
+          'REGISTRATION_WINDOW_UNAVAILABLE'
+        );
+      }
+    }
+
+    const configurations =
+      await loadTicketConfigurations(
+        tx,
+        eventId
+      );
+
+    if (configurations.length === 0) {
+      throw new EventManagementError(
+        'EVENT_TICKET_DATA_INVALID'
+      );
+    }
+
+    assertTicketSchedules(
+      current,
+      configurations
+    );
+
+    for (const { inventory } of configurations) {
+      if (
+        !isValidInventoryCounters(inventory)
+      ) {
+        throw new EventManagementError(
+          'EVENT_TICKET_DATA_INVALID'
+        );
+      }
+    }
+
+    if (
+      target === 'open' &&
+      !configurations.some(
+        item => item.ticketType.status === 'active'
+      )
+    ) {
+      throw new EventManagementError(
+        'EVENT_PUBLICATION_NOT_READY'
+      );
+    }
+
+    const existingPublicTickets = await tx.get(
+      publicTicketCollection
+        .where('eventId', '==', eventId)
+        .limit(51)
+    );
+
+    if (existingPublicTickets.size > 50) {
+      throw new EventManagementError(
+        'EVENT_TICKET_DATA_INVALID'
+      );
+    }
+
+    const updated: EventRecord = {
+      ...current,
+      registrationStatus: target,
+      updatedByUid: context.uid,
+      updatedAt: nextEventRevision(current),
+    };
+
+    const publicEvent =
+      buildPublicEventProjection(
+        updated,
+        nowMs
+      );
+
+    if (!publicEvent) {
+      throw new EventManagementError(
+        'EVENT_DATA_INVALID'
+      );
+    }
+
+    const publicTickets = configurations
+      .map(item =>
+        buildPublicTicketProjection(
+          updated,
+          item.ticketType,
+          item.inventory,
+          nowMs
+        )
+      )
+      .filter(
+        (item): item is NonNullable<typeof item> =>
+          item !== null
+      );
+
+    const existingById = new Map(
+      existingPublicTickets.docs.map(doc => [
+        doc.id,
+        doc,
+      ])
+    );
+
+    // Fail closed if projections are inconsistent.
+    // Never overwrite another event's ticket document.
+
+    if (
+      publicTickets.length === 0 ||
+      publicTickets.length !==
+        existingPublicTickets.size
+    ) {
+      throw new EventManagementError(
+        'EVENT_TICKET_DATA_INVALID'
+      );
+    }
+
+    for (const ticket of publicTickets) {
+      const existing =
+        existingById.get(ticket.ticketTypeId);
+
+      if (
+        !existing ||
+        existing.data().eventId !== eventId ||
+        existing.data().ticketTypeId !==
+          ticket.ticketTypeId
+      ) {
+        throw new EventManagementError(
+          'EVENT_TICKET_DATA_INVALID'
+        );
+      }
+    }
+
+    const action: EventAuditLog['action'] =
+      target === 'closed'
+        ? 'event_registration_closed'
+        : target === 'paused'
+          ? 'event_registration_paused'
+          : previous === 'paused'
+            ? 'event_registration_resumed'
+            : 'event_registration_opened';
+
+    const audit: EventAuditLog = {
+      auditId: auditRef.id,
+      eventId,
+      action,
+      actorType: 'admin',
+      actorUid: context.uid,
+      resourceType: 'event',
+      resourceId: eventId,
+      reason: previous + ' -> ' + target,
+      createdAt: updated.updatedAt,
+    };
+
+    // All transaction reads are complete.
+
+    tx.set(eventRef, updated);
+
+    tx.set(publicRef, publicEvent);
+
+    for (const ticket of publicTickets) {
+      tx.set(
+        publicTicketCollection.doc(
+          ticket.ticketTypeId
+        ),
+        ticket
+      );
+    }
+
+    tx.create(auditRef, audit);
+
+    return updated;
   });
 }

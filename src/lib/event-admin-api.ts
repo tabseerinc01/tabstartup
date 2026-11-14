@@ -238,6 +238,7 @@ export function eventApiFailure(
       case 'EVENT_NOT_FOUND':
         return failure(404, error.code);
 
+      case 'INVALID_REGISTRATION_STATUS':
       case 'INVALID_EVENT_ID':
       case 'EVENT_TICKET_DATA_INVALID':
       case 'EVENT_VISIBILITY_NOT_SUPPORTED':
@@ -248,6 +249,8 @@ export function eventApiFailure(
         return failure(403, error.code);
 
       case 'EVENT_SLUG_ALREADY_EXISTS':
+      case 'REGISTRATION_CONTROL_DISABLED':
+      case 'REGISTRATION_WINDOW_UNAVAILABLE':
       case 'EVENT_STATUS_CONFLICT':
       case 'EVENT_PUBLICATION_NOT_READY':
         return failure(409, error.code);

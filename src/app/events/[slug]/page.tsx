@@ -1,3 +1,7 @@
+import {
+  isEventRegistrationEnabled,
+} from '@/lib/event-registration-access';
+
 import type { Metadata } from 'next';
 
 import { cache } from 'react';
@@ -195,10 +199,13 @@ function TicketCard({
   const isFree =
     ticket.pricingType === 'free';
 
-  // Registration is intentionally disabled
-  // until the registration and payment
-  // engine is implemented and verified.
-  const registrationEnabled = false;
+  const registrationEnabled =
+    isEventRegistrationEnabled() &&
+    event.registrationStatus === 'open';
+
+  const canRegister =
+    registrationEnabled &&
+    ticket.availability === 'available';
 
   const availability =
     ticket.availability === 'available' &&
@@ -303,16 +310,38 @@ function TicketCard({
       </div>
 
       <div className="mt-auto">
-        <Button
-          disabled
-          className="w-full"
-        >
-          <Ticket className="mr-2 h-4 w-4" />
+        {canRegister ? (
+          <Button
+            asChild
+            className="w-full"
+          >
+            <Link
+              href={
+                '/events/' +
+                encodeURIComponent(event.slug) +
+                '/register?ticket=' +
+                encodeURIComponent(ticket.ticketTypeId)
+              }
+            >
+              <Ticket className="mr-2 h-4 w-4" />
 
-          {ticketAvailabilityLabel(
-            availability
-          )}
-        </Button>
+              {isFree
+                ? 'Register for free'
+                : 'Register now'}
+            </Link>
+          </Button>
+        ) : (
+          <Button
+            disabled
+            className="w-full"
+          >
+            <Ticket className="mr-2 h-4 w-4" />
+
+            {ticketAvailabilityLabel(
+              availability
+            )}
+          </Button>
+        )}
       </div>
     </article>
   );
@@ -331,10 +360,9 @@ export default async function EventDetailsPage({
 
   const { event, tickets } = result;
 
-  // Never expose an actionable registration
-  // state before the engine is ready.
   const displayRegistrationStatus =
-    event.registrationStatus === 'open'
+    event.registrationStatus === 'open' &&
+    !isEventRegistrationEnabled()
       ? 'not_open'
       : event.registrationStatus;
 

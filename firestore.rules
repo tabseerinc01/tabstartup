@@ -202,6 +202,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /eventRegistrationRateLimits/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /eventRegistrationRequests/{document=**} {
+      allow read, write: if false;
+    }
+
     match /eventRegistrations/{document=**} {
       allow read, write: if false;
     }

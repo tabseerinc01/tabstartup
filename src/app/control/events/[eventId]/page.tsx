@@ -273,6 +273,25 @@ export default function AdminEventDetailsPage() {
 
   const publishLock = useRef(false);
 
+  const registrationLock = useRef(false);
+
+  const [
+    registrationTarget,
+    setRegistrationTarget,
+  ] = useState<
+    'open' | 'paused' | 'closed' | null
+  >(null);
+
+  const [
+    registrationBusy,
+    setRegistrationBusy,
+  ] = useState(false);
+
+  const [
+    registrationError,
+    setRegistrationError,
+  ] = useState('');
+
   useEffect(() => {
     setManaged(null);
     setTickets([]);
@@ -281,6 +300,8 @@ export default function AdminEventDetailsPage() {
     setActionError('');
     setEditing(false);
     setConfirmPublish(false);
+    setRegistrationTarget(null);
+    setRegistrationError('');
 
     if (!user) return;
 
@@ -410,6 +431,103 @@ export default function AdminEventDetailsPage() {
     setEditing(false);
     setNotice('Event details saved.');
     setRefreshKey(key => key + 1);
+  }
+
+  async function updateRegistrationStatus() {
+    if (
+      !user ||
+      !managed ||
+      !registrationTarget ||
+      registrationLock.current ||
+      (
+        managed.event.status !== 'published' &&
+        managed.event.status !== 'ongoing'
+      )
+    ) {
+      return;
+    }
+
+    const target = registrationTarget;
+
+    registrationLock.current = true;
+
+    setRegistrationBusy(true);
+    setRegistrationError('');
+    setActionError('');
+    setNotice('');
+
+    try {
+      const result =
+        await eventAdminRequest<EventDetails>(
+          user,
+          endpoint + '/registration',
+          {
+            method: 'POST',
+
+            body: {
+              registrationStatus: target,
+            },
+
+            expectedUpdatedAtMs:
+              managed.event.updatedAt,
+          }
+        );
+
+      if (
+        result?.eventId !== eventId ||
+        result.registrationStatus !== target
+      ) {
+        throw new Error(
+          'Invalid registration update response.'
+        );
+      }
+
+      setManaged(current =>
+        current?.event.eventId === eventId
+          ? {
+              ...current,
+              event: result,
+            }
+          : current
+      );
+
+      setRegistrationTarget(null);
+
+      setNotice(
+        'Registration status updated successfully.'
+      );
+
+      setRefreshKey(key => key + 1);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to update registration.';
+
+      if (
+        message.includes(
+          'REGISTRATION_CONTROL_DISABLED'
+        )
+      ) {
+        setRegistrationError(
+          'Registration cannot be opened until the registration and payment system is enabled.'
+        );
+      } else if (
+        message.includes(
+          'REGISTRATION_WINDOW_UNAVAILABLE'
+        )
+      ) {
+        setRegistrationError(
+          'The registration window has ended or is invalid.'
+        );
+      } else {
+        setRegistrationError(message);
+      }
+    } finally {
+      registrationLock.current = false;
+
+      setRegistrationBusy(false);
+    }
   }
 
   async function publishEvent() {
@@ -792,6 +910,196 @@ export default function AdminEventDetailsPage() {
               </div>
             )}
           </section>
+
+          {(
+            event.status === 'published' ||
+            event.status === 'ongoing'
+          ) && (
+            <section className="space-y-5 rounded-2xl border bg-white p-5 sm:p-6">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Registration Management
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Manage registration without changing
+                  the published event configuration.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4">
+                <span className="text-sm font-medium text-slate-600">
+                  Current registration status
+                </span>
+
+                <span className={
+                  'rounded-full px-3 py-1 text-xs font-semibold ' +
+                  (
+                    event.registrationStatus === 'open'
+                      ? 'bg-green-100 text-green-800'
+                      : event.registrationStatus === 'paused'
+                        ? 'bg-amber-100 text-amber-800'
+                        : event.registrationStatus === 'closed'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-slate-200 text-slate-700'
+                  )
+                }>
+                  {eventLabel(event.registrationStatus)}
+                </span>
+              </div>
+
+              {event.registrationStatus === 'closed' ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                  Registration has been permanently
+                  closed for this event. Existing orders
+                  and confirmed participants remain
+                  unchanged.
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-3">
+                    {(
+                      event.registrationStatus === 'not_open' ||
+                      event.registrationStatus === 'paused'
+                    ) && (
+                      <button
+                        type="button"
+                        disabled={
+                          registrationBusy ||
+                          loading
+                        }
+                        onClick={() => {
+                          setRegistrationTarget('open');
+                          setRegistrationError('');
+                        }}
+                        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {event.registrationStatus === 'paused'
+                          ? 'Resume registration'
+                          : 'Open registration'}
+                      </button>
+                    )}
+
+                    {event.registrationStatus === 'open' && (
+                      <button
+                        type="button"
+                        disabled={
+                          registrationBusy ||
+                          loading
+                        }
+                        onClick={() => {
+                          setRegistrationTarget('paused');
+                          setRegistrationError('');
+                        }}
+                        className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 disabled:opacity-50"
+                      >
+                        Pause registration
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={
+                        registrationBusy ||
+                        loading
+                      }
+                      onClick={() => {
+                        setRegistrationTarget('closed');
+                        setRegistrationError('');
+                      }}
+                      className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Close registration
+                    </button>
+                  </div>
+
+                  {registrationTarget && (
+                    <div
+                      className={
+                        'space-y-4 rounded-xl border p-4 ' +
+                        (
+                          registrationTarget === 'closed'
+                            ? 'border-red-200 bg-red-50'
+                            : 'border-blue-200 bg-blue-50'
+                        )
+                      }
+                    >
+                      <h3 className="text-sm font-semibold">
+                        Confirm registration update
+                      </h3>
+
+                      <p className="text-sm text-slate-700">
+                        {registrationTarget === 'closed'
+                          ? 'Closing registration is permanent. Use Pause if you may need to reopen registration later.'
+                          : registrationTarget === 'paused'
+                            ? 'New registrations will be paused until you resume registration.'
+                            : 'Registration will become available subject to the configured schedule, ticket availability and system readiness.'}
+                      </p>
+
+                      <p className="text-xs text-slate-600">
+                        Existing orders, reservations,
+                        payments and confirmed registrations
+                        will not be cancelled by this action.
+                      </p>
+
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          disabled={registrationBusy}
+                          onClick={() =>
+                            void updateRegistrationStatus()
+                          }
+                          className={
+                            'rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ' +
+                            (
+                              registrationTarget === 'closed'
+                                ? 'bg-red-600'
+                                : 'bg-blue-600'
+                            )
+                          }
+                        >
+                          {registrationBusy
+                            ? 'Updating...'
+                            : registrationTarget === 'closed'
+                              ? 'Confirm permanent closure'
+                              : registrationTarget === 'paused'
+                                ? 'Confirm pause'
+                                : 'Confirm opening'}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={registrationBusy}
+                          onClick={() => {
+                            setRegistrationTarget(null);
+                            setRegistrationError('');
+                          }}
+                          className="rounded-lg border bg-white px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {registrationError && (
+                    <div
+                      role="alert"
+                      className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                    >
+                      {registrationError}
+                    </div>
+                  )}
+                </>
+              )}
+
+              <p className="text-xs text-slate-500">
+                Registration opening is subject to
+                platform readiness and server-side
+                authorization.
+              </p>
+            </section>
+          )}
 
           <section className="overflow-hidden rounded-2xl border bg-white">
             <div className="flex items-center justify-between border-b p-5">

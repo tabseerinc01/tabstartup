@@ -148,6 +148,43 @@ export type PaymentOwner =
       ownerId: string;
     };
 
+/**
+ * Authoritative financial order.
+ * Product-specific orders link to this record.
+ */
+export interface PaymentOrderBase {
+  orderId: string;
+
+  purpose: PaymentPurpose;
+  resourceId: string;
+  productOrderId: string;
+
+  payerUid: string | null;
+  payerEmail: string;
+
+  owner: PaymentOwner;
+
+  amountMinor: number;
+  refundedAmountMinor: number;
+
+  status: PaymentOrderStatus;
+
+  activePaymentId: string | null;
+  successfulPaymentId: string | null;
+
+  expiresAt: Timestamp | null;
+  paidAt: Timestamp | null;
+  fulfilledAt: Timestamp | null;
+
+  schemaVersion: typeof PAYMENT_SCHEMA_VERSION;
+
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export type PaymentOrder =
+  PaymentOrderBase & ActivePaymentMethod;
+
 export interface PaymentRecordBase {
   paymentId: string;
   orderId: string;

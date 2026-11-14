@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { createHash } from 'node:crypto';
+
 import { getFirebaseAdmin } from '@/firebase/admin';
 
 import {
@@ -54,7 +56,10 @@ export type PublicEventDetails = PublicEventSummary &
     | 'maxTicketsPerOrder'
     | 'terms'
     | 'refundPolicy'
-  >;
+  > & {
+    termsHash: string;
+    refundPolicyHash: string;
+  };
 
 export type PublicEventTicket = Pick<
   PublicEventTicketProjection,
@@ -328,6 +333,14 @@ function readPublicEvent(
 
     terms: value.terms,
     refundPolicy: value.refundPolicy,
+
+    termsHash: createHash('sha256')
+      .update(value.terms, 'utf8')
+      .digest('hex'),
+
+    refundPolicyHash: createHash('sha256')
+      .update(value.refundPolicy, 'utf8')
+      .digest('hex'),
   };
 }
 
