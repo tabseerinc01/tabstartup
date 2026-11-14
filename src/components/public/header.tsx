@@ -18,6 +18,7 @@ export function PublicHeader() {
     { href: '/community', label: 'Community' },
     { href: '/cofounders', label: 'Co-founders' },
     { href: '/mentors', label: 'Mentors' },
+    { href: '/events', label: 'Events' },
     { href: '/services', label: 'Services' },
   ];
 

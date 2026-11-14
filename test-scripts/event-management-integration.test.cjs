@@ -4,6 +4,11 @@ const { randomUUID } = require('node:crypto');
 require('./identity-runtime-loader.cjs');
 
 const {
+  listPublicEvents,
+  getPublicEventBySlug,
+} = require('../src/services/public-event.service.ts');
+
+const {
   getFirebaseAdmin,
 } = require('../src/firebase/admin.ts');
 
@@ -335,6 +340,18 @@ async function main() {
   );
 
   pass('Draft is not publicly projected');
+
+  assert.equal(
+    await getPublicEventBySlug(slug),
+    null
+  );
+
+  assert.ok(
+    !(await listPublicEvents())
+      .some(item => item.eventId === eventId)
+  );
+
+  pass('Draft excluded from public service');
 
   failure(
     await request(
@@ -851,6 +868,262 @@ async function main() {
   }
 
   pass('Public tickets created but unavailable for purchase');
+
+  {
+  // Public Events integration verification.
+
+  const publicRef =
+    adminDb.collection(C.publicEvents).doc(eventId);
+
+  const listing = await listPublicEvents();
+
+  assert.ok(
+    listing.some(
+      item =>
+        item.eventId === eventId &&
+        item.slug === slug
+    )
+  );
+
+  pass('Published event appears in public directory');
+
+  const details =
+    await getPublicEventBySlug(slug);
+
+  assert.ok(details);
+  assert.equal(details.event.eventId, eventId);
+  assert.equal(details.event.slug, slug);
+  assert.equal(details.event.status, 'published');
+  assert.equal(details.tickets.length, 2);
+
+  pass('Public event details resolve by slug');
+
+  const freeTicket = details.tickets.find(
+    item => item.pricingType === 'free'
+  );
+
+  const paidTicket = details.tickets.find(
+    item => item.pricingType === 'paid'
+  );
+
+  assert.ok(freeTicket);
+  assert.ok(paidTicket);
+
+  assert.equal(freeTicket.price.usdAmountMinor, 0);
+  assert.equal(freeTicket.price.bdtAmountMinor, 0);
+
+  assert.equal(
+    paidTicket.price.usdAmountMinor,
+    1500
+  );
+
+  assert.equal(
+    paidTicket.price.bdtAmountMinor,
+    180000
+  );
+
+  pass('Free and independent USD/BDT prices preserved');
+
+  assert.equal(
+    details.event.registrationStatus,
+    'not_open'
+  );
+
+  assert.ok(
+    details.tickets.every(
+      item => item.availability === 'not_open'
+    )
+  );
+
+  pass('Registration remains unavailable after publication');
+
+  const detailsJson = JSON.stringify(details);
+
+  for (const secret of [
+    'private-meeting-id',
+    'private-passcode',
+    'https://example.test/private-meeting',
+    'Private instructions for confirmed participants.',
+  ]) {
+    assert.ok(!detailsJson.includes(secret));
+  }
+
+  pass('Private meeting data excluded from public service');
+
+  // Unexpected fields must not escape the public allowlist.
+
+  const firstTicket = publicTickets.docs[0];
+  const originalTicket = firstTicket.data();
+
+  try {
+    await publicRef.update({
+      privateMeetingSecret: 'event-secret-marker',
+    });
+
+    await firstTicket.ref.update({
+      privateTicketSecret: 'ticket-secret-marker',
+      price: {
+        ...originalTicket.price,
+        internalFee: 'internal-fee-marker',
+      },
+    });
+
+    const sanitized =
+      await getPublicEventBySlug(slug);
+
+    assert.ok(sanitized);
+
+    const sanitizedJson =
+      JSON.stringify(sanitized);
+
+    assert.ok(
+      !sanitizedJson.includes('event-secret-marker')
+    );
+
+    assert.ok(
+      !sanitizedJson.includes('ticket-secret-marker')
+    );
+
+    assert.ok(
+      !sanitizedJson.includes('internal-fee-marker')
+    );
+
+    const sanitizedList =
+      JSON.stringify(await listPublicEvents());
+
+    assert.ok(
+      !sanitizedList.includes('event-secret-marker')
+    );
+
+    pass('Unexpected sensitive fields removed by allowlist');
+  } finally {
+    await publicRef.set(publicEvent);
+    await firstTicket.ref.set(originalTicket);
+  }
+
+  // Hidden or non-discoverable projections.
+
+  for (const patch of [
+    { status: 'draft' },
+    { status: 'cancelled' },
+    { status: 'archived' },
+    { visibility: 'private' },
+    { visibility: 'invite_only' },
+    { eventId: prefix + '-wrong-event' },
+  ]) {
+    try {
+      await publicRef.update(patch);
+
+      assert.equal(
+        await getPublicEventBySlug(slug),
+        null
+      );
+
+      assert.ok(
+        !(await listPublicEvents()).some(
+          item => item.slug === slug
+        )
+      );
+
+      pass(
+        'Invalid public projection rejected: ' +
+        JSON.stringify(patch)
+      );
+    } finally {
+      await publicRef.set(publicEvent);
+    }
+  }
+
+  // Corrupted ticket identity.
+
+  try {
+    await firstTicket.ref.update({
+      ticketTypeId: prefix + '-wrong-ticket',
+    });
+
+    await assert.rejects(
+      () => getPublicEventBySlug(slug),
+      /INVALID_PUBLIC_TICKET_CONFIGURATION/
+    );
+
+    pass('Mismatched ticket document identity rejected');
+  } finally {
+    await firstTicket.ref.set(originalTicket);
+  }
+
+  // Corrupted paid ticket pricing.
+
+  const paidRef =
+    adminDb.collection(C.publicTicketTypes)
+      .doc(paidTicket.ticketTypeId);
+
+  const originalPaid =
+    (await paidRef.get()).data();
+
+  assert.ok(originalPaid);
+
+  try {
+    await paidRef.update({
+      price: {
+        ...originalPaid.price,
+        bdtAmountMinor: 0,
+      },
+    });
+
+    await assert.rejects(
+      () => getPublicEventBySlug(slug),
+      /INVALID_PUBLIC_TICKET_CONFIGURATION/
+    );
+
+    pass('Invalid dual-currency pricing rejected');
+  } finally {
+    await paidRef.set(originalPaid);
+  }
+
+  // Duplicate public slug.
+
+  const duplicateRef =
+    adminDb.collection(C.publicEvents)
+      .doc(prefix + '-duplicate');
+
+  try {
+    await duplicateRef.create({
+      ...publicEvent,
+      eventId: duplicateRef.id,
+    });
+
+    assert.equal(
+      await getPublicEventBySlug(slug),
+      null
+    );
+
+    pass('Ambiguous public slug rejected');
+  } finally {
+    await duplicateRef.delete();
+  }
+
+  assert.equal(
+    await getPublicEventBySlug('../private'),
+    null
+  );
+
+  assert.equal(
+    await getPublicEventBySlug(prefix + '-missing'),
+    null
+  );
+
+  pass('Invalid and missing event slugs rejected');
+
+  // Final fixture restoration verification.
+
+  const restored =
+    await getPublicEventBySlug(slug);
+
+  assert.ok(restored);
+  assert.equal(restored.tickets.length, 2);
+
+  pass('Public event restored after security checks');
+  }
 
   failure(
     await request(

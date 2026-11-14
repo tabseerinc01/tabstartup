@@ -1,5 +1,9 @@
 import { MetadataRoute } from 'next';
 import { firebaseConfig } from '@/firebase/config';
+import { listPublicEvents } from '@/services/public-event.service';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://tabstartup.com'; // Adjust to your actual domain
@@ -12,6 +16,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     '/investors',
     '/mentors',
     '/services',
+    '/events',
     '/cofounders',
     '/community',
     '/about',
@@ -65,5 +70,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error("Error generating dynamic sitemap entries:", error);
   }
 
-  return [...staticPages, ...startupEntries];
+  let eventEntries: MetadataRoute.Sitemap = [];
+
+  try {
+    const events = await listPublicEvents();
+
+    eventEntries = events.map(event => ({
+      url: baseUrl + '/events/' +
+        encodeURIComponent(event.slug),
+
+      changeFrequency: 'daily' as const,
+      priority: 0.8,
+    }));
+  } catch (error) {
+    console.error(
+      'Error generating public event sitemap entries:',
+      error
+    );
+  }
+
+  return [
+    ...staticPages,
+    ...startupEntries,
+    ...eventEntries,
+  ];
 }

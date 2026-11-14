@@ -22,6 +22,7 @@ export function PublicFooter() {
               <li><Link href="/investors" className="text-muted-foreground hover:text-primary">Investors</Link></li>
               <li><Link href="/cofounders" className="text-muted-foreground hover:text-primary">Co-founders</Link></li>
               <li><Link href="/mentors" className="text-muted-foreground hover:text-primary">Mentors</Link></li>
+              <li><Link href="/events" className="text-muted-foreground hover:text-primary">Events</Link></li>
               <li><Link href="/services" className="text-muted-foreground hover:text-primary">Services</Link></li>
             </ul>
           </div>
