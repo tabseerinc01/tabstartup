@@ -1,13 +1,35 @@
 'use client';
 
-import { ShieldCheck, Bell, Search, Settings } from 'lucide-react';
+import { ShieldCheck, Bell, Search, Settings, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
+import type { AccountAccessResponse } from '@/lib/account-access-client';
+import { getAvailableAccountPortals } from '@/lib/safe-account-redirect';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-export function AdminHeader() {
+export function AdminHeader({
+  account,
+}: {
+  account: AccountAccessResponse | null;
+}) {
   const { user } = useUser();
+
+  const switchablePortals =
+    account && account.uid === user?.uid
+      ? getAvailableAccountPortals(account).filter(
+          portal => portal.id !== 'admin'
+        )
+      : [];
   const displayName = user?.displayName || user?.email?.split('@')[0] || "Admin";
 
   return (
@@ -42,10 +64,62 @@ export function AdminHeader() {
               <p className="text-xs font-bold text-slate-800">{displayName}</p>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest">Root Access</p>
            </div>
-           <Avatar className="h-9 w-9 border-2 border-destructive/20">
-             <AvatarImage src={`https://picsum.photos/seed/${user?.uid}/40/40`} />
-             <AvatarFallback className="bg-destructive text-white font-bold">{displayName[0]}</AvatarFallback>
-           </Avatar>
+           <DropdownMenu>
+             <DropdownMenuTrigger asChild>
+               <Button
+                 variant="ghost"
+                 className="relative h-9 w-9 rounded-full p-0"
+                 aria-label="Account menu"
+               >
+                 <Avatar className="h-9 w-9 border-2 border-destructive/20">
+                   <AvatarImage src={`https://picsum.photos/seed/${user?.uid}/40/40`} />
+                   <AvatarFallback className="bg-destructive text-white font-bold">
+                     {displayName[0]}
+                   </AvatarFallback>
+                 </Avatar>
+               </Button>
+             </DropdownMenuTrigger>
+
+             <DropdownMenuContent
+               align="end"
+               className="w-64"
+             >
+               <DropdownMenuLabel className="font-normal">
+                 <div className="flex flex-col space-y-1">
+                   <p className="text-sm font-medium">
+                     {displayName}
+                   </p>
+                   <p className="text-xs text-muted-foreground">
+                     {user?.email}
+                   </p>
+                   <p className="text-xs font-medium text-muted-foreground">
+                     Administrative Account
+                   </p>
+                 </div>
+               </DropdownMenuLabel>
+
+               {switchablePortals.length > 0 && (
+                 <>
+                   <DropdownMenuSeparator />
+                   <DropdownMenuLabel className="text-xs text-muted-foreground">
+                     Switch Portal
+                   </DropdownMenuLabel>
+
+                   {switchablePortals.map(portal => (
+                     <DropdownMenuItem key={portal.id} asChild>
+                       <Link
+                         href={portal.path}
+                         className="flex items-center gap-2 cursor-pointer"
+                       >
+                         <ArrowRight className="h-4 w-4" />
+                         <span>{portal.label}</span>
+                       </Link>
+                     </DropdownMenuItem>
+                   ))}
+                 </>
+               )}
+             </DropdownMenuContent>
+           </DropdownMenu>
         </div>
       </div>
     </header>

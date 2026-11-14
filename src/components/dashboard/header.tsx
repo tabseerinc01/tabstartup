@@ -47,12 +47,25 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceToNow } from 'date-fns';
 import { GlobalSearch } from '@/components/search/global-search';
+import type { AccountAccessResponse } from '@/lib/account-access-client';
+import { getAvailableAccountPortals } from '@/lib/safe-account-redirect';
 
-export function DashboardHeader() {
+export function DashboardHeader({
+  account,
+}: {
+  account: AccountAccessResponse | null;
+}) {
   const { user } = useUser();
   const auth = useAuth();
   const firestore = useFirestore();
   const router = useRouter();
+
+  const switchablePortals =
+    account && account.uid === user?.uid
+      ? getAvailableAccountPortals(account).filter(
+          portal => portal.id !== 'startup'
+        )
+      : [];
 
   const [profile, setProfile] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -278,6 +291,25 @@ export function DashboardHeader() {
                 </div>
               </div>
             </DropdownMenuLabel>
+            {switchablePortals.length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  Switch Portal
+                </DropdownMenuLabel>
+                {switchablePortals.map(portal => (
+                  <DropdownMenuItem key={portal.id} asChild>
+                    <Link
+                      href={portal.path}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                      <span>{portal.label}</span>
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link href="/dashboard/profile" className="flex items-center gap-2 cursor-pointer">

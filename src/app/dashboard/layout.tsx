@@ -113,7 +113,7 @@ export default function DashboardLayout({
       </aside>
 
       <div className="flex flex-col">
-        <DashboardHeader />
+        <DashboardHeader account={access.account} />
 
         <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 bg-muted/40">
           {children}

@@ -20,6 +20,7 @@ import { usePortalAccess } from '@/hooks/use-portal-access';
 import {
   sanitizeAccountReturnTo,
   resolveAccountLoginDestination,
+  getAvailableAccountPortals,
 } from '@/lib/safe-account-redirect';
 import { Loader2 } from 'lucide-react';
 
@@ -121,11 +122,21 @@ function LoginFormContent() {
     const suspended =
       account?.status === 'suspended';
 
-    const eventOrganizerAvailable =
-      account?.portals.event_organizer.allowed === true;
+    const availablePortals =
+      account && access.status !== 'error'
+        ? getAvailableAccountPortals(account)
+        : [];
 
-    const startupAvailable =
-      account?.portals.startup.allowed === true;
+    const requiresPortalSelection =
+      availablePortals.length > 1;
+
+    const eventOrganizerPending =
+      !suspended &&
+      access.status !== 'error' &&
+      account?.portals.event_organizer.allowed === true &&
+      !availablePortals.some(
+        portal => portal.id === 'event_organizer'
+      );
 
     return (
       <Card className="w-full max-w-md rounded-2xl">
@@ -135,7 +146,7 @@ function LoginFormContent() {
               ? 'Account Suspended'
               : access.status === 'error'
                 ? 'Account Access Unavailable'
-                : eventOrganizerAvailable
+                : requiresPortalSelection
                   ? 'Choose Your Portal'
                   : 'Account Access Required'}
           </CardTitle>
@@ -145,22 +156,24 @@ function LoginFormContent() {
               ? 'Please contact support regarding your account.'
               : access.status === 'error'
                 ? 'Your account access could not be verified.'
-                : eventOrganizerAvailable
+                : requiresPortalSelection
                   ? 'Select an available portal to continue.'
                   : 'Your account requires profile setup or recovery. Please contact support.'}
           </CardDescription>
         </CardHeader>
 
         <CardContent className="flex flex-col gap-3">
-          {startupAvailable && (
+          {availablePortals.map(portal => (
             <Button
-              onClick={() => router.replace('/dashboard')}
+              key={portal.id}
+              className="w-full h-12 rounded-xl font-semibold"
+              onClick={() => router.replace(portal.path)}
             >
-              Startup Dashboard
+              {portal.label}
             </Button>
-          )}
+          ))}
 
-          {eventOrganizerAvailable && (
+          {eventOrganizerPending && (
             <Button variant="outline" disabled>
               Event Organizer Dashboard — Coming Soon
             </Button>

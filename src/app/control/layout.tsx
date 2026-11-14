@@ -101,7 +101,7 @@ export default function AdminLayout({
       <AdminSidebar />
 
       <div className="flex flex-col flex-1 overflow-hidden">
-        <AdminHeader />
+        <AdminHeader account={access.account} />
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-8">
           <div className="max-w-7xl mx-auto space-y-8">

@@ -46,6 +46,59 @@ export function sanitizeAccountReturnTo(
   }
 }
 
+export type AvailableAccountPortal = {
+  id: 'startup' | 'admin' | 'event_organizer';
+  label: string;
+  path: string;
+};
+
+// Enable only after the independent Event Organizer
+// dashboard and its access guard are implemented.
+const EVENT_ORGANIZER_PORTAL_READY: boolean = false;
+
+export function getAvailableAccountPortals(
+  account: AccountAccessResponse
+): AvailableAccountPortal[] {
+  if (account.status === 'suspended') {
+    return [];
+  }
+
+  const portals: AvailableAccountPortal[] = [];
+
+  if (
+    account.status === 'active' &&
+    account.portals.startup.allowed
+  ) {
+    portals.push({
+      id: 'startup',
+      label: 'Startup Dashboard',
+      path: '/dashboard',
+    });
+  }
+
+  if (account.isAdmin) {
+    portals.push({
+      id: 'admin',
+      label: 'Control Dashboard',
+      path: '/control',
+    });
+  }
+
+  if (
+    EVENT_ORGANIZER_PORTAL_READY &&
+    account.status === 'active' &&
+    account.portals.event_organizer.allowed
+  ) {
+    portals.push({
+      id: 'event_organizer',
+      label: 'Event Organizer Dashboard',
+      path: '/event-organizer/dashboard',
+    });
+  }
+
+  return portals;
+}
+
 export function resolveAccountLoginDestination(
   account: AccountAccessResponse,
   returnTo?: string | null
@@ -82,18 +135,11 @@ export function resolveAccountLoginDestination(
     }
   }
 
-  if (account.isAdmin) {
-    return '/control';
-  }
+  const portals = getAvailableAccountPortals(account);
 
-  if (
-    account.portals.startup.allowed &&
-    !account.portals.event_organizer.allowed
-  ) {
-    return '/dashboard';
-  }
-
-  // Event Organizer and dual-profile accounts will use
-  // portal selection until the independent portal is ready.
-  return null;
+  // Single available portal: automatic navigation.
+  // Multiple available portals: let the user choose.
+  return portals.length === 1
+    ? portals[0].path
+    : null;
 }

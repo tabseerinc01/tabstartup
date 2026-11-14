@@ -115,6 +115,57 @@ const scenarios = [
     '/control',
   ],
   [
+    'Startup and Admin require portal selection',
+    account({ startup: true, admin: true }),
+    null,
+    null,
+  ],
+  [
+    'Startup and Admin authorized Startup returnTo',
+    account({ startup: true, admin: true }),
+    '/dashboard/profile',
+    '/dashboard/profile',
+  ],
+  [
+    'Startup and Admin authorized Control returnTo',
+    account({ startup: true, admin: true }),
+    '/control/users',
+    '/control/users',
+  ],
+  [
+    'Multiple portals block external returnTo',
+    account({ startup: true, admin: true }),
+    '//evil.example',
+    null,
+  ],
+  [
+    'Admin remains available before Event Organizer launch',
+    account({ admin: true, eventOrganizer: true }),
+    null,
+    '/control',
+  ],
+  [
+    'All profiles show available portal selection',
+    account({
+      startup: true,
+      admin: true,
+      eventOrganizer: true,
+    }),
+    null,
+    null,
+  ],
+  [
+    'Suspended multi-portal account cannot redirect',
+    account({
+      startup: true,
+      admin: true,
+      eventOrganizer: true,
+      status: 'suspended',
+    }),
+    null,
+    null,
+  ],
+  [
     'Admin authorized returnTo',
     account({ admin: true }),
     '/control/users',
@@ -127,13 +178,13 @@ const scenarios = [
     null,
   ],
   [
-    'Dual profile requires portal selection',
+    'Startup remains available before Event Organizer launch',
     account({
       startup: true,
       eventOrganizer: true,
     }),
     null,
-    null,
+    '/dashboard',
   ],
   [
     'Dual profile authorized Startup returnTo',
