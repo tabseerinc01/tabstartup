@@ -230,6 +230,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Event email jobs are server-only.
+    match /eventEmailOutbox/{document=**} {
+      allow read, write: if false;
+    }
+
     match /eventAuditLogs/{document=**} {
       allow read, write: if false;
     }

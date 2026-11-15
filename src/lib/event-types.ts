@@ -45,6 +45,7 @@ export const EVENT_COLLECTIONS = {
   tickets: 'eventTickets',
   checkIns: 'eventCheckIns',
   auditLogs: 'eventAuditLogs',
+  emailOutbox: 'eventEmailOutbox',
 } as const;
 
 export const EVENT_MODES = [

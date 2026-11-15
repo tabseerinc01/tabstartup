@@ -59,6 +59,16 @@ import type {
   RegistrationAccessContext,
 } from '@/services/event-registration.service';
 
+import type { EventRecord } from '@/lib/event-types';
+
+import {
+  buildPaymentSubmittedEmailJobs,
+} from '@/services/email/event-email-scheduling.service';
+
+import {
+  queueEventEmailsSafely,
+} from '@/services/email/event-email-outbox.service';
+
 export interface BkashSubmissionResult {
   status: 'pending_verification';
 
@@ -609,6 +619,25 @@ export async function submitEventBkashPayment(
 
       // All reads completed.
       // Commit all state changes atomically.
+
+      queueEventEmailsSafely(
+        tx,
+        adminDb,
+        {
+          eventId: context.resourceId,
+          orderId: order.orderId,
+          trigger: 'payment_submission',
+        },
+        () => buildPaymentSubmittedEmailJobs({
+          event: event as EventRecord,
+          order: {
+            ...order,
+            status: 'pending_verification',
+            updatedAt: now,
+          },
+          now,
+        })
+      );
 
       tx.create(claimRef, claim);
 

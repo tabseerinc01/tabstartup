@@ -1,5 +1,15 @@
 import 'server-only';
 
+import type { EventRecord, EventOrder } from '@/lib/event-types';
+
+import {
+  buildExpiredRegistrationEmailJobs,
+} from '@/services/email/event-email-scheduling.service';
+
+import {
+  queueEventEmailsSafely,
+} from '@/services/email/event-email-outbox.service';
+
 import {
   Timestamp,
 } from 'firebase-admin/firestore';
@@ -211,6 +221,25 @@ export async function expireBkashPaymentReview(
       // Do not delete the transaction claim.
       // Do not mark the payment refunded.
       // Do not issue tickets.
+
+      queueEventEmailsSafely(
+        tx,
+        adminDb,
+        {
+          eventId: review.event.eventId,
+          orderId: review.order.orderId,
+          trigger: 'payment_expiry',
+        },
+        () => buildExpiredRegistrationEmailJobs({
+          event: review.event,
+          order: {
+            ...(review.order as EventOrder),
+            status: 'requires_review',
+            updatedAt: now,
+          },
+          now,
+        })
+      );
 
       tx.update(
         review.refs.submission,

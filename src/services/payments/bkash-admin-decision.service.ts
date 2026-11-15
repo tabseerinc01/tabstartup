@@ -5,6 +5,15 @@ import {
 } from '@/services/event-ticket-issuance.service';
 
 import {
+  buildConfirmedEventEmailJobs,
+  buildPaymentRejectedEmailJobs,
+} from '@/services/email/event-email-scheduling.service';
+
+import {
+  queueEventEmailsSafely,
+} from '@/services/email/event-email-outbox.service';
+
+import {
   Timestamp,
 } from 'firebase-admin/firestore';
 
@@ -16,6 +25,7 @@ import {
   EVENT_COLLECTIONS,
   EVENT_SCHEMA_VERSION,
   PLATFORM_EVENT_ORGANIZER_ID,
+  type EventOrder,
   type EventTicketType,
   type EventTicketInventory,
   type EventAuditLog,
@@ -519,6 +529,32 @@ export async function decideAdminBkashPayment(
 
         // Approval reads complete.
 
+        queueEventEmailsSafely(
+          tx,
+          adminDb,
+          {
+            eventId: order.eventId,
+            orderId: order.orderId,
+            trigger: 'payment_decision',
+          },
+          () => buildConfirmedEventEmailJobs(
+            {
+              event,
+              order: {
+                ...(order as EventOrder),
+                status: 'fulfilled',
+                successfulPaymentId:
+                  payment.paymentId,
+                paidAt: now,
+                fulfilledAt: now,
+                updatedAt: now,
+              },
+              now,
+            },
+            'payment_decision'
+          )
+        );
+
         const confirmedRegistrations =
           review.registrations.map(
             registration => ({
@@ -674,6 +710,25 @@ export async function decideAdminBkashPayment(
           );
 
         // Rejection reads complete.
+
+        queueEventEmailsSafely(
+          tx,
+          adminDb,
+          {
+            eventId: order.eventId,
+            orderId: order.orderId,
+            trigger: 'payment_decision',
+          },
+          () => buildPaymentRejectedEmailJobs({
+            event,
+            order: {
+              ...(order as EventOrder),
+              status: 'cancelled',
+              updatedAt: now,
+            },
+            now,
+          })
+        );
 
         applyEventInventoryRelease(
           tx,

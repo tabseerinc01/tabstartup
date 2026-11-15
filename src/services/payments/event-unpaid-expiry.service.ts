@@ -1,5 +1,15 @@
 import 'server-only';
 
+import type { EventRecord, EventOrder } from '@/lib/event-types';
+
+import {
+  buildExpiredRegistrationEmailJobs,
+} from '@/services/email/event-email-scheduling.service';
+
+import {
+  queueEventEmailsSafely,
+} from '@/services/email/event-email-outbox.service';
+
 import {
   Timestamp,
 } from 'firebase-admin/firestore';
@@ -484,7 +494,46 @@ export async function expireUnpaidEventReservation(
           }
         );
 
+      const emailEventSnap = await tx.get(
+        adminDb
+          .collection(EVENT_COLLECTIONS.events)
+          .doc(order.eventId)
+      );
+
       // All transaction reads are complete.
+
+      queueEventEmailsSafely(
+        tx,
+        adminDb,
+        {
+          eventId: order.eventId,
+          orderId: order.orderId,
+          trigger: 'payment_expiry',
+        },
+        () => {
+          const emailEvent =
+            emailEventSnap.data() as EventRecord | undefined;
+
+          if (
+            !emailEvent ||
+            emailEvent.eventId !== order.eventId ||
+            emailEvent.organizerType !== 'platform' ||
+            emailEvent.organizerId !== 'tabstartup'
+          ) {
+            throw new Error('INVALID_EMAIL_EVENT');
+          }
+
+          return buildExpiredRegistrationEmailJobs({
+            event: emailEvent,
+            order: {
+              ...(order as EventOrder),
+              status: nextStatus,
+              updatedAt: now,
+            },
+            now,
+          });
+        }
+      );
 
       tx.update(paymentRef, {
         status: nextStatus,

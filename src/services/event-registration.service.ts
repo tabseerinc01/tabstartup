@@ -78,6 +78,14 @@ import {
   issueConfirmedEventTickets,
 } from '@/services/event-ticket-issuance.service';
 
+import {
+  buildRegistrationEmailJobs,
+} from '@/services/email/event-email-scheduling.service';
+
+import {
+  queueEventEmailsSafely,
+} from '@/services/email/event-email-outbox.service';
+
 export interface RegistrationAccessContext {
   idToken: string | null;
 
@@ -793,6 +801,21 @@ export async function createEventRegistration(
     };
 
     // All reads are complete before writes begin.
+
+    queueEventEmailsSafely(
+      tx,
+      adminDb,
+      {
+        eventId: order.eventId,
+        orderId: order.orderId,
+        trigger: 'registration',
+      },
+      () => buildRegistrationEmailJobs({
+        event,
+        order,
+        now,
+      })
+    );
 
     if (!paid) {
       issueConfirmedEventTickets(
