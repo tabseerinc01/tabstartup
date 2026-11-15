@@ -703,7 +703,7 @@ async function loadTicketConfigurations(
  * Protected UID access follows existing
  * TabStartup account authorization policy.
  */
-async function assertCurrentEventAdmin(
+export async function assertCurrentEventAdmin(
   tx: Transaction,
   context: EventAdminContext,
   idToken: string

@@ -31,6 +31,7 @@ export function AdminSidebar() {
     { href: '/control/users', label: 'Manage Users', icon: Users },
     { href: '/control/startups', label: 'Startups', icon: Rocket },
     { href: '/control/events', label: 'Events', icon: CalendarDays },
+    { href: '/control/payments', label: 'Payments', icon: CreditCard },
     { href: '/control/subscriptions', label: 'Subscriptions', icon: CreditCard },
     { href: '/control/referrals', label: 'Referral Mgmt', icon: Gift },
     { href: '/control/analytics', label: 'Platform Analytics', icon: BarChart3 },

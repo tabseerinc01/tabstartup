@@ -478,6 +478,12 @@ export interface EventReservation {
 
   expiresAt: Timestamp;
 
+  /**
+   * Separate deadline for submitted manual payments.
+   * Original payment expiry remains unchanged.
+   */
+  reviewDeadlineAt?: Timestamp;
+
   consumedAt: Timestamp | null;
   releasedAt: Timestamp | null;
 

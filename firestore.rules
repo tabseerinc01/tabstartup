@@ -272,6 +272,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Payment provider configuration is server-only.
+    match /paymentProviderSettings/{document=**} {
+      allow read, write: if false;
+    }
+
     // =====================================================
     // END EVENT AND PAYMENT SECURITY RULES
     // =====================================================

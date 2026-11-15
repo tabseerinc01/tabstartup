@@ -19,6 +19,9 @@ const LIMITS = {
   guest_session: 30,
   registration: 20,
   order_status: 120,
+  payment_checkout: 20,
+  bkash_instructions: 30,
+  bkash_submission: 20,
 } as const;
 
 type RateLimitAction = keyof typeof LIMITS;

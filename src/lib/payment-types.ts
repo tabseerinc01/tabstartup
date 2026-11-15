@@ -30,6 +30,7 @@ export const PAYMENT_COLLECTIONS = {
   webhookEvents: 'paymentWebhookEvents',
   refunds: 'paymentRefunds',
   auditLogs: 'paymentAuditLogs',
+  providerSettings: 'paymentProviderSettings',
 } as const;
 
 export const SUPPORTED_PAYMENT_CURRENCIES = [
@@ -185,6 +186,182 @@ export interface PaymentOrderBase {
 export type PaymentOrder =
   PaymentOrderBase & ActivePaymentMethod;
 
+/**
+ * Persistent hosted checkout creation claim.
+ *
+ * A creation claim must never be automatically
+ * reclaimed after a timeout or server crash.
+ */
+export interface TabEdgeCheckoutClaimBase {
+  provider: 'tabedge';
+
+  attemptId: string;
+
+  merchantReference: string;
+
+  amountMinor: number;
+
+  currency: 'USD';
+
+  claimedAt: Timestamp;
+
+  updatedAt: Timestamp;
+}
+
+export type TabEdgeCheckoutInitiation =
+  TabEdgeCheckoutClaimBase &
+    (
+      | {
+          status: 'creating';
+
+          checkoutId: null;
+
+          checkoutUrl: null;
+
+          completedAt: null;
+
+          failureCode: null;
+        }
+      | {
+          status: 'ready';
+
+          checkoutId: string;
+
+          checkoutUrl: string;
+
+          completedAt: Timestamp;
+
+          failureCode: null;
+        }
+      | {
+          status: 'requires_review';
+
+          checkoutId: string | null;
+
+          checkoutUrl: string | null;
+
+          completedAt: Timestamp;
+
+          failureCode:
+            | 'configuration'
+            | 'provider_rejected'
+            | 'outcome_unknown'
+            | 'invalid_response'
+            | 'persistence_failed'
+            | 'payment_window_expired'
+            | 'unexpected_error';
+        }
+    );
+
+/**
+ * Immutable receiving account information
+ * for an individual manual payment.
+ */
+export type BkashAccountSnapshot = {
+  receivingNumber: string;
+
+  configVersion: number;
+
+  capturedAt: Timestamp;
+} & (
+  | {
+      accountType: 'personal';
+
+      paymentMethod: 'send_money';
+    }
+  | {
+      accountType: 'merchant';
+
+      paymentMethod: 'payment';
+    }
+);
+
+/**
+ * Persistent uniqueness claim for a
+ * normalized bKash transaction ID.
+ *
+ * Rejected submissions must not
+ * automatically release this claim.
+ */
+export interface BkashTransactionClaim {
+  claimId: string;
+
+  provider: 'bkash_manual';
+
+  currency: 'BDT';
+
+  transactionId: string;
+
+  paymentId: string;
+
+  paymentOrderId: string;
+
+  productOrderId: string;
+
+  resourceId: string;
+
+  submissionId: string;
+
+  amountMinor: number;
+
+  schemaVersion: typeof PAYMENT_SCHEMA_VERSION;
+
+  createdAt: Timestamp;
+}
+
+/**
+ * Server-only platform bKash configuration.
+ *
+ * Existing payment snapshots are never
+ * modified by configuration changes.
+ */
+export interface BkashProviderSettings {
+  provider: 'bkash_manual';
+
+  currency: 'BDT';
+
+  enabled: boolean;
+
+  receivingNumber: string;
+
+  accountType: 'personal' | 'merchant';
+
+  configVersion: number;
+
+  schemaVersion: typeof PAYMENT_SCHEMA_VERSION;
+
+  createdAt: Timestamp;
+
+  updatedAt: Timestamp;
+
+  updatedByUid: string;
+}
+
+/**
+ * Configuration change audit record.
+ *
+ * Stored in the private payment audit collection.
+ */
+export interface BkashSettingsAuditRecord {
+  auditId: string;
+
+  action: 'bkash_settings_updated';
+
+  provider: 'bkash_manual';
+
+  actorType: 'admin';
+
+  actorUid: string;
+
+  previous: BkashProviderSettings | null;
+
+  current: BkashProviderSettings;
+
+  schemaVersion: typeof PAYMENT_SCHEMA_VERSION;
+
+  createdAt: Timestamp;
+}
+
 export interface PaymentRecordBase {
   paymentId: string;
   orderId: string;
@@ -202,6 +379,23 @@ export interface PaymentRecordBase {
 
   providerPaymentId: string | null;
   providerReference: string | null;
+
+  /**
+   * Optional for backward compatibility.
+   * Only used by the TabEdge hosted checkout flow.
+   */
+  checkoutInitiation?: TabEdgeCheckoutInitiation;
+
+  /**
+   * Immutable once payment instructions
+   * have been issued to the customer.
+   */
+  bkashAccountSnapshot?: BkashAccountSnapshot;
+
+  /**
+   * Canonical manual payment submission.
+   */
+  manualSubmissionId?: string;
 
   verifiedAt: Timestamp | null;
   verifiedByUid: string | null;
@@ -228,6 +422,13 @@ export interface ManualPaymentSubmission {
 
   claimedAmountMinor: number;
 
+  /**
+   * Receiving account used for verification.
+   */
+  bkashAccountSnapshot?: BkashAccountSnapshot;
+
+  transactionClaimId?: string;
+
   status:
     | 'pending_verification'
     | 'approved'
@@ -235,6 +436,8 @@ export interface ManualPaymentSubmission {
     | 'requires_review';
 
   submittedAt: Timestamp;
+
+  reviewDeadlineAt?: Timestamp;
 
   reviewedByUid: string | null;
   reviewedAt: Timestamp | null;

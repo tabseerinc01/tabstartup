@@ -7,6 +7,8 @@ import {
 
 import {
   Timestamp,
+  type Transaction,
+  type Firestore,
 } from 'firebase-admin/firestore';
 
 import {
@@ -118,6 +120,150 @@ function optionalMillis(
   return millis;
 }
 
+
+/**
+ * Resolve the authenticated purchaser before
+ * entering a Firestore transaction.
+ */
+export async function resolveEventOrderAccessUid(
+  access: RegistrationAccessContext
+): Promise<string | null> {
+  if (access.idToken === null) {
+    return null;
+  }
+
+  const { adminAuth } = getFirebaseAdmin();
+
+  const decoded = await adminAuth
+    .verifyIdToken(access.idToken, true)
+    .catch(() => {
+      throw new EventRegistrationError(
+        'UNAUTHENTICATED'
+      );
+    });
+
+  return decoded.uid;
+}
+
+/**
+ * Internal server-side authorization helper.
+ *
+ * The caller must resolve uid using the verified
+ * access context, never from customer input.
+ *
+ * All ownership and suspension reads occur in
+ * the caller's Firestore transaction.
+ */
+export async function readAuthorizedEventOrder(
+  tx: Transaction,
+  adminDb: Firestore,
+  orderId: string,
+  access: RegistrationAccessContext,
+  uid: string | null
+): Promise<PersistedEventOrder> {
+  if (
+    !isValidEventDocumentId(orderId) ||
+    /^__.*__$/.test(orderId)
+  ) {
+    return notFound();
+  }
+
+  if (
+    (access.idToken === null) !== (uid === null)
+  ) {
+    throw new EventRegistrationError(
+      'UNAUTHENTICATED'
+    );
+  }
+
+  const orderRef = adminDb
+    .collection(EVENT_COLLECTIONS.orders)
+    .doc(orderId);
+
+  if (uid !== null) {
+    const [identitySnap, userSnap] =
+      await tx.getAll(
+        adminDb
+          .collection(ACCOUNT_IDENTITIES_COLLECTION)
+          .doc(uid),
+
+        adminDb
+          .collection('users')
+          .doc(uid)
+      );
+
+    try {
+      assertGlobalAccountNotSuspended(
+        uid,
+        identitySnap
+      );
+    } catch {
+      throw new EventRegistrationError(
+        'ACCOUNT_ACCESS_DENIED'
+      );
+    }
+
+    const user = userSnap.data();
+
+    if (
+      (!identitySnap.exists &&
+        !userSnap.exists) ||
+      (
+        userSnap.exists &&
+        (
+          !user ||
+          (
+            user.uid !== undefined &&
+            user.uid !== uid
+          ) ||
+          (
+            user.status !== undefined &&
+            user.status !== 'active'
+          )
+        )
+      )
+    ) {
+      throw new EventRegistrationError(
+        'ACCOUNT_ACCESS_DENIED'
+      );
+    }
+  }
+
+  const snapshot = await tx.get(orderRef);
+
+  if (!snapshot.exists) {
+    return notFound();
+  }
+
+  const order =
+    snapshot.data() as PersistedEventOrder;
+
+  // Unauthorized and missing orders return
+  // the same response to prevent enumeration.
+
+  if (uid !== null) {
+    if (
+      order.purchaserUid !== uid ||
+      order.guestSessionHash !== null
+    ) {
+      return notFound();
+    }
+  } else {
+    if (
+      order.purchaserUid !== null ||
+      !matchesGuestSession(
+        order.guestSessionHash,
+        access.guestSessionSecret
+      )
+    ) {
+      return notFound();
+    }
+  }
+
+
+  return order;
+}
+
 export async function getAuthorizedEventOrder(
   orderId: string,
   access: RegistrationAccessContext
@@ -129,108 +275,21 @@ export async function getAuthorizedEventOrder(
     return notFound();
   }
 
-  const { adminDb, adminAuth } =
-    getFirebaseAdmin();
+  const { adminDb } = getFirebaseAdmin();
 
-  const orderRef = adminDb
-    .collection(EVENT_COLLECTIONS.orders)
-    .doc(orderId);
-
-  let uid: string | null = null;
-
-  if (access.idToken !== null) {
-    const decoded = await adminAuth
-      .verifyIdToken(access.idToken, true)
-      .catch(() => {
-        throw new EventRegistrationError(
-          'UNAUTHENTICATED'
-        );
-      });
-
-    uid = decoded.uid;
-  }
+  const uid =
+    await resolveEventOrderAccessUid(access);
 
   return adminDb.runTransaction(
     async tx => {
-      if (uid !== null) {
-        const [identitySnap, userSnap] =
-          await tx.getAll(
-            adminDb
-              .collection(ACCOUNT_IDENTITIES_COLLECTION)
-              .doc(uid),
-
-            adminDb
-              .collection('users')
-              .doc(uid)
-          );
-
-        try {
-          assertGlobalAccountNotSuspended(
-            uid,
-            identitySnap
-          );
-        } catch {
-          throw new EventRegistrationError(
-            'ACCOUNT_ACCESS_DENIED'
-          );
-        }
-
-        const user = userSnap.data();
-
-        if (
-          (!identitySnap.exists &&
-            !userSnap.exists) ||
-          (
-            userSnap.exists &&
-            (
-              !user ||
-              (
-                user.uid !== undefined &&
-                user.uid !== uid
-              ) ||
-              (
-                user.status !== undefined &&
-                user.status !== 'active'
-              )
-            )
-          )
-        ) {
-          throw new EventRegistrationError(
-            'ACCOUNT_ACCESS_DENIED'
-          );
-        }
-      }
-
-      const snapshot = await tx.get(orderRef);
-
-      if (!snapshot.exists) {
-        return notFound();
-      }
-
       const order =
-        snapshot.data() as PersistedEventOrder;
-
-      // Unauthorized and missing orders return
-      // the same response to prevent enumeration.
-
-      if (uid !== null) {
-        if (
-          order.purchaserUid !== uid ||
-          order.guestSessionHash !== null
-        ) {
-          return notFound();
-        }
-      } else {
-        if (
-          order.purchaserUid !== null ||
-          !matchesGuestSession(
-            order.guestSessionHash,
-            access.guestSessionSecret
-          )
-        ) {
-          return notFound();
-        }
-      }
+        await readAuthorizedEventOrder(
+          tx,
+          adminDb,
+          orderId,
+          access,
+          uid
+        );
 
       if (
         order.schemaVersion !== EVENT_SCHEMA_VERSION ||
