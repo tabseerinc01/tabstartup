@@ -555,3 +555,78 @@ export function getPriceForCurrency(
       throw new Error('UNSUPPORTED_PAYMENT_CURRENCY');
   }
 }
+
+/**
+ * Durable payment webhook processing.
+ *
+ * A verified webhook is persisted before
+ * acknowledgement to the payment provider.
+ *
+ * Financial finalization is performed
+ * separately by a trusted server worker.
+ */
+export type PaymentWebhookStatus =
+  | 'received'
+  | 'processing'
+  | 'retry_pending'
+  | 'processed'
+  | 'requires_review';
+
+export interface TabEdgeWebhookRecord {
+  webhookRecordId: string;
+
+  provider: 'tabedge';
+
+  providerEventId: string;
+
+  eventType: 'checkout.payment_succeeded';
+
+  businessId: string;
+
+  checkoutId: string;
+
+  providerPaymentId: string;
+
+  merchantReference: string;
+
+  amountMinor: number;
+
+  currency: 'USD';
+
+  /**
+   * Hash of the normalized verified event.
+   * Detects conflicting duplicate deliveries.
+   */
+  eventHash: string;
+
+  status: PaymentWebhookStatus;
+
+  /**
+   * Processing attempts, not delivery count.
+   */
+  attemptCount: number;
+
+  nextAttemptAt: Timestamp | null;
+
+  /**
+   * Exclusive processing lease.
+   * Expired leases may be reclaimed.
+   */
+  leaseToken: string | null;
+
+  leaseExpiresAt: Timestamp | null;
+
+  lastErrorCode: string | null;
+
+  resolvedPaymentId: string | null;
+
+  resolvedPaymentOrderId: string | null;
+
+  processedAt: Timestamp | null;
+
+  schemaVersion: typeof PAYMENT_SCHEMA_VERSION;
+
+  receivedAt: Timestamp;
+
+  updatedAt: Timestamp;
+}
