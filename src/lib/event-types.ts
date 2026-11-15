@@ -46,6 +46,7 @@ export const EVENT_COLLECTIONS = {
   checkIns: 'eventCheckIns',
   auditLogs: 'eventAuditLogs',
   emailOutbox: 'eventEmailOutbox',
+  invitations: 'eventInvitations',
 } as const;
 
 export const EVENT_MODES = [
@@ -80,6 +81,29 @@ export type EventVisibility =
   | 'public'
   | 'private'
   | 'invite_only';
+
+/**
+ * Registration access is independent of pricing
+ * and event discovery visibility.
+ */
+export type EventRegistrationAccess =
+  | 'public'
+  | 'invite_only'
+  | 'public_and_invitation';
+
+export type EventTicketAccess =
+  | 'public'
+  | 'invite_only';
+
+export interface EventInvitationSettings {
+  enabled: boolean;
+
+  allowComplimentary: boolean;
+
+  maxAcceptedInvitations: number;
+
+  acceptedInvitationCount: number;
+}
 
 export type EventRegistrationType =
   | 'free'
@@ -173,6 +197,14 @@ export interface EventRecordBase {
 
   registrationType: EventRegistrationType;
   registrationStatus: EventRegistrationStatus;
+
+  /**
+   * Missing fields preserve legacy behavior.
+   * Invitations require explicit enablement.
+   */
+  registrationAccess?: EventRegistrationAccess;
+
+  invitationSettings?: EventInvitationSettings;
 
   bannerUrl: string | null;
 
@@ -271,6 +303,12 @@ export interface EventTicketTypeBase {
   attendanceMode: EventAttendanceMode;
 
   status: EventTicketTypeStatus;
+
+  /**
+   * Legacy tickets without access are public.
+   * Private tickets must never be publicly projected.
+   */
+  access?: EventTicketAccess;
 
   salesStartAt: Timestamp | null;
   salesEndAt: Timestamp | null;
@@ -562,6 +600,12 @@ export type EventAuditAction =
   | 'payment_submitted'
   | 'payment_verified'
   | 'payment_rejected'
+  | 'payment_reminder_requested'
+  | 'invitation_settings_updated'
+  | 'invitation_created'
+  | 'invitation_accepted'
+  | 'invitation_revoked'
+  | 'invitation_renewed'
   | 'ticket_issued'
   | 'ticket_revoked'
   | 'ticket_checked_in'

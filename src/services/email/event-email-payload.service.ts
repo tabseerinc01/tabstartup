@@ -14,9 +14,19 @@ import {
   EVENT_COLLECTIONS,
 } from '@/lib/event-types';
 
-import type {
-  EventEmailOutboxRecord,
-} from '@/lib/event-email-types';
+import {
+  isEventInvitationEmailJob,
+  type AnyEventEmailOutboxRecord,
+  type EventInvitationEmailOutboxRecord,
+} from '@/lib/event-invitation-email-types';
+
+import {
+  buildEventInvitationEmailTemplate,
+} from './event-invitation-email-template.service';
+
+import {
+  checkEventInvitationEmailEligibility,
+} from './event-invitation-email-eligibility.service';
 
 import {
   buildEventEmailTemplate,
@@ -54,7 +64,7 @@ const MINIMUM_LEASE_REMAINING_MS =
  * Never perform provider calls here.
  */
 export async function prepareClaimedEmailPayload(
-  job: EventEmailOutboxRecord,
+  job: AnyEventEmailOutboxRecord,
   leaseToken: string
 ): Promise<EventEmailPayloadResult> {
   if (!isEventEmailEnabled()) {
@@ -62,7 +72,13 @@ export async function prepareClaimedEmailPayload(
   }
 
   const rendered =
-    buildEventEmailTemplate(job.templateInput);
+    isEventInvitationEmailJob(job)
+      ? buildEventInvitationEmailTemplate(
+          job.templateInput
+        )
+      : buildEventEmailTemplate(
+          job.templateInput
+        );
 
   const payload: TransactionalEmailInput = {
     to: job.recipientEmail,
@@ -163,12 +179,61 @@ export async function prepareClaimedEmailPayload(
       if (
         current.recipientEmail !== job.recipientEmail ||
         current.idempotencyKey !== job.idempotencyKey ||
+        current.eventId !== job.eventId ||
+        current.type !== job.type ||
+        current.trigger !== job.trigger ||
+        current.orderId !== job.orderId ||
         JSON.stringify(current.templateInput) !==
           JSON.stringify(job.templateInput)
       ) {
         return requireReview(
           'EMAIL_JOB_PAYLOAD_CHANGED'
         );
+      }
+
+      if (isEventInvitationEmailJob(job)) {
+        if (
+          current.invitationId !== job.invitationId ||
+          current.tokenVersion !== job.tokenVersion
+        ) {
+          return requireReview(
+            'INVITATION_EMAIL_JOB_CHANGED'
+          );
+        }
+
+        // Recheck canonical invitation state
+        // immediately before delivery.
+        //
+        // All reads must finish before writes.
+
+        const eligibility =
+          await checkEventInvitationEmailEligibility(
+            tx,
+            adminDb,
+            current as EventInvitationEmailOutboxRecord,
+            now
+          );
+
+        if (!eligibility.eligible) {
+          return requireReview(
+            'INVITATION_EMAIL_ELIGIBILITY_CHANGED'
+          );
+        }
+
+        if (
+          current.leaseExpiresAt.toMillis() <=
+            Date.now() + MINIMUM_LEASE_REMAINING_MS
+        ) {
+          return { status: 'lease_lost' };
+        }
+
+        if (
+          job.templateInput.expiresAtMs <= Date.now()
+        ) {
+          return requireReview(
+            'INVITATION_EMAIL_EXPIRED_BEFORE_DELIVERY'
+          );
+        }
       }
 
       const previousHash =

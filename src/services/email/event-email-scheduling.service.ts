@@ -320,3 +320,46 @@ export function buildExpiredRegistrationEmailJobs(
     ),
   ];
 }
+
+
+/**
+ * One manual payment reminder per order.
+ *
+ * The admin service must enforce authorization,
+ * canonical order eligibility and duplicate protection
+ * before creating this outbox record.
+ */
+export function buildAdminPaymentReminderJob(
+  context: EventEmailContext
+): QueueEventEmailInput {
+  const { event, order, now } = context;
+
+  if (
+    event.eventId !== order.eventId ||
+    (
+      event.status !== 'published' &&
+      event.status !== 'ongoing'
+    ) ||
+    event.cancelledAt !== null ||
+    !(event.endsAt instanceof Timestamp) ||
+    event.endsAt.toMillis() <= now.toMillis() ||
+    order.paymentRequired !== true ||
+    order.status !== 'awaiting_payment' ||
+    !(order.expiresAt instanceof Timestamp) ||
+    order.expiresAt.toMillis() <= now.toMillis() ||
+    order.paidAt !== null ||
+    order.successfulPaymentId !== null
+  ) {
+    throw new Error(
+      'ORDER_NOT_ELIGIBLE_FOR_PAYMENT_REMINDER'
+    );
+  }
+
+  return buildJob(
+    context,
+    'payment_reminder',
+    'admin_reminder',
+    'manual_initial',
+    now
+  );
+}

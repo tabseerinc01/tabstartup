@@ -204,6 +204,7 @@ function TicketCard({
     event.registrationStatus === 'open';
 
   const canRegister =
+    event.registrationAccess !== 'invite_only' &&
     registrationEnabled &&
     ticket.availability === 'available';
 
@@ -410,6 +411,14 @@ export default async function EventDetailsPage({
                 </Badge>
               </div>
 
+              {event.registrationAccess === 'invite_only' && (
+                <div className="mb-4">
+                  <Badge variant="secondary">
+                    Invitation Only
+                  </Badge>
+                </div>
+              )}
+
               <h1 className="break-words text-3xl font-extrabold tracking-tight md:text-5xl">
                 {event.title}
               </h1>
@@ -527,11 +536,34 @@ export default async function EventDetailsPage({
               </h2>
 
               <p className="mb-6 mt-2 text-sm text-muted-foreground">
-                Explore available ticket categories
-                and attendance options.
+                {event.registrationAccess === 'invite_only'
+                  ? 'Attendance is available to invited guests only.'
+                  : 'Explore available ticket categories and attendance options.'}
+
+                {event.registrationAccess === 'public_and_invitation' && (
+                  <span className="mt-2 block">
+                    Invited guests should register using their
+                    personal invitation link.
+                  </span>
+                )}
               </p>
 
-              {tickets.length > 0 ? (
+              {event.registrationAccess === 'invite_only' ? (
+                <div className="rounded-2xl border bg-card p-8 text-center">
+                  <Ticket className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
+
+                  <h3 className="text-lg font-semibold">
+                    Registration by Invitation Only
+                  </h3>
+
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                    This event requires a personal invitation.
+                    If you have been invited, please use your
+                    invitation link and sign in with your
+                    verified invitation email.
+                  </p>
+                </div>
+              ) : tickets.length > 0 ? (
                 <div className="grid gap-5 sm:grid-cols-2">
                   {tickets.map(ticket => (
                     <TicketCard
@@ -656,9 +688,11 @@ export default async function EventDetailsPage({
 
               <div className="space-y-3 border-t pt-5">
                 <Badge variant="secondary">
-                  {registrationLabel(
-                    displayRegistrationStatus
-                  )}
+                  {event.registrationAccess === 'invite_only' &&
+                    displayRegistrationStatus !== 'closed' &&
+                    displayRegistrationStatus !== 'paused'
+                    ? 'Invitation Only'
+                    : registrationLabel(displayRegistrationStatus)}
                 </Badge>
 
                 {event.registrationOpensAtMs !== null && (
@@ -681,27 +715,65 @@ export default async function EventDetailsPage({
                   </p>
                 )}
 
-                <Button
-                  asChild
-                  className="w-full"
-                >
-                  <a href="#tickets">
-                    <Ticket className="mr-2 h-4 w-4" />
-                    View Tickets
-                  </a>
-                </Button>
+                {event.registrationAccess === 'invite_only' ? (
+                  <div className="rounded-xl border bg-muted/30 p-4">
+                    <p className="text-sm font-semibold">
+                      Registration by Invitation Only
+                    </p>
 
-                <Button
-                  disabled
-                  variant="outline"
-                  className="w-full"
-                >
-                  {displayRegistrationStatus === 'closed'
-                    ? 'Registration Closed'
-                    : displayRegistrationStatus === 'paused'
-                      ? 'Registration Paused'
-                      : 'Registration Coming Soon'}
-                </Button>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      Invited guests must use their personal
+                      invitation link.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      asChild
+                      className="w-full"
+                    >
+                      <a href="#tickets">
+                        <Ticket className="mr-2 h-4 w-4" />
+                        View Tickets
+                      </a>
+                    </Button>
+
+                    {displayRegistrationStatus === 'open' &&
+                    tickets.some(ticket =>
+                      ticket.availability === 'available'
+                    ) ? (
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="w-full"
+                      >
+                        <Link
+                          href={
+                            '/events/' +
+                            encodeURIComponent(event.slug) +
+                            '/register'
+                          }
+                        >
+                          Register Now
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button
+                        disabled
+                        variant="outline"
+                        className="w-full"
+                      >
+                        {displayRegistrationStatus === 'closed'
+                          ? 'Registration Closed'
+                          : displayRegistrationStatus === 'paused'
+                            ? 'Registration Paused'
+                            : displayRegistrationStatus === 'open'
+                              ? 'No Tickets Available'
+                              : 'Registration Coming Soon'}
+                      </Button>
+                    )}
+                  </>
+                )}
               </div>
 
               <div className="flex items-center gap-2 border-t pt-4 text-xs text-muted-foreground">

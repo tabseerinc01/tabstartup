@@ -69,6 +69,11 @@ export interface PublicEventProjection {
   registrationType:
     EventRecord['registrationType'];
 
+  registrationAccess?:
+    | 'public'
+    | 'invite_only'
+    | 'public_and_invitation';
+
   registrationStatus:
     EventRecord['registrationStatus'];
 
@@ -306,6 +311,16 @@ function assertPublicEventFields(
       'mixed',
     ]),
     'registrationType'
+  );
+
+  assertPublicField(
+    event.registrationAccess === undefined ||
+    isPublicEnum(event.registrationAccess, [
+      'public',
+      'invite_only',
+      'public_and_invitation',
+    ]),
+    'registrationAccess'
   );
 
   assertPublicField(
@@ -755,6 +770,9 @@ export function buildPublicEventProjection(
     registrationType:
       event.registrationType,
 
+    registrationAccess:
+      event.registrationAccess ?? 'public',
+
     registrationStatus:
       status === 'completed' ||
       nowMs >= endsAtMs ||
@@ -933,6 +951,33 @@ export function buildPublicTicketProjection(
   assertValidProjectionTime(nowMs);
 
   if (!canProjectPublicEvent(event)) {
+    return null;
+  }
+
+  /**
+   * Invitation-only tickets are canonical,
+   * server-managed records.
+   *
+   * Never expose them through public projections.
+   * Missing access preserves legacy public tickets.
+   * Unknown access values fail closed.
+   */
+  if (
+    ticket.access !== undefined &&
+    ticket.access !== 'public'
+  ) {
+    return null;
+  }
+
+  /**
+   * Invitation-only registration must not
+   * advertise publicly available tickets.
+   */
+  if (
+    event.registrationAccess !== undefined &&
+    event.registrationAccess !== 'public' &&
+    event.registrationAccess !== 'public_and_invitation'
+  ) {
     return null;
   }
 

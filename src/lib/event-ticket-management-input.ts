@@ -177,6 +177,43 @@ export function buildTicketConfiguration(
     'registrationType'
   );
 
+  const access =
+    data.access === undefined
+      ? 'public'
+      : data.access;
+
+  requireField(
+    access === 'public' ||
+      access === 'invite_only',
+    'access'
+  );
+
+  if (access === 'invite_only') {
+    requireField(
+      event.registrationAccess === 'invite_only' ||
+        event.registrationAccess === 'public_and_invitation',
+      'registrationAccess'
+    );
+
+    requireField(
+      event.invitationSettings?.enabled === true &&
+        event.invitationSettings.allowComplimentary === true,
+      'invitationSettings'
+    );
+
+    requireField(
+      pricing.pricingType === 'free',
+      'pricingType'
+    );
+  } else {
+    requireField(
+      event.registrationAccess === undefined ||
+        event.registrationAccess === 'public' ||
+        event.registrationAccess === 'public_and_invitation',
+      'registrationAccess'
+    );
+  }
+
   const capacity = integer(
     data.capacity,
     'capacity',
@@ -193,6 +230,13 @@ export function buildTicketConfiguration(
       capacity
     )
   );
+
+  if (access === 'invite_only') {
+    requireField(
+      maxPerOrder === 1,
+      'maxPerOrder'
+    );
+  }
 
   const salesStartAt = optionalDate(
     data.salesStartAtMs,
@@ -285,6 +329,7 @@ export function buildTicketConfiguration(
 
     attendanceMode,
     status,
+    access,
 
     ...pricing,
 
@@ -349,6 +394,38 @@ export function assertTicketAllocation(
     offline: 0,
   };
 
+  let complimentaryCapacity = 0;
+
+  const registrationAccess =
+    event.registrationAccess === undefined
+      ? 'public'
+      : event.registrationAccess;
+
+  requireField(
+    registrationAccess === 'public' ||
+      registrationAccess === 'invite_only' ||
+      registrationAccess === 'public_and_invitation',
+    'registrationAccess'
+  );
+
+  const invitationSettings =
+    event.invitationSettings;
+
+  if (registrationAccess !== 'public') {
+    requireField(
+      invitationSettings?.enabled === true &&
+        invitationSettings.allowComplimentary === true &&
+        Number.isSafeInteger(
+          invitationSettings.maxAcceptedInvitations
+        ) &&
+        invitationSettings.maxAcceptedInvitations > 0 &&
+        invitationSettings.maxAcceptedInvitations <=
+          event.capacity.online + event.capacity.offline &&
+        invitationSettings.acceptedInvitationCount === 0,
+      'invitationSettings'
+    );
+  }
+
   for (const configuration of configurations) {
     const {
       ticketType,
@@ -409,9 +486,57 @@ export function assertTicketAllocation(
       'maxPerOrder'
     );
 
+    const access =
+      ticketType.access === undefined
+        ? 'public'
+        : ticketType.access;
+
+    requireField(
+      access === 'public' ||
+        access === 'invite_only',
+      'ticketAccess'
+    );
+
+    if (access === 'invite_only') {
+      requireField(
+        registrationAccess === 'invite_only' ||
+          registrationAccess === 'public_and_invitation',
+        'registrationAccess'
+      );
+
+      requireField(
+        invitationSettings?.enabled === true &&
+          invitationSettings.allowComplimentary === true,
+        'invitationSettings'
+      );
+
+      requireField(
+        ticketType.pricingType === 'free' &&
+          ticketType.maxPerOrder === 1,
+        'complimentaryTicket'
+      );
+
+      complimentaryCapacity += inventory.capacity;
+    } else {
+      requireField(
+        registrationAccess !== 'invite_only',
+        'ticketAccess'
+      );
+    }
+
     totals[ticketType.attendanceMode] +=
       inventory.capacity;
   }
+
+  requireField(
+    complimentaryCapacity <=
+      (
+        registrationAccess === 'public'
+          ? 0
+          : invitationSettings?.maxAcceptedInvitations ?? 0
+      ),
+    'invitationCapacityExceeded'
+  );
 
   requireField(
     totals.online <= event.capacity.online,

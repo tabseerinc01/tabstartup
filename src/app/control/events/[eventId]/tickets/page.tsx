@@ -35,6 +35,7 @@ import {
 
 type AttendanceMode = 'online' | 'offline';
 type PricingType = 'free' | 'paid';
+type TicketAccess = 'public' | 'invite_only';
 
 interface TicketForm {
   key: string;
@@ -43,6 +44,7 @@ interface TicketForm {
   benefits: string;
   attendanceMode: AttendanceMode;
   pricingType: PricingType;
+  access: TicketAccess;
   usdPrice: string;
   bdtPrice: string;
   capacity: string;
@@ -60,6 +62,7 @@ interface SavedTicket {
     benefits: string[];
     attendanceMode: AttendanceMode;
     pricingType: PricingType;
+    access?: TicketAccess;
     price: {
       usdAmountMinor: number;
       bdtAmountMinor: number;
@@ -128,7 +131,13 @@ function newTicket(
       (event.mode === 'offline'
         ? 'offline'
         : 'online'),
+    access:
+      event.registrationAccess === 'invite_only'
+        ? 'invite_only'
+        : 'public',
+
     pricingType:
+      event.registrationAccess === 'invite_only' ||
       event.registrationType === 'free'
         ? 'free'
         : 'paid',
@@ -154,6 +163,7 @@ function restoreTicket(
     benefits: ticket.benefits.join('\n'),
     attendanceMode: ticket.attendanceMode,
     pricingType: ticket.pricingType,
+    access: ticket.access ?? 'public',
     usdPrice: minorToPrice(
       ticket.price.usdAmountMinor
     ),
@@ -324,6 +334,31 @@ export default function AdminEventTicketsPage() {
     );
   }
 
+  function updateTicketAccess(
+    key: string,
+    access: TicketAccess
+  ) {
+    setTickets(current =>
+      current.map(ticket =>
+        ticket.key !== key
+          ? ticket
+          : {
+              ...ticket,
+              access,
+
+              ...(access === 'invite_only'
+                ? {
+                    pricingType: 'free' as const,
+                    usdPrice: '0.00',
+                    bdtPrice: '0.00',
+                    maxPerOrder: '1',
+                  }
+                : {}),
+            }
+      )
+    );
+  }
+
   const totals = tickets.reduce(
     (result, ticket) => {
       const quantity =
@@ -387,6 +422,28 @@ export default function AdminEventTicketsPage() {
         );
       }
 
+      const registrationAccess =
+        event.registrationAccess ?? 'public';
+
+      const invitationCapacity = tickets.reduce(
+        (total, ticket) =>
+          total + (
+            ticket.access === 'invite_only'
+              ? Number(ticket.capacity)
+              : 0
+          ),
+        0
+      );
+
+      if (
+        invitationCapacity >
+        (event.invitationSettings?.maxAcceptedInvitations ?? 0)
+      ) {
+        throw new Error(
+          'Invitation ticket capacity exceeds the event invitation limit.'
+        );
+      }
+
       const payload = tickets.map(
         (ticket, index) => {
           const capacity =
@@ -409,7 +466,39 @@ export default function AdminEventTicketsPage() {
             );
           }
 
+          if (
+            ticket.access !== 'public' &&
+            ticket.access !== 'invite_only'
+          ) {
+            throw new Error('Invalid ticket access.');
+          }
+
+          if (
+            ticket.access === 'invite_only' &&
+            (
+              registrationAccess === 'public' ||
+              !event.invitationSettings?.enabled ||
+              !event.invitationSettings?.allowComplimentary ||
+              ticket.pricingType !== 'free' ||
+              maxPerOrder !== 1
+            )
+          ) {
+            throw new Error(
+              'Invitation tickets must be complimentary with a maximum of one per order.'
+            );
+          }
+
+          if (
+            ticket.access === 'public' &&
+            registrationAccess === 'invite_only'
+          ) {
+            throw new Error(
+              'Public tickets are not allowed for invitation-only events.'
+            );
+          }
+
           return {
+            access: ticket.access,
             name: ticket.name.trim(),
             description: ticket.description,
             benefits: ticket.benefits
@@ -727,6 +816,7 @@ export default function AdminEventTicketsPage() {
                   <select
                     className={fieldClass}
                     value={ticket.pricingType}
+                    disabled={ticket.access === 'invite_only'}
                     onChange={e =>
                       updateTicket(
                         ticket.key,
@@ -739,14 +829,67 @@ export default function AdminEventTicketsPage() {
                       <option value="free">Free</option>
                     )}
 
-                    {event.registrationType !== 'free' && (
-                      <option value="paid">Paid</option>
-                    )}
+                    {event.registrationType !== 'free' &&
+                      ticket.access !== 'invite_only' && (
+                        <option value="paid">Paid</option>
+                      )}
                   </select>
                 </label>
               </div>
 
+              <label className="block space-y-1">
+                <span className="text-sm font-medium">
+                  Ticket Access
+                </span>
+
+                <select
+                  className={fieldClass}
+                  value={ticket.access}
+                  onChange={e =>
+                    updateTicketAccess(
+                      ticket.key,
+                      e.target.value as TicketAccess
+                    )
+                  }
+                >
+                  <option
+                    value="public"
+                    disabled={
+                      event.registrationAccess === 'invite_only'
+                    }
+                  >
+                    Public Ticket
+                  </option>
+
+                  <option
+                    value="invite_only"
+                    disabled={
+                      (event.registrationAccess ?? 'public') === 'public' ||
+                      !event.invitationSettings?.enabled ||
+                      !event.invitationSettings?.allowComplimentary
+                    }
+                  >
+                    Invitation Only
+                  </option>
+                </select>
+              </label>
+
+              {ticket.access === 'invite_only' && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                  <p className="font-semibold">
+                    Complimentary Invitation Ticket
+                  </p>
+
+                  <p className="mt-1">
+                    Hidden from public registration.
+                    Available only to authorized invited guests.
+                    No payment is required.
+                  </p>
+                </div>
+              )}
+
               {ticket.pricingType === 'paid' && (
+
                 <div className="grid gap-4 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
                   <label className="space-y-1">
                     <span className="text-sm font-medium">
@@ -838,7 +981,12 @@ export default function AdminEventTicketsPage() {
                     className={fieldClass}
                     type="number"
                     min={1}
-                    max={event.maxTicketsPerOrder}
+                    max={
+                      ticket.access === 'invite_only'
+                        ? 1
+                        : event.maxTicketsPerOrder
+                    }
+                    disabled={ticket.access === 'invite_only'}
                     required
                     value={ticket.maxPerOrder}
                     onChange={e =>

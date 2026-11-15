@@ -231,6 +231,10 @@ service cloud.firestore {
     }
 
     // Event email jobs are server-only.
+    match /eventInvitations/{document=**} {
+      allow read, write: if false;
+    }
+
     match /eventEmailOutbox/{document=**} {
       allow read, write: if false;
     }

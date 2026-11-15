@@ -67,13 +67,15 @@ function EventCard({
     '/events/' + encodeURIComponent(event.slug);
 
   const registrationLabel =
-    event.registrationStatus === 'open'
-      ? 'Registration coming soon'
-      : event.registrationStatus === 'closed'
-        ? 'Registration closed'
-        : event.registrationStatus === 'paused'
-          ? 'Registration paused'
-          : 'Registration coming soon';
+    event.registrationStatus === 'closed'
+      ? 'Registration closed'
+      : event.registrationStatus === 'paused'
+        ? 'Registration paused'
+        : event.registrationAccess === 'invite_only'
+          ? 'Invitation Only'
+          : event.registrationStatus === 'open'
+            ? 'View Registration Details'
+            : 'Registration coming soon';
 
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-lg">

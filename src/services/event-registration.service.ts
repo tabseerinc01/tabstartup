@@ -86,6 +86,26 @@ import {
   queueEventEmailsSafely,
 } from '@/services/email/event-email-outbox.service';
 
+import {
+  EVENT_INVITATION_SCHEMA_VERSION,
+  type EventInvitation,
+} from '@/lib/event-invitation-types';
+
+import {
+  isValidEventInvitationId,
+  isValidEventInvitationToken,
+  verifyEventInvitationToken,
+} from '@/lib/event-invitation-token';
+
+import {
+  buildEventTicketId,
+} from '@/services/event-ticket-issuance.service';
+
+interface InvitationRegistrationAccess {
+  invitationId: string;
+  token: string;
+}
+
 export interface RegistrationAccessContext {
   idToken: string | null;
 
@@ -254,6 +274,46 @@ export async function createEventRegistration(
   rawInput: unknown,
   access: RegistrationAccessContext
 ): Promise<EventRegistrationResult> {
+  return executeEventRegistration(
+    rawInput,
+    access,
+    null
+  );
+}
+
+export async function acceptEventInvitation(
+  rawInput: unknown,
+  idToken: string,
+  invitationId: string,
+  token: string
+): Promise<EventRegistrationResult> {
+  ensure(
+    process.env.EVENT_REGISTRATION_ENABLED === 'true' &&
+      typeof idToken === 'string' &&
+      idToken.length > 0 &&
+      isValidEventInvitationId(invitationId) &&
+      isValidEventInvitationToken(token),
+    'ACCOUNT_ACCESS_DENIED'
+  );
+
+  return executeEventRegistration(
+    rawInput,
+    {
+      idToken,
+      guestSessionSecret: null,
+    },
+    {
+      invitationId,
+      token,
+    }
+  );
+}
+
+async function executeEventRegistration(
+  rawInput: unknown,
+  access: RegistrationAccessContext,
+  invitationAccess: InvitationRegistrationAccess | null
+): Promise<EventRegistrationResult> {
   const input =
     validateEventRegistrationInput(rawInput);
 
@@ -290,14 +350,41 @@ export async function createEventRegistration(
       `guest:${sha256(access.guestSessionSecret)}`;
   }
 
+  if (invitationAccess !== null) {
+    ensure(
+      purchaserUid !== null &&
+        input.quantity === 1 &&
+        input.participants.length === 1 &&
+        input.currency === null &&
+        input.expectedUnitAmountMinor === 0 &&
+        input.participants[0].email === input.purchaserEmail,
+      'REGISTRATION_DATA_INVALID'
+    );
+  }
+
   const requestId = sha256(
-    JSON.stringify([
-      'event-registration-v1',
-      actorScope,
-      input.eventSlug,
-      input.idempotencyKey,
-    ])
+    JSON.stringify(
+      invitationAccess === null
+        ? [
+            'event-registration-v1',
+            actorScope,
+            input.eventSlug,
+            input.idempotencyKey,
+          ]
+        : [
+            'event-invitation-registration-v1',
+            invitationAccess.invitationId,
+            actorScope,
+          ]
+    )
   );
+
+  const invitationRef =
+    invitationAccess === null
+      ? null
+      : adminDb
+          .collection(EVENT_COLLECTIONS.invitations)
+          .doc(invitationAccess.invitationId);
 
   const requestHash = sha256(
     JSON.stringify(input)
@@ -412,6 +499,47 @@ export async function createEventRegistration(
       );
     }
 
+    let invitation: EventInvitation | null = null;
+
+    if (
+      invitationAccess !== null &&
+      invitationRef !== null
+    ) {
+      const invitationSnap =
+        await tx.get(invitationRef);
+
+      ensure(
+        invitationSnap.exists,
+        'ACCOUNT_ACCESS_DENIED'
+      );
+
+      invitation =
+        invitationSnap.data() as EventInvitation;
+
+      ensure(
+        invitation.schemaVersion ===
+          EVENT_INVITATION_SCHEMA_VERSION &&
+        invitation.invitationId ===
+          invitationAccess.invitationId &&
+        invitation.organizerType === 'platform' &&
+        invitation.organizerId ===
+          PLATFORM_EVENT_ORGANIZER_ID &&
+        invitation.pricingType === 'complimentary' &&
+        invitation.ticketTypeId === input.ticketTypeId &&
+        verifiedEmail !== null &&
+        invitation.guestEmail === verifiedEmail &&
+        verifyEventInvitationToken(
+          invitationAccess.token,
+          invitation.tokenHash
+        ) &&
+        (
+          invitation.status === 'pending' ||
+          invitation.status === 'accepted'
+        ),
+        'ACCOUNT_ACCESS_DENIED'
+      );
+    }
+
     // Idempotent request replay.
 
     const requestSnap = await tx.get(requestRef);
@@ -465,6 +593,27 @@ export async function createEventRegistration(
         existingOrder.purchaserEmail === input.purchaserEmail,
         'REGISTRATION_DATA_INVALID'
       );
+
+      if (invitation !== null) {
+        ensure(
+          invitation.status === 'accepted' &&
+          invitation.acceptedByUid === purchaserUid &&
+          invitation.acceptedAt instanceof Timestamp &&
+          invitation.eventId === existingOrder.eventId &&
+          invitation.orderId === existingOrder.orderId &&
+          existing.registrationIds.length === 1 &&
+          invitation.registrationId ===
+            existing.registrationIds[0] &&
+          invitation.ticketId ===
+            buildEventTicketId(existing.registrationIds[0]) &&
+          existingOrder.paymentRequired === false &&
+          existingOrder.items.length === 1 &&
+          existingOrder.items[0].ticketTypeId ===
+            invitation.ticketTypeId &&
+          existingOrder.items[0].quantity === 1,
+          'REGISTRATION_REQUEST_CONFLICT'
+        );
+      }
 
       return resultFromOrder(
         existingOrder,
@@ -559,6 +708,66 @@ export async function createEventRegistration(
       'EVENT_DATA_INVALID'
     );
 
+    /**
+     * Public registration must never consume private invitations.
+     *
+     * Missing access fields preserve legacy public behavior.
+     * Unknown access values fail closed.
+     */
+    if (invitation === null) {
+      ensure(
+        event.registrationAccess === undefined ||
+        event.registrationAccess === 'public' ||
+        event.registrationAccess === 'public_and_invitation',
+        'REGISTRATION_NOT_OPEN'
+      );
+
+      ensure(
+        ticket.access === undefined ||
+        ticket.access === 'public',
+        'TICKET_UNAVAILABLE'
+      );
+    } else {
+      const settings = event.invitationSettings;
+
+      ensure(
+        invitation.eventId === eventId &&
+        invitation.status === 'pending' &&
+        invitation.expiresAt instanceof Timestamp &&
+        invitation.expiresAt.toMillis() > Date.now() &&
+        invitation.acceptedByUid === null &&
+        invitation.acceptedAt === null &&
+        invitation.orderId === null &&
+        invitation.registrationId === null &&
+        invitation.ticketId === null &&
+        invitation.revokedAt === null &&
+        event.cancelledAt === null &&
+        (
+          event.registrationAccess === 'invite_only' ||
+          event.registrationAccess === 'public_and_invitation'
+        ) &&
+        settings?.enabled === true &&
+        settings.allowComplimentary === true &&
+        Number.isSafeInteger(settings.maxAcceptedInvitations) &&
+        settings.maxAcceptedInvitations > 0 &&
+        Number.isSafeInteger(settings.acceptedInvitationCount) &&
+        settings.acceptedInvitationCount >= 0 &&
+        settings.acceptedInvitationCount <
+          settings.maxAcceptedInvitations,
+        'REGISTRATION_NOT_OPEN'
+      );
+
+      ensure(
+        ticket.access === 'invite_only' &&
+        ticket.pricingType === 'free' &&
+        ticket.price.usdAmountMinor === 0 &&
+        ticket.price.bdtAmountMinor === 0 &&
+        ticket.maxPerOrder === 1 &&
+        ticket.attendanceMode === invitation.attendanceMode,
+        'TICKET_UNAVAILABLE'
+      );
+    }
+
     ensure(
       publicEventSnap.exists &&
       publicEventSnap.data()?.eventId === eventId &&
@@ -568,12 +777,19 @@ export async function createEventRegistration(
       'REGISTRATION_NOT_OPEN'
     );
 
-    ensure(
-      publicTicketSnap.exists &&
-      publicTicketSnap.data()?.eventId === eventId &&
-      publicTicketSnap.data()?.ticketTypeId === ticket.ticketTypeId,
-      'TICKET_UNAVAILABLE'
-    );
+    if (invitation === null) {
+      ensure(
+        publicTicketSnap.exists &&
+        publicTicketSnap.data()?.eventId === eventId &&
+        publicTicketSnap.data()?.ticketTypeId === ticket.ticketTypeId,
+        'TICKET_UNAVAILABLE'
+      );
+    } else {
+      ensure(
+        !publicTicketSnap.exists,
+        'EVENT_DATA_INVALID'
+      );
+    }
 
     const now = Timestamp.now();
 
@@ -610,6 +826,14 @@ export async function createEventRegistration(
 
     const paid = plan.payment.paymentRequired;
 
+    if (invitation !== null) {
+      ensure(
+        !paid &&
+        input.quantity === 1,
+        'INVALID_TICKET_PRICE'
+      );
+    }
+
     const nextInventory: EventTicketInventory = {
       eventId,
 
@@ -634,14 +858,17 @@ export async function createEventRegistration(
     );
 
     const nextProjection =
-      buildPublicTicketProjection(
-        event,
-        ticket,
-        nextInventory,
-        now.toMillis()
-      );
+      invitation === null
+        ? buildPublicTicketProjection(
+            event,
+            ticket,
+            nextInventory,
+            now.toMillis()
+          )
+        : null;
 
     ensure(
+      invitation !== null ||
       nextProjection !== null,
       'EVENT_DATA_INVALID'
     );
@@ -800,6 +1027,17 @@ export async function createEventRegistration(
       createdAt: now,
     };
 
+    if (invitation !== null) {
+      ensure(
+        invitation.expiresAt.toMillis() > Date.now() &&
+        purchaserUid !== null &&
+        registrations.length === 1 &&
+        registrations[0].participant.uid === purchaserUid &&
+        !paid,
+        'REGISTRATION_NOT_OPEN'
+      );
+    }
+
     // All reads are complete before writes begin.
 
     queueEventEmailsSafely(
@@ -850,7 +1088,39 @@ export async function createEventRegistration(
 
     tx.set(inventoryRef, nextInventory);
 
-    tx.set(publicTicketRef, nextProjection);
+    if (nextProjection !== null) {
+      tx.set(publicTicketRef, nextProjection);
+    }
+
+    if (
+      invitation !== null &&
+      invitationRef !== null
+    ) {
+      const settings = event.invitationSettings!;
+
+      tx.update(invitationRef, {
+        status: 'accepted',
+        acceptedByUid: purchaserUid,
+        acceptedAt: now,
+        orderId: orderRef.id,
+        registrationId: registrations[0].registrationId,
+        ticketId: buildEventTicketId(
+          registrations[0].registrationId
+        ),
+        updatedAt: now,
+      });
+
+      tx.update(eventRef, {
+        'invitationSettings.acceptedInvitationCount':
+          settings.acceptedInvitationCount + 1,
+      });
+
+      writeAudit(
+        'invitation_accepted',
+        'event_invitation',
+        invitation.invitationId
+      );
+    }
 
     function writeAudit(
       action: EventAuditAction,

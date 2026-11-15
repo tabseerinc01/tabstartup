@@ -98,6 +98,18 @@ export interface AdminEventSummary {
   status: string;
   visibility: string;
   registrationType: 'free' | 'paid' | 'mixed';
+
+  registrationAccess?:
+    | 'public'
+    | 'invite_only'
+    | 'public_and_invitation';
+
+  invitationSettings?: {
+    enabled: boolean;
+    allowComplimentary: boolean;
+    maxAcceptedInvitations: number;
+    acceptedInvitationCount: number;
+  };
   registrationStatus: string;
   bannerUrl: string | null;
   timezone: string;

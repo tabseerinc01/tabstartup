@@ -492,8 +492,57 @@ export async function updateOfficialEvent(
 
     await assertCurrentEventAdmin(tx, context, idToken);
 
+    if (
+      current.invitationSettings !== undefined &&
+      current.invitationSettings.acceptedInvitationCount !== 0
+    ) {
+      throw new EventManagementError(
+        'EVENT_DATA_INVALID'
+      );
+    }
+
+    let draftInput = input;
+
+    if (
+      input !== null &&
+      typeof input === 'object' &&
+      !Array.isArray(input)
+    ) {
+      const data = input as Record<string, unknown>;
+
+      if (
+        !Object.prototype.hasOwnProperty.call(
+          data,
+          'registrationAccess'
+        ) &&
+        !Object.prototype.hasOwnProperty.call(
+          data,
+          'invitationSettings'
+        )
+      ) {
+        const settings = current.invitationSettings;
+
+        draftInput = {
+          ...data,
+
+          registrationAccess:
+            current.registrationAccess ?? 'public',
+
+          invitationSettings: {
+            enabled: settings?.enabled ?? false,
+
+            allowComplimentary:
+              settings?.allowComplimentary ?? false,
+
+            maxAcceptedInvitations:
+              settings?.maxAcceptedInvitations ?? 0,
+          },
+        };
+      }
+    }
+
     const draft = buildEventDraft(
-      input,
+      draftInput,
       eventId,
       context.uid,
       Date.now()
@@ -1189,7 +1238,54 @@ export async function publishOfficialEvent(
           item !== null
       );
 
-    if (publicTickets.length === 0) {
+    const invitationOnlyReady =
+      published.registrationAccess === 'invite_only' &&
+      published.invitationSettings?.enabled === true &&
+      published.invitationSettings.allowComplimentary === true &&
+      Number.isSafeInteger(
+        published.invitationSettings.maxAcceptedInvitations
+      ) &&
+      published.invitationSettings.maxAcceptedInvitations > 0 &&
+      configurations.some(
+        item =>
+          item.ticketType.access === 'invite_only' &&
+          item.ticketType.status === 'active' &&
+          item.ticketType.pricingType === 'free' &&
+          item.inventory.capacity > 0
+      );
+
+    if (
+      published.registrationAccess ===
+        'public_and_invitation' &&
+      (
+        published.invitationSettings?.enabled !== true ||
+        published.invitationSettings.allowComplimentary !== true ||
+        !configurations.some(
+          item =>
+            item.ticketType.access === 'invite_only' &&
+            item.ticketType.status === 'active' &&
+            item.ticketType.pricingType === 'free' &&
+            item.inventory.capacity > 0
+        ) ||
+        !configurations.some(
+          item =>
+            (
+              item.ticketType.access === undefined ||
+              item.ticketType.access === 'public'
+            ) &&
+            item.ticketType.status === 'active'
+        )
+      )
+    ) {
+      throw new EventManagementError(
+        'EVENT_PUBLICATION_NOT_READY'
+      );
+    }
+
+    if (
+      publicTickets.length === 0 &&
+      !invitationOnlyReady
+    ) {
       throw new EventManagementError(
         'EVENT_PUBLICATION_NOT_READY'
       );
@@ -1463,10 +1559,41 @@ export async function updateOfficialEventRegistration(
       }
     }
 
+    const invitationOnly =
+      current.registrationAccess === 'invite_only';
+
+    const invitationOnlyReady =
+      invitationOnly &&
+      current.invitationSettings?.enabled === true &&
+      current.invitationSettings.allowComplimentary === true &&
+      Number.isSafeInteger(
+        current.invitationSettings.maxAcceptedInvitations
+      ) &&
+      current.invitationSettings.maxAcceptedInvitations > 0 &&
+      configurations.some(
+        item =>
+          item.ticketType.access === 'invite_only' &&
+          item.ticketType.status === 'active' &&
+          item.ticketType.pricingType === 'free' &&
+          item.inventory.capacity > 0
+      );
+
+    const publicRegistrationReady =
+      configurations.some(
+        item =>
+          item.ticketType.status === 'active' &&
+          (
+            item.ticketType.access === undefined ||
+            item.ticketType.access === 'public'
+          )
+      );
+
     if (
       target === 'open' &&
-      !configurations.some(
-        item => item.ticketType.status === 'active'
+      (
+        invitationOnly
+          ? !invitationOnlyReady
+          : !publicRegistrationReady
       )
     ) {
       throw new EventManagementError(
@@ -1530,7 +1657,10 @@ export async function updateOfficialEventRegistration(
     // Never overwrite another event's ticket document.
 
     if (
-      publicTickets.length === 0 ||
+      (
+        publicTickets.length === 0 &&
+        !invitationOnly
+      ) ||
       publicTickets.length !==
         existingPublicTickets.size
     ) {

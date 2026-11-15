@@ -14,8 +14,11 @@ import {
 
 import {
   EVENT_EMAIL_SCHEMA_VERSION,
-  type EventEmailOutboxRecord,
 } from '@/lib/event-email-types';
+
+import type {
+  AnyEventEmailOutboxRecord,
+} from '@/lib/event-invitation-email-types';
 
 import {
   EVENT_EMAIL_MAX_ATTEMPTS,
@@ -109,7 +112,7 @@ export async function finalizeEventEmailAttempt(
       }
 
       const job =
-        snap.data() as EventEmailOutboxRecord;
+        snap.data() as AnyEventEmailOutboxRecord;
 
       const now = Timestamp.now();
       const nowMs = now.toMillis();

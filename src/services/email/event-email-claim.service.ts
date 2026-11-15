@@ -16,8 +16,16 @@ import {
 
 import {
   EVENT_EMAIL_SCHEMA_VERSION,
-  type EventEmailOutboxRecord,
 } from '@/lib/event-email-types';
+
+import {
+  isEventInvitationEmailJob,
+  type AnyEventEmailOutboxRecord,
+} from '@/lib/event-invitation-email-types';
+
+import {
+  checkEventInvitationEmailEligibility,
+} from './event-invitation-email-eligibility.service';
 
 import {
   checkEventEmailEligibility,
@@ -39,7 +47,7 @@ export const EVENT_EMAIL_RETRY_WINDOW_MS =
 export type EventEmailClaimResult =
   | {
       status: 'claimed';
-      job: EventEmailOutboxRecord;
+      job: AnyEventEmailOutboxRecord;
       leaseToken: string;
     }
   | {
@@ -99,7 +107,7 @@ export async function claimEventEmailJob(
       }
 
       const job =
-        snap.data() as EventEmailOutboxRecord;
+        snap.data() as AnyEventEmailOutboxRecord;
 
       const now = Timestamp.now();
       const nowMs = now.toMillis();
@@ -224,12 +232,19 @@ export async function claimEventEmailJob(
       }
 
       const eligibility =
-        await checkEventEmailEligibility(
-          tx,
-          adminDb,
-          job,
-          now
-        );
+        isEventInvitationEmailJob(job)
+          ? await checkEventInvitationEmailEligibility(
+              tx,
+              adminDb,
+              job,
+              now
+            )
+          : await checkEventEmailEligibility(
+              tx,
+              adminDb,
+              job,
+              now
+            );
 
       // All transaction reads complete.
 
@@ -252,7 +267,7 @@ export async function claimEventEmailJob(
         return { status: 'skipped' };
       }
 
-      const claimedJob: EventEmailOutboxRecord = {
+      const claimedJob: AnyEventEmailOutboxRecord = {
         ...job,
 
         status: 'processing',

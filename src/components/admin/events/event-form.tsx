@@ -30,6 +30,13 @@ export interface EventFormValues {
   mode: 'online' | 'offline' | 'hybrid';
   visibility: 'public';
   registrationType: 'free' | 'paid' | 'mixed';
+
+  registrationAccess:
+    | 'public'
+    | 'invite_only'
+    | 'public_and_invitation';
+
+  maxAcceptedInvitations: string;
   timezone: string;
   startsAt: string;
   endsAt: string;
@@ -63,6 +70,8 @@ export const defaultEventFormValues: EventFormValues = {
   mode: 'online',
   visibility: 'public',
   registrationType: 'paid',
+  registrationAccess: 'public',
+  maxAcceptedInvitations: '0',
   timezone: 'Asia/Dhaka',
   startsAt: '',
   endsAt: '',
@@ -267,6 +276,45 @@ export function buildEventFormPayload(
   const nullable = (value: string) =>
     value.trim() || null;
 
+  const invitationsEnabled =
+    values.registrationAccess !== 'public';
+
+  const totalCapacity =
+    (hasOnline ? Number(values.onlineCapacity) : 0) +
+    (hasOffline ? Number(values.offlineCapacity) : 0);
+
+  const invitationLimit = invitationsEnabled
+    ? Number(values.maxAcceptedInvitations)
+    : 0;
+
+  if (
+    invitationsEnabled &&
+    (
+      !Number.isSafeInteger(invitationLimit) ||
+      invitationLimit < 1 ||
+      invitationLimit > totalCapacity
+    )
+  ) {
+    throw new Error(
+      'Invitation limit must be between 1 and total event capacity.'
+    );
+  }
+
+  if (
+    (
+      values.registrationAccess === 'invite_only' &&
+      values.registrationType !== 'free'
+    ) ||
+    (
+      invitationsEnabled &&
+      values.registrationType === 'paid'
+    )
+  ) {
+    throw new Error(
+      'Complimentary invitations require a free or mixed event.'
+    );
+  }
+
   return {
     title: values.title,
     slug: values.slug,
@@ -277,6 +325,15 @@ export function buildEventFormPayload(
     mode: values.mode,
     visibility: values.visibility,
     registrationType: values.registrationType,
+
+    registrationAccess:
+      values.registrationAccess,
+
+    invitationSettings: {
+      enabled: invitationsEnabled,
+      allowComplimentary: invitationsEnabled,
+      maxAcceptedInvitations: invitationLimit,
+    },
     timezone: values.timezone,
 
     startsAtMs: zonedDateToMillis(
@@ -313,7 +370,9 @@ export function buildEventFormPayload(
       Number(values.maxTicketsPerOrder),
 
     allowGuestRegistration:
-      values.allowGuestRegistration,
+      values.registrationAccess === 'invite_only'
+        ? false
+        : values.allowGuestRegistration,
 
     venue: hasOffline
       ? {
@@ -706,6 +765,82 @@ export function EventForm({
           title="Registration Settings"
           icon={<Users className="h-5 w-5" />}
         >
+          <Field
+            label="Registration Access"
+            hint="Controls who can register. Event visibility is configured separately."
+          >
+            <select
+              className={fieldClass}
+              value={values.registrationAccess}
+              onChange={event => {
+                const access = event.target.value as
+                  EventFormValues['registrationAccess'];
+
+                setValues(current => ({
+                  ...current,
+                  registrationAccess: access,
+
+                  registrationType:
+                    access === 'invite_only'
+                      ? 'free'
+                      : access === 'public_and_invitation' &&
+                          current.registrationType === 'paid'
+                        ? 'mixed'
+                        : current.registrationType,
+
+                  maxAcceptedInvitations:
+                    access === 'public'
+                      ? '0'
+                      : Number(current.maxAcceptedInvitations) > 0
+                        ? current.maxAcceptedInvitations
+                        : '1',
+
+                  allowGuestRegistration:
+                    access === 'invite_only'
+                      ? false
+                      : current.allowGuestRegistration,
+                }));
+              }}
+            >
+              <option value="public">
+                Public Registration
+              </option>
+
+              <option value="invite_only">
+                Invitation Only
+              </option>
+
+              <option value="public_and_invitation">
+                Public &amp; Invitation
+              </option>
+            </select>
+          </Field>
+
+          {values.registrationAccess !== 'public' && (
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-800">
+                Complimentary Invitations
+              </p>
+
+              <p className="text-xs text-slate-600">
+                Invited guests must sign in using their
+                verified invitation email. Private tickets
+                are not available through public registration.
+              </p>
+
+              {input(
+                'maxAcceptedInvitations',
+                'Maximum Accepted Invitations',
+                {
+                  type: 'number',
+                  min: 1,
+                  required: true,
+                  hint: 'Must not exceed total event capacity.',
+                }
+              )}
+            </div>
+          )}
+
           <Field label="Registration Type">
             <select
               className={fieldClass}
@@ -718,8 +853,15 @@ export function EventForm({
               }
             >
               <option value="free">Free Event</option>
-              <option value="paid">Paid Event</option>
-              <option value="mixed">Free & Paid Tickets</option>
+              {values.registrationAccess === 'public' && (
+                <option value="paid">Paid Event</option>
+              )}
+
+              {values.registrationAccess !== 'invite_only' && (
+                <option value="mixed">
+                  Free &amp; Paid Tickets
+                </option>
+              )}
             </select>
           </Field>
 
@@ -757,7 +899,13 @@ export function EventForm({
           <label className="flex items-center gap-3 rounded-lg border p-3 text-sm">
             <input
               type="checkbox"
-              checked={values.allowGuestRegistration}
+              disabled={
+                values.registrationAccess === 'invite_only'
+              }
+              checked={
+                values.registrationAccess !== 'invite_only' &&
+                values.allowGuestRegistration
+              }
               onChange={event =>
                 set(
                   'allowGuestRegistration',

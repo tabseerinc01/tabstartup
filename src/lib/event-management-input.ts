@@ -350,6 +350,103 @@ export function buildEventDraft(
     timestampMs(nowMs, 'nowMs')
   );
 
+  const registrationAccess = enumValue(
+    data.registrationAccess === undefined
+      ? 'public'
+      : data.registrationAccess,
+    [
+      'public',
+      'invite_only',
+      'public_and_invitation',
+    ] as const,
+    'registrationAccess'
+  );
+
+  const invitationInput = asObject(
+    data.invitationSettings === undefined
+      ? {}
+      : data.invitationSettings,
+    'invitationSettings'
+  );
+
+  // Never accept server-managed counters from clients.
+
+  requireField(
+    Object.keys(invitationInput).every(
+      key =>
+        key === 'enabled' ||
+        key === 'allowComplimentary' ||
+        key === 'maxAcceptedInvitations'
+    ),
+    'invitationSettings'
+  );
+
+  const invitationEnabled =
+    invitationInput.enabled === undefined
+      ? false
+      : invitationInput.enabled;
+
+  const allowComplimentary =
+    invitationInput.allowComplimentary === undefined
+      ? false
+      : invitationInput.allowComplimentary;
+
+  const maxAcceptedInvitations =
+    invitationInput.maxAcceptedInvitations === undefined
+      ? 0
+      : invitationInput.maxAcceptedInvitations;
+
+  requireField(
+    typeof invitationEnabled === 'boolean',
+    'invitationSettings.enabled'
+  );
+
+  requireField(
+    typeof allowComplimentary === 'boolean',
+    'invitationSettings.allowComplimentary'
+  );
+
+  const totalEventCapacity =
+    (capacity.online as number) +
+    (capacity.offline as number);
+
+  requireField(
+    typeof maxAcceptedInvitations === 'number' &&
+      Number.isSafeInteger(maxAcceptedInvitations) &&
+      maxAcceptedInvitations >= 0 &&
+      maxAcceptedInvitations <= totalEventCapacity,
+    'invitationSettings.maxAcceptedInvitations'
+  );
+
+  if (registrationAccess === 'public') {
+    requireField(
+      invitationEnabled === false &&
+        allowComplimentary === false &&
+        maxAcceptedInvitations === 0,
+      'invitationSettings'
+    );
+  } else {
+    requireField(
+      invitationEnabled === true &&
+        allowComplimentary === true &&
+        maxAcceptedInvitations > 0,
+      'invitationSettings'
+    );
+
+    requireField(
+      data.registrationType === 'free' ||
+        data.registrationType === 'mixed',
+      'registrationType'
+    );
+
+    if (registrationAccess === 'invite_only') {
+      requireField(
+        data.registrationType === 'free',
+        'registrationType'
+      );
+    }
+  }
+
   const event: EventRecord = {
     eventId,
     slug,
@@ -396,6 +493,17 @@ export function buildEventDraft(
     ),
 
     registrationStatus: 'not_open',
+
+    registrationAccess,
+
+    invitationSettings: {
+      enabled: invitationEnabled,
+      allowComplimentary,
+      maxAcceptedInvitations,
+
+      // Draft events cannot have accepted invitations.
+      acceptedInvitationCount: 0,
+    },
 
     bannerUrl: nullableUrl(
       data.bannerUrl,

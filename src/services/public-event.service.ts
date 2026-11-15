@@ -37,6 +37,7 @@ export type PublicEventSummary = Pick<
   | 'mode'
   | 'status'
   | 'registrationType'
+  | 'registrationAccess'
   | 'registrationStatus'
   | 'bannerUrl'
   | 'timezone'
@@ -200,6 +201,12 @@ function readPublicEvent(
       value.registrationType !== 'mixed'
     ) ||
     (
+      value.registrationAccess !== undefined &&
+      value.registrationAccess !== 'public' &&
+      value.registrationAccess !== 'invite_only' &&
+      value.registrationAccess !== 'public_and_invitation'
+    ) ||
+    (
       value.registrationStatus !== 'not_open' &&
       value.registrationStatus !== 'open' &&
       value.registrationStatus !== 'paused' &&
@@ -314,6 +321,10 @@ function readPublicEvent(
 
     status: value.status,
     registrationType: value.registrationType,
+
+    registrationAccess:
+      value.registrationAccess ?? 'public',
+
     registrationStatus,
 
     bannerUrl: value.bannerUrl,
@@ -357,6 +368,10 @@ function toSummary(
     mode: event.mode,
     status: event.status,
     registrationType: event.registrationType,
+
+    registrationAccess:
+      event.registrationAccess ?? 'public',
+
     registrationStatus: event.registrationStatus,
     bannerUrl: event.bannerUrl,
     timezone: event.timezone,

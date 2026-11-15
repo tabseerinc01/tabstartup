@@ -151,6 +151,14 @@ function restoreEventForm(
     mode: event.mode,
     visibility: 'public',
     registrationType: event.registrationType,
+
+    registrationAccess:
+      event.registrationAccess ?? 'public',
+
+    maxAcceptedInvitations:
+      String(
+        event.invitationSettings?.maxAcceptedInvitations ?? 0
+      ),
     timezone: event.timezone,
 
     startsAt: localDate(
@@ -783,6 +791,28 @@ export default function AdminEventDetailsPage() {
                 : 'View Tickets'}
             </Link>
           )}
+
+          {!editing && (
+            <Link
+              href={pagePath + '/participants'}
+              className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium"
+            >
+              <Users className="h-4 w-4" />
+              Manage Participants
+            </Link>
+          )}
+
+          {!editing &&
+            event.invitationSettings?.enabled &&
+            event.registrationAccess !== 'public' && (
+              <Link
+                href={pagePath + '/invitations'}
+                className="inline-flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium"
+              >
+                <Users className="h-4 w-4" />
+                Manage Invitations
+              </Link>
+            )}
         </div>
       </div>
 

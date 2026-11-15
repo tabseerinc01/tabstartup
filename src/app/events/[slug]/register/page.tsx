@@ -50,7 +50,11 @@ export default async function RegisterEventPage({
     ticket => ticket.availability === 'available'
   );
 
+  const invitationOnly =
+    event.registrationAccess === 'invite_only';
+
   const enabled =
+    !invitationOnly &&
     isEventRegistrationEnabled() &&
     event.registrationStatus === 'open' &&
     availableTickets.length > 0;
@@ -74,7 +78,9 @@ export default async function RegisterEventPage({
         </h1>
 
         <p className="mt-3 text-muted-foreground">
-          Choose your ticket and provide participant details.
+          {invitationOnly
+            ? 'This event requires a personal invitation.'
+            : 'Choose your ticket and provide participant details.'}
         </p>
       </header>
 
@@ -91,12 +97,15 @@ export default async function RegisterEventPage({
       ) : (
         <section className="rounded-2xl border bg-card p-8">
           <h2 className="text-xl font-semibold">
-            Registration is not available
+            {invitationOnly
+              ? 'Registration by Invitation Only'
+              : 'Registration is not available'}
           </h2>
 
           <p className="mt-3 text-muted-foreground">
-            Please check the event page for registration
-            availability and updates.
+            {invitationOnly
+              ? 'Please use your personal invitation link and sign in with your verified invitation email.'
+              : 'Please check the event page for registration availability and updates.'}
           </p>
 
           <Link
