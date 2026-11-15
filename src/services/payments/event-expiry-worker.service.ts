@@ -30,7 +30,8 @@ const PAGE_SIZE = 10;
 
 const MAX_RECORDS_PER_CATEGORY = 50;
 
-const MAX_WORKER_DURATION_MS = 40_000;
+// Soft execution budget for external cron scheduling.
+const MAX_WORKER_DURATION_MS = 15_000;
 
 export function isEventExpiryWorkerEnabled():
   boolean {
