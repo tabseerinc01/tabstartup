@@ -87,6 +87,15 @@ const errorMessages: Record<string, string> = {
 
   REGISTRATION_TEMPORARILY_UNAVAILABLE:
     'Registration is temporarily unavailable.',
+
+  PAYMENT_PROVIDER_UNAVAILABLE:
+    'bKash payment is temporarily unavailable. Please try again later. No payment is required until your order is created.',
+
+  PAYMENT_UNAVAILABLE:
+    'Payment is unavailable for this registration.',
+
+  PAYMENT_SERVICE_UNAVAILABLE:
+    'The payment service is temporarily unavailable. Please try again later.',
 };
 
 function emptyParticipant(): Participant {
@@ -151,7 +160,7 @@ export function EventRegistrationForm({
   );
 
   const [currency, setCurrency] =
-    useState<Currency>('USD');
+    useState<Currency>('BDT');
 
   const [quantity, setQuantity] =
     useState(1);
@@ -510,7 +519,7 @@ export function EventRegistrationForm({
                       )
                     }
                   >
-                    <option value="USD">USD</option>
+                    {/* USD disabled for bKash-first launch. */}
                     <option value="BDT">BDT</option>
                   </select>
                 </label>

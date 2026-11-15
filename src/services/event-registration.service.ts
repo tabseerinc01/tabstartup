@@ -66,6 +66,14 @@ import {
   buildPublicTicketProjection,
 } from '@/lib/event-public-projection';
 
+import {
+  requirePaymentProviderEnabled,
+} from '@/services/payments/payment-provider.service';
+
+import {
+  getBkashManualConfiguration,
+} from '@/services/payments/bkash-manual-provider.service';
+
 export interface RegistrationAccessContext {
   idToken: string | null;
 
@@ -565,6 +573,28 @@ export async function createEventRegistration(
       purchaserUid,
       now
     );
+
+    /**
+     * Validate payment availability before
+     * reserving inventory or creating orders.
+     *
+     * Free registration does not require
+     * an enabled payment provider.
+     */
+    if (plan.payment.paymentRequired) {
+      requirePaymentProviderEnabled(
+        plan.payment.provider
+      );
+
+      if (
+        plan.payment.provider === 'bkash_manual'
+      ) {
+        await getBkashManualConfiguration(
+          tx,
+          adminDb
+        );
+      }
+    }
 
     const paid = plan.payment.paymentRequired;
 

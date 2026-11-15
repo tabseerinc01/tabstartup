@@ -244,21 +244,13 @@ function TicketCard({
           <>
             <p className="text-3xl font-extrabold">
               {formatMoney(
-                ticket.price.usdAmountMinor,
-                'USD'
-              )}
-            </p>
-
-            <p className="mt-2 text-lg font-semibold text-muted-foreground">
-              or{' '}
-              {formatMoney(
                 ticket.price.bdtAmountMinor,
                 'BDT'
               )}
             </p>
 
             <p className="mt-2 text-xs text-muted-foreground">
-              USD or BDT ticket price
+              Pay with bKash
             </p>
           </>
         )}

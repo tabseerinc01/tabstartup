@@ -15,6 +15,10 @@ import {
 import { useAuth } from '@/firebase';
 
 import {
+  EventBkashPayment,
+} from './event-bkash-payment';
+
+import {
   CheckCircle2,
   Clock3,
   AlertCircle,
@@ -506,7 +510,7 @@ export function EventOrderStatus({
 
             <p className="mt-2 text-muted-foreground">
               {elapsed
-                ? 'The payment deadline has passed. Refresh to check the latest order status.'
+                ? 'The payment deadline has passed. If you already sent money, do not pay again. Refresh your order or contact support with your order reference and Transaction ID.'
                 : message.description}
             </p>
           </div>
@@ -627,24 +631,17 @@ export function EventOrderStatus({
               </button>
             </div>
           ) : (
-            <div className="rounded-xl border p-5">
-              <p className="font-semibold">
-                bKash — BDT Payment
-              </p>
-
-              <p className="mt-2 text-sm text-muted-foreground">
-                Manual payment verification.
-                Payment instructions are not available yet.
-              </p>
-
-              <button
-                type="button"
-                disabled
-                className="mt-5 w-full rounded-lg bg-primary px-4 py-3 font-medium text-primary-foreground opacity-50"
-              >
-                bKash payment unavailable
-              </button>
-            </div>
+            <EventBkashPayment
+              key={order.orderId + ':' + (user?.uid ?? 'guest')}
+              auth={auth}
+              user={user}
+              orderId={order.orderId}
+              amountMinor={order.totalAmountMinor}
+              expiresAtMs={order.expiresAtMs}
+              onSubmitted={() =>
+                setRefresh(value => value + 1)
+              }
+            />
           )}
 
           <p className="flex items-start gap-2 text-xs text-muted-foreground">

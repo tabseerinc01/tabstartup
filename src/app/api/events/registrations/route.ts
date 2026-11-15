@@ -9,8 +9,11 @@ import {
   requireRegistrationEnabled,
   readRegistrationApiBody,
   registrationApiSuccess,
-  registrationApiFailure,
 } from '@/lib/event-registration-api';
+
+import {
+  eventPaymentApiFailure,
+} from '@/lib/event-payment-api';
 
 import {
   createEventRegistration,
@@ -54,6 +57,6 @@ export async function POST(
       result.replayed ? 200 : 201
     );
   } catch (error) {
-    return registrationApiFailure(error);
+    return eventPaymentApiFailure(error);
   }
 }
