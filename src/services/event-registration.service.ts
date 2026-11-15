@@ -74,6 +74,10 @@ import {
   getBkashManualConfiguration,
 } from '@/services/payments/bkash-manual-provider.service';
 
+import {
+  issueConfirmedEventTickets,
+} from '@/services/event-ticket-issuance.service';
+
 export interface RegistrationAccessContext {
   idToken: string | null;
 
@@ -789,6 +793,31 @@ export async function createEventRegistration(
     };
 
     // All reads are complete before writes begin.
+
+    if (!paid) {
+      issueConfirmedEventTickets(
+        tx,
+        adminDb,
+        {
+          eventId,
+
+          orderId: orderRef.id,
+
+          ticketTypeId: ticket.ticketTypeId,
+
+          expectedQuantity: input.quantity,
+
+          registrations,
+
+          actor: {
+            type: 'participant',
+            uid: purchaserUid,
+          },
+
+          now,
+        }
+      );
+    }
 
     tx.create(orderRef, order);
 

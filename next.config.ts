@@ -1,6 +1,13 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    '/api/events/orders/**/tickets/**/pdf': [
+      './src/assets/pdf-fonts/NotoSansBengali.ttf',
+      './public/brand/tabstartup-logo.png',
+    ],
+  },
+
   /* config options here */
   typescript: {
     ignoreBuildErrors: true,

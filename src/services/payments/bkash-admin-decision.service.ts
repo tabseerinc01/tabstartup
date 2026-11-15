@@ -1,6 +1,10 @@
 import 'server-only';
 
 import {
+  issueConfirmedEventTickets,
+} from '@/services/event-ticket-issuance.service';
+
+import {
   Timestamp,
 } from 'firebase-admin/firestore';
 
@@ -342,6 +346,13 @@ export async function decideAdminBkashPayment(
         !canTransitionPaymentOrderStatus(
           order.status,
           orderStatus
+        ) ||
+        (
+          approving &&
+          !canTransitionPaymentOrderStatus(
+            'paid',
+            'fulfilled'
+          )
         )
       ) {
         return conflict();
@@ -508,6 +519,43 @@ export async function decideAdminBkashPayment(
 
         // Approval reads complete.
 
+        const confirmedRegistrations =
+          review.registrations.map(
+            registration => ({
+              ...registration,
+
+              status: 'confirmed' as const,
+
+              confirmedAt: now,
+
+              updatedAt: now,
+            })
+          );
+
+        issueConfirmedEventTickets(
+          tx,
+          adminDb,
+          {
+            eventId: order.eventId,
+
+            orderId: order.orderId,
+
+            ticketTypeId: item.ticketTypeId,
+
+            expectedQuantity: item.quantity,
+
+            registrations:
+              confirmedRegistrations,
+
+            actor: {
+              type: 'admin',
+              uid: actorUid,
+            },
+
+            now,
+          }
+        );
+
         tx.set(
           refs.inventory,
           nextInventory
@@ -554,23 +602,27 @@ export async function decideAdminBkashPayment(
         });
 
         tx.update(refs.paymentOrder, {
-          status: 'paid',
+          status: 'fulfilled',
 
           successfulPaymentId:
             payment.paymentId,
 
           paidAt: now,
+
+          fulfilledAt: now,
 
           updatedAt: now,
         });
 
         tx.update(refs.order, {
-          status: 'paid',
+          status: 'fulfilled',
 
           successfulPaymentId:
             payment.paymentId,
 
           paidAt: now,
+
+          fulfilledAt: now,
 
           updatedAt: now,
         });

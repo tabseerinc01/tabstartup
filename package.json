@@ -51,6 +51,7 @@
     "lucide-react": "^0.475.0",
     "next": "15.5.29",
     "patch-package": "^8.0.0",
+    "pdfmake": "0.2.23",
     "react": "^19.2.1",
     "react-day-picker": "^9.11.3",
     "react-dom": "^19.2.1",
@@ -63,6 +64,7 @@
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.1",
     "@types/node": "^20",
+    "@types/pdfmake": "0.2.13",
     "@types/react": "^19.2.1",
     "@types/react-dom": "^19.2.1",
     "firebase-tools": "^15.34.2",
