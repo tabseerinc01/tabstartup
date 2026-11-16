@@ -35,8 +35,26 @@ import type {
   BkashAdminDecisionResult,
 } from '@/services/payments/bkash-admin-decision.service';
 
+import type {
+  BkashRecoveryPaymentSummary,
+} from '@/services/payments/bkash-recovery-projection.service';
+
+import type {
+  BkashAdminRecoveryDetails,
+} from '@/services/payments/bkash-recovery-admin-details.service';
+
+type PaymentQueue = 'pending' | 'recovery';
+
+type PaymentSummary =
+  | BkashPendingPaymentSummary
+  | BkashRecoveryPaymentSummary;
+
+type PaymentDetails =
+  | BkashAdminPaymentDetails
+  | BkashAdminRecoveryDetails;
+
 type PendingList = {
-  items: BkashPendingPaymentSummary[];
+  items: PaymentSummary[];
   limit: number;
   hasMore: boolean;
 };
@@ -112,11 +130,19 @@ function VerificationDashboard({
     ReturnType<typeof useUser>['user']
   >;
 }) {
+  const [queue, setQueue] =
+    useState<PaymentQueue>('pending');
+
+  const expectedStatus =
+    queue === 'recovery'
+      ? 'requires_review'
+      : 'pending_verification';
+
   const [list, setList] =
     useState<PendingList | null>(null);
 
   const [details, setDetails] =
-    useState<BkashAdminPaymentDetails | null>(null);
+    useState<PaymentDetails | null>(null);
 
   const [loading, setLoading] =
     useState(false);
@@ -198,7 +224,7 @@ function VerificationDashboard({
       const result =
         await paymentAdminRequest<PendingList>(
           user,
-          endpoint + '/pending',
+          endpoint + '/' + queue,
           {
             signal: controller.signal,
           }
@@ -212,7 +238,7 @@ function VerificationDashboard({
         result.items.some(item =>
           !item ||
           !validId(item.submissionId) ||
-          item.status !== 'pending_verification' ||
+          item.status !== expectedStatus ||
           item.currency !== 'BDT' ||
           item.provider !== 'bkash_manual' ||
           !Number.isSafeInteger(item.amountMinor) ||
@@ -266,9 +292,10 @@ function VerificationDashboard({
 
     try {
       const result =
-        await paymentAdminRequest<BkashAdminPaymentDetails>(
+        await paymentAdminRequest<PaymentDetails>(
           user,
-          endpoint + '/' + submissionId,
+          endpoint + '/' + submissionId +
+            (queue === 'recovery' ? '/recovery' : ''),
           {
             signal: controller.signal,
           }
@@ -277,14 +304,27 @@ function VerificationDashboard({
       if (
         !result ||
         result.submissionId !== submissionId ||
-        result.status !== 'pending_verification' ||
+        result.status !== expectedStatus ||
         result.currency !== 'BDT' ||
         result.provider !== 'bkash_manual' ||
         !Number.isSafeInteger(result.amountMinor) ||
         result.amountMinor <= 0 ||
         !Array.isArray(result.participants) ||
         !Array.isArray(result.approvalBlockers) ||
-        typeof result.canApprove !== 'boolean'
+        typeof result.canApprove !== 'boolean' ||
+        (
+          result.status === 'requires_review' &&
+          (
+            (
+              result.recoveryType !== 'late_submission' &&
+              result.recoveryType !== 'review_timeout'
+            ) ||
+            !Number.isSafeInteger(result.availableQuantity) ||
+            result.availableQuantity < 0 ||
+            !Number.isSafeInteger(result.releasedAtMs) ||
+            result.releasedAtMs <= 0
+          )
+        )
       ) {
         throw new Error(
           'INVALID_PAYMENT_DETAILS_RESPONSE'
@@ -327,7 +367,27 @@ function VerificationDashboard({
 
       decisionRequestRef.current?.abort();
     };
-  }, [user]);
+  }, [user, queue]);
+
+  function changeQueue(next: PaymentQueue) {
+    if (
+      next === queue ||
+      saving ||
+      decisionLock.current
+    ) {
+      return;
+    }
+
+    requestRef.current?.abort();
+
+    setList(null);
+    setDetails(null);
+    setError('');
+    setNotice('');
+    resetForm();
+
+    setQueue(next);
+  }
 
   const amountValid =
     /^\d{1,12}(\.\d{1,2})?$/.test(
@@ -361,8 +421,14 @@ function VerificationDashboard({
     details !== null &&
     details.canApprove &&
     details.approvalBlockers.length === 0 &&
-    details.reviewDeadlineAtMs !== null &&
-    details.reviewDeadlineAtMs > Date.now();
+    (
+      details.status === 'requires_review'
+        ? details.availableQuantity >= details.quantity
+        : (
+            details.reviewDeadlineAtMs !== null &&
+            details.reviewDeadlineAtMs > Date.now()
+          )
+    );
 
   const canSubmit =
     details !== null &&
@@ -391,6 +457,7 @@ function VerificationDashboard({
 
     if (
       decision === 'approve' &&
+      details.status === 'pending_verification' &&
       (
         details.reviewDeadlineAtMs === null ||
         details.reviewDeadlineAtMs <= Date.now()
@@ -406,8 +473,16 @@ function VerificationDashboard({
 
     const accepted = window.confirm(
       decision === 'approve'
-        ? 'Approve this verified payment and confirm the registrations?'
-        : 'Reject this payment and release its reserved tickets? Confirm that no funds were received.'
+        ? (
+            details.status === 'requires_review'
+              ? 'Approve this recovered payment using currently available ticket capacity?'
+              : 'Approve this verified payment and confirm the registrations?'
+          )
+        : (
+            details.status === 'requires_review'
+              ? 'Reject this recovery submission? Confirm that no funds were received. Its reservation has already been released.'
+              : 'Reject this payment and release its reserved tickets? Confirm that no funds were received.'
+          )
     );
 
     if (!accepted) {
@@ -461,7 +536,11 @@ function VerificationDashboard({
           endpoint +
             '/' +
             details.submissionId +
-            '/decision',
+            (
+              details.status === 'requires_review'
+                ? '/recovery/decision'
+                : '/decision'
+            ),
           {
             method: 'POST',
             body: input,
@@ -561,6 +640,48 @@ function VerificationDashboard({
         </button>
       </div>
 
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          aria-pressed={queue === 'pending'}
+          disabled={saving}
+          className={
+            buttonClass +
+            (queue === 'pending'
+              ? ' bg-primary text-primary-foreground'
+              : '')
+          }
+          onClick={() => changeQueue('pending')}
+        >
+          Pending Verification
+        </button>
+
+        <button
+          type="button"
+          aria-pressed={queue === 'recovery'}
+          disabled={saving}
+          className={
+            buttonClass +
+            (queue === 'recovery'
+              ? ' bg-primary text-primary-foreground'
+              : '')
+          }
+          onClick={() => changeQueue('recovery')}
+        >
+          Requires Review
+        </button>
+      </div>
+
+      {queue === 'recovery' && (
+        <div className="rounded-xl border p-4 text-sm">
+          Review late payment submissions and expired
+          verification requests. Approval requires
+          verified funds and available ticket capacity.
+          If funds were received but approval is blocked,
+          do not reject the payment.
+        </div>
+      )}
+
       <div className="flex items-start gap-3 rounded-xl border p-4">
         <ShieldCheck className="mt-1 h-5 w-5 shrink-0" />
 
@@ -603,7 +724,9 @@ function VerificationDashboard({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-xl border bg-card p-5">
               <p className="text-sm text-muted-foreground">
-                Pending payments shown
+                {queue === 'recovery'
+                  ? 'Recovery payments shown'
+                  : 'Pending payments shown'}
               </p>
 
               <p className="mt-2 text-2xl font-bold">
@@ -631,7 +754,7 @@ function VerificationDashboard({
 
           {list.hasMore && (
             <p className="text-sm text-muted-foreground">
-              Showing a limited batch of pending payments.
+              Showing a limited batch of payments.
               Refresh after processing this batch.
             </p>
           )}
@@ -693,7 +816,9 @@ function VerificationDashboard({
                       colSpan={5}
                       className="p-8 text-center text-muted-foreground"
                     >
-                      No pending bKash payments.
+                      {queue === 'recovery'
+                        ? 'No bKash recovery submissions.'
+                        : 'No pending bKash payments.'}
                     </td>
                   </tr>
                 )}
@@ -749,6 +874,26 @@ function VerificationDashboard({
               ['Payment expiry', dateTime(details.paymentWindowExpiresAtMs)],
               ['Review deadline', dateTime(details.reviewDeadlineAtMs)],
               ['Event status', details.eventStatus],
+              ...(
+                details.status === 'requires_review'
+                  ? [
+                      [
+                        'Recovery type',
+                        details.recoveryType === 'late_submission'
+                          ? 'Late submission'
+                          : 'Review timeout',
+                      ],
+                      [
+                        'Available tickets',
+                        String(details.availableQuantity),
+                      ],
+                      [
+                        'Reservation released',
+                        dateTime(details.releasedAtMs),
+                      ],
+                    ]
+                  : []
+              ),
             ].map(([label, value]) => (
               <div key={label}>
                 <dt className="text-muted-foreground">
@@ -797,7 +942,9 @@ function VerificationDashboard({
 
               <p className="mt-2">
                 If funds were received, do not reject.
-                Escalate for manual recovery.
+                {details.status === 'requires_review'
+                  ? 'Manual refund resolution is required if fulfillment is impossible.'
+                  : 'Escalate for manual recovery.'}
               </p>
             </div>
           )}

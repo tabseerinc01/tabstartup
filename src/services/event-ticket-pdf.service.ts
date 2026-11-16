@@ -156,6 +156,7 @@ export async function generateEventTicketPdf(
       title: 'TabStartup Event Admission Ticket',
       author: 'TabStartup',
       subject: 'Event registration confirmation',
+      creationDate: new Date(input.issuedAtMs),
     },
 
     defaultStyle: {
@@ -322,9 +323,10 @@ export async function generateEventTicketPdf(
 
       {
         text:
-          'Present this ticket at the event. ' +
-          'Admission is subject to verification ' +
-          'of the current registration status.',
+          'This ticket is non-transferable and valid ' +
+          'only for the named participant. ' +
+          'Identity and registration status may be verified. ' +
+          'Each ticket permits one admission only.',
         fontSize: 9,
         color: '#475569',
       },

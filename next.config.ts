@@ -1,7 +1,17 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: [
+    'pdfmake',
+    '@foliojs-fork/pdfkit',
+    '@foliojs-fork/fontkit',
+  ],
+
   outputFileTracingIncludes: {
+    '/api/cron/event-email': [
+      './src/assets/pdf-fonts/NotoSansBengali.ttf',
+      './public/brand/tabstartup-logo.png',
+    ],
     '/api/events/orders/**/tickets/**/pdf': [
       './src/assets/pdf-fonts/NotoSansBengali.ttf',
       './public/brand/tabstartup-logo.png',

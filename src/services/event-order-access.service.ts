@@ -1,6 +1,26 @@
 import 'server-only';
 
 import {
+  readConfirmedEventTickets,
+} from '@/services/event-confirmed-ticket-reader.service';
+
+import {
+  readAuthorizedBkashRecoveryRecords,
+} from '@/services/payments/bkash-recovery-records.service';
+
+import {
+  validateBkashAccountSnapshot,
+} from '@/services/payments/bkash-manual-provider.service';
+
+import {
+  PaymentProviderError,
+} from '@/lib/payment-provider';
+
+import {
+  PAYMENT_COLLECTIONS,
+} from '@/lib/payment-types';
+
+import {
   createHash,
   timingSafeEqual,
 } from 'node:crypto';
@@ -28,15 +48,7 @@ import {
   EVENT_SCHEMA_VERSION,
   PLATFORM_EVENT_ORGANIZER_ID,
   type PersistedEventOrder,
-  type EventRecord,
-  type EventRegistration,
-  type EventRegistrationRequest,
-  type EventIssuedTicket,
 } from '@/lib/event-types';
-
-import {
-  buildEventTicketId,
-} from '@/services/event-ticket-issuance.service';
 
 import {
   isValidEventDocumentId,
@@ -385,297 +397,58 @@ export async function getAuthorizedEventOrder(
       const fulfilledAtMs =
         optionalMillis(order.fulfilledAt);
 
-      const tickets: Array<{
-        ticketId: string;
-        ticketNumber: string;
-        participantName: string;
-        ticketName: string;
-        attendanceMode: 'online' | 'offline';
-        status: 'issued' | 'checked_in';
-        issuedAtMs: number;
-      }> = [];
-
-      if (order.status === 'fulfilled') {
-        if (
-          fulfilledAtMs === null ||
-          !isValidEventDocumentId(
-            order.registrationRequestId
-          ) ||
-          (
-            order.paymentRequired &&
-            (
-              paidAtMs === null ||
-              !isValidEventDocumentId(
-                order.successfulPaymentId
-              )
+      const confirmedTicketData =
+        order.status === 'fulfilled'
+          ? await readConfirmedEventTickets(
+              tx,
+              adminDb,
+              order,
+              options
             )
-          )
-        ) {
-          return invalidOrder();
-        }
+          : null;
 
-        const requestRef = adminDb
-          .collection(
-            EVENT_COLLECTIONS.registrationRequests
-          )
-          .doc(order.registrationRequestId);
+      const tickets =
+        confirmedTicketData?.tickets ?? [];
 
-        const requestSnap =
-          await tx.get(requestRef);
+      const ticketEvent =
+        confirmedTicketData?.ticketEvent ?? null;
 
-        if (!requestSnap.exists) {
-          return invalidOrder();
-        }
-
-        const registrationRequest =
-          requestSnap.data() as
-            EventRegistrationRequest;
-
-        if (
-          registrationRequest.schemaVersion !==
-            EVENT_SCHEMA_VERSION ||
-          registrationRequest.requestId !==
-            requestRef.id ||
-          registrationRequest.eventId !==
-            order.eventId ||
-          registrationRequest.orderId !==
-            order.orderId ||
-          registrationRequest.purchaserUid !==
-            order.purchaserUid ||
-          !Array.isArray(
-            registrationRequest.registrationIds
-          ) ||
-          registrationRequest.registrationIds.length !==
-            item.quantity ||
-          new Set(
-            registrationRequest.registrationIds
-          ).size !== item.quantity ||
-          !registrationRequest.registrationIds.every(
-            id => isValidEventDocumentId(id)
-          )
-        ) {
-          return invalidOrder();
-        }
-
-        const registrationRefs =
-          registrationRequest.registrationIds.map(
-            id => adminDb
-              .collection(
-                EVENT_COLLECTIONS.registrations
-              )
-              .doc(id)
-          );
-
-        const ticketRefs =
-          registrationRequest.registrationIds.map(
-            id => adminDb
-              .collection(
-                EVENT_COLLECTIONS.tickets
-              )
-              .doc(buildEventTicketId(id))
-          );
-
-        const snapshots = await tx.getAll(
-          ...registrationRefs,
-          ...ticketRefs
-        );
-
-        for (
-          let index = 0;
-          index < item.quantity;
-          index++
-        ) {
-          const registrationSnap =
-            snapshots[index];
-
-          const ticketSnap =
-            snapshots[item.quantity + index];
-
-          if (
-            !registrationSnap.exists ||
-            !ticketSnap.exists
-          ) {
-            return invalidOrder();
-          }
-
-          const registration =
-            registrationSnap.data() as
-              EventRegistration;
-
-          const ticket =
-            ticketSnap.data() as
-              EventIssuedTicket;
-
-          if (
-            registration.registrationId !==
-              registrationRefs[index].id ||
-            registration.eventId !==
-              order.eventId ||
-            registration.orderId !==
-              order.orderId ||
-            registration.ticketTypeId !==
-              item.ticketTypeId ||
-            registration.attendanceMode !==
-              item.attendanceMode ||
-            registration.status !==
-              'confirmed' ||
-            !registration.participant ||
-            typeof registration.participant.fullName !==
-              'string' ||
-            !registration.participant.fullName.trim() ||
-            ticket.ticketId !==
-              ticketRefs[index].id ||
-            ticket.registrationId !==
-              registration.registrationId ||
-            ticket.eventId !== order.eventId ||
-            ticket.orderId !== order.orderId ||
-            ticket.ticketTypeId !==
-              item.ticketTypeId ||
-            ticket.attendeeUid !==
-              registration.participant.uid ||
-            ticket.attendanceMode !==
-              item.attendanceMode ||
-            (
-              ticket.status !== 'issued' &&
-              ticket.status !== 'checked_in'
-            ) ||
-            ticket.ticketNumber !==
-              'TS-' + ticket.ticketId
-                .slice('ticket_'.length)
-                .toUpperCase()
-          ) {
-            return invalidOrder();
-          }
-
-          const issuedAtMs =
-            optionalMillis(ticket.issuedAt);
-
-          const confirmedAtMs =
-            optionalMillis(
-              registration.confirmedAt
-            );
-
-          if (
-            issuedAtMs === null ||
-            confirmedAtMs === null ||
-            issuedAtMs !== confirmedAtMs ||
-            issuedAtMs !== fulfilledAtMs
-          ) {
-            return invalidOrder();
-          }
-
-          tickets.push({
-            ticketId: ticket.ticketId,
-
-            ticketNumber: ticket.ticketNumber,
-
-            participantName:
-              registration.participant.fullName,
-
-            ticketName: item.ticketName,
-
-            attendanceMode:
-              ticket.attendanceMode,
-
-            status: ticket.status,
-
-            issuedAtMs,
-          });
-        }
-      }
-
-      let ticketEvent: {
-        title: string;
-        startsAtMs: number;
-        endsAtMs: number;
-        timezone: string;
-        venue: string | null;
-      } | null = null;
+      let canRecoverPayment = false;
 
       if (
-        options.includeTicketEvent === true &&
-        order.status === 'fulfilled'
+        order.status === 'requires_review' &&
+        order.paymentRequired === true &&
+        order.provider === 'bkash_manual' &&
+        order.currency === 'BDT'
       ) {
-        const eventSnap = await tx.get(
-          adminDb
-            .collection(EVENT_COLLECTIONS.events)
-            .doc(order.eventId)
-        );
+        try {
+          const records =
+            await readAuthorizedBkashRecoveryRecords(
+              tx,
+              adminDb,
+              orderId,
+              order,
+              'bkash_manual'
+            );
 
-        if (!eventSnap.exists) {
-          return notFound();
-        }
-
-        const event =
-          eventSnap.data() as EventRecord;
-
-        if (
-          event.schemaVersion !==
-            EVENT_SCHEMA_VERSION ||
-          event.eventId !== order.eventId ||
-          event.organizerType !== 'platform' ||
-          event.organizerId !==
-            PLATFORM_EVENT_ORGANIZER_ID ||
-          !['published', 'ongoing', 'completed']
-            .includes(event.status) ||
-          event.cancelledAt !== null
-        ) {
-          throw new RegistrationApiError(
-            409,
-            'TICKET_UNAVAILABLE'
+          validateBkashAccountSnapshot(
+            records.payment.bkashAccountSnapshot
           );
-        }
 
-        const startsAtMs =
-          optionalMillis(event.startsAt);
+          const submission = await tx.get(
+            adminDb
+              .collection(PAYMENT_COLLECTIONS.manualSubmissions)
+              .doc(records.payment.paymentId)
+          );
 
-        const endsAtMs =
-          optionalMillis(event.endsAt);
-
-        if (
-          startsAtMs === null ||
-          endsAtMs === null ||
-          endsAtMs <= startsAtMs ||
-          typeof event.title !== 'string' ||
-          !event.title.trim() ||
-          typeof event.timezone !== 'string' ||
-          !event.timezone.trim()
-        ) {
-          return invalidOrder();
-        }
-
-        let venue: string | null = null;
-
-        if (item.attendanceMode === 'offline') {
-          if (!event.venue) {
-            return invalidOrder();
+          canRecoverPayment = !submission.exists;
+        } catch (error) {
+          if (!(error instanceof PaymentProviderError)) {
+            throw error;
           }
 
-          const parts = [
-            event.venue.name,
-            event.venue.address,
-            event.venue.city,
-            event.venue.countryCode,
-          ];
-
-          if (!parts.every(
-            value =>
-              typeof value === 'string' &&
-              value.trim().length > 0
-          )) {
-            return invalidOrder();
-          }
-
-          venue = parts.join(', ');
+          canRecoverPayment = false;
         }
-
-        ticketEvent = {
-          title: event.title,
-          startsAtMs,
-          endsAtMs,
-          timezone: event.timezone,
-          venue,
-        };
       }
 
       // Explicit response allowlist.
@@ -723,6 +496,8 @@ export async function getAuthorizedEventOrder(
         ...(options.includeTicketEvent === true
           ? { ticketEvent }
           : {}),
+
+        canRecoverPayment,
 
         paymentWindowElapsed:
           expiresAtMs !== null &&

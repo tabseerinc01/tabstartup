@@ -1121,6 +1121,299 @@ async function main() {
 
   pass('Confirmation email queued exactly once');
 
+  // L9C: Confirmed ticket PDF email attachments.
+
+  const {
+    readConfirmedEmailTicketInputs,
+    generateConfirmedEmailAttachments,
+  } = require(
+    '../src/services/email/event-ticket-attachment.service.ts'
+  );
+
+  const confirmedPdfInputs =
+    await adminDb.runTransaction(
+      tx => readConfirmedEmailTicketInputs(
+        tx,
+        adminDb,
+        confirmationEmail,
+        Timestamp.now()
+      ),
+      { readOnly: true }
+    );
+
+  assert.equal(confirmedPdfInputs.length, 1);
+
+  const pdfInput = confirmedPdfInputs[0];
+
+  assert.equal(
+    pdfInput.ticketNumber,
+    issuedTicket.ticketNumber
+  );
+
+  const pdfRegistration = await readRecord(
+    C.registrations,
+    issuedTicket.registrationId
+  );
+
+  assert.equal(
+    pdfInput.participantName,
+    pdfRegistration.participant.fullName
+  );
+
+  assert.equal(pdfInput.currency, 'BDT');
+  assert.equal(pdfInput.unitAmountMinor, 180000);
+  assert.equal(pdfInput.status, 'issued');
+
+  pass('Email PDF inputs match canonical admission ticket');
+
+  const pdfAttachments =
+    await generateConfirmedEmailAttachments(
+      confirmedPdfInputs
+    );
+
+  assert.equal(pdfAttachments.length, 1);
+
+  assert.equal(
+    pdfAttachments[0].filename,
+    'TabStartup-Ticket-' +
+      issuedTicket.ticketNumber +
+      '.pdf'
+  );
+
+  const pdfBytes = Buffer.from(
+    pdfAttachments[0].content,
+    'base64'
+  );
+
+  assert.equal(
+    pdfBytes.subarray(0, 5).toString('ascii'),
+    '%PDF-'
+  );
+
+  assert.ok(pdfBytes.length > 1000);
+  assert.ok(pdfBytes.length <= 1024 * 1024);
+
+  pass('Confirmation attachment contains a valid PDF header and size');
+
+  const repeatedPdfAttachments =
+    await generateConfirmedEmailAttachments(
+      confirmedPdfInputs
+    );
+
+  assert.deepEqual(
+    repeatedPdfAttachments,
+    pdfAttachments,
+    'Repeated ticket generation must preserve exact PDF bytes'
+  );
+
+  pass('Repeated PDF generation preserves attachment bytes');
+
+  await assert.rejects(
+    adminDb.runTransaction(
+      tx => readConfirmedEmailTicketInputs(
+        tx,
+        adminDb,
+        {
+          ...confirmationEmail,
+          recipientEmail: 'wrong-recipient@example.test',
+        },
+        Timestamp.now()
+      ),
+      { readOnly: true }
+    )
+  );
+
+  pass('Ticket attachment rejects mismatched recipient');
+
+  await assert.rejects(
+    generateConfirmedEmailAttachments([
+      pdfInput,
+      pdfInput,
+    ])
+  );
+
+  pass('Duplicate ticket attachment rejected');
+
+  await assert.rejects(
+    generateConfirmedEmailAttachments([])
+  );
+
+  pass('Empty ticket attachment list rejected');
+
+  // L9C: Email payload and mocked Resend delivery.
+
+  const emailTestEnvironment = {
+    EVENT_EMAIL_ENABLED: 'true',
+    RESEND_API_KEY: 're_emulator_test_only_123456',
+    EVENT_EMAIL_FROM:
+      'TabStartup Events <events@tabstartup.com>',
+    EVENT_EMAIL_REPLY_TO:
+      'info@tabstartup.com',
+  };
+
+  const previousEmailEnvironment = {};
+
+  for (const [key, value] of
+    Object.entries(emailTestEnvironment)) {
+    previousEmailEnvironment[key] = process.env[key];
+    process.env[key] = value;
+  }
+
+  const originalEmailFetch = globalThis.fetch;
+
+  try {
+    const {
+      claimEventEmailJob,
+    } = require(
+      '../src/services/email/event-email-claim.service.ts'
+    );
+
+    const {
+      prepareClaimedEmailPayload,
+    } = require(
+      '../src/services/email/event-email-payload.service.ts'
+    );
+
+    const {
+      sendTransactionalEmail,
+    } = require(
+      '../src/services/email/resend-email.service.ts'
+    );
+
+    const emailClaim =
+      await claimEventEmailJob(
+        confirmationEmail.emailId
+      );
+
+    assert.equal(emailClaim.status, 'claimed');
+
+    const preparedEmail =
+      await prepareClaimedEmailPayload(
+        emailClaim.job,
+        emailClaim.leaseToken
+      );
+
+    assert.equal(preparedEmail.status, 'ready');
+
+    assert.equal(
+      preparedEmail.payload.to,
+      confirmationEmail.recipientEmail
+    );
+
+    assert.deepEqual(
+      preparedEmail.payload.attachments,
+      pdfAttachments
+    );
+
+    assert.equal(
+      preparedEmail.payload.idempotencyKey,
+      confirmationEmail.idempotencyKey
+    );
+
+    pass('Prepared confirmation email binds canonical PDF attachments');
+
+    const repeatedEmail =
+      await prepareClaimedEmailPayload(
+        emailClaim.job,
+        emailClaim.leaseToken
+      );
+
+    assert.equal(repeatedEmail.status, 'ready');
+
+    assert.deepEqual(
+      repeatedEmail.payload,
+      preparedEmail.payload
+    );
+
+    pass('Repeated email preparation preserves delivery payload');
+
+    let mockedEmailRequests = 0;
+
+    globalThis.fetch = async (url, options) => {
+      assert.equal(
+        String(url),
+        'https://api.resend.com/emails'
+      );
+
+      assert.equal(options.method, 'POST');
+
+      const body = JSON.parse(options.body);
+
+      assert.deepEqual(
+        body.attachments,
+        pdfAttachments
+      );
+
+      assert.equal(
+        body.from,
+        emailTestEnvironment.EVENT_EMAIL_FROM
+      );
+
+      mockedEmailRequests++;
+
+      return new Response(
+        JSON.stringify({
+          id: 'emulator-email-test-123456',
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    };
+
+    const emailDelivery =
+      await sendTransactionalEmail(
+        preparedEmail.payload
+      );
+
+    assert.equal(emailDelivery.status, 'accepted');
+    assert.equal(emailDelivery.provider, 'resend');
+
+    assert.equal(
+      emailDelivery.providerEmailId,
+      'emulator-email-test-123456'
+    );
+
+    assert.equal(mockedEmailRequests, 1);
+
+    pass('Mocked Resend request contains exact PDF attachments');
+
+    await assert.rejects(
+      sendTransactionalEmail({
+        ...preparedEmail.payload,
+        attachments: [
+          {
+            filename: 'invalid.pdf',
+            content: 'invalid-content',
+          },
+        ],
+      })
+    );
+
+    assert.equal(mockedEmailRequests, 1);
+
+    pass('Invalid attachment blocked before provider request');
+
+  } finally {
+    globalThis.fetch = originalEmailFetch;
+
+    for (const [key, value] of
+      Object.entries(previousEmailEnvironment)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+
+
+
+
+
   const trx2 = transactionId();
 
   await submit(second, trx2);
@@ -1390,6 +1683,470 @@ async function main() {
   );
 
   pass('Repeated expiry cannot release inventory twice');
+
+  // L9C: Recovery approval after review timeout.
+
+  const {
+    decideAdminBkashRecovery,
+  } = require(
+    '../src/services/payments/bkash-recovery-decision.service.ts'
+  );
+
+  const {
+    getAdminBkashRecoveryDetails,
+  } = require(
+    '../src/services/payments/bkash-recovery-admin-details.service.ts'
+  );
+
+  await assert.rejects(
+    getAdminBkashRecoveryDetails(
+      founder.token,
+      third.paymentId
+    )
+  );
+
+  await assert.rejects(
+    decideAdminBkashRecovery(
+      founder.token,
+      third.paymentId,
+      approval(trx3)
+    )
+  );
+
+  pass('Non-admin cannot access or approve recovery');
+
+  const recoveryDetails =
+    await getAdminBkashRecoveryDetails(
+      admin.token,
+      third.paymentId
+    );
+
+  assert.equal(
+    recoveryDetails.recoveryType,
+    'review_timeout'
+  );
+
+  assert.equal(
+    recoveryDetails.canApprove,
+    true
+  );
+
+  assert.ok(
+    recoveryDetails.availableQuantity >= 1
+  );
+
+  pass('Expired review is eligible for recovery');
+
+  const beforeRecovery =
+    await inventory(paidId);
+
+  const recoveryResult =
+    await decideAdminBkashRecovery(
+      admin.token,
+      third.paymentId,
+      approval(trx3)
+    );
+
+  assert.equal(
+    recoveryResult.status,
+    'approved'
+  );
+
+  for (const [collection, id, status] of [
+    [P.payments, third.paymentId, 'succeeded'],
+    [P.orders, third.paymentOrderId, 'fulfilled'],
+    [C.orders, third.orderId, 'fulfilled'],
+    [P.manualSubmissions, third.paymentId, 'approved'],
+    [C.reservations, third.reservationId, 'expired'],
+  ]) {
+    assert.equal(
+      (await readRecord(collection, id)).status,
+      status
+    );
+  }
+
+  await assertRegistrationStatus(
+    third.orderId,
+    'confirmed'
+  );
+
+  pass('Recovery approval fulfills payment and registration');
+
+  const afterRecovery =
+    await inventory(paidId);
+
+  assert.equal(
+    afterRecovery.reservedQuantity,
+    beforeRecovery.reservedQuantity
+  );
+
+  assert.equal(
+    afterRecovery.issuedQuantity,
+    beforeRecovery.issuedQuantity + 1
+  );
+
+  pass('Recovery issues capacity without double release');
+
+  const recoveryTickets = await adminDb
+    .collection(C.tickets)
+    .where('orderId', '==', third.orderId)
+    .get();
+
+  assert.equal(recoveryTickets.size, 1);
+
+  assert.equal(
+    recoveryTickets.docs[0].data().status,
+    'issued'
+  );
+
+  pass('Recovery issues exactly one admission ticket');
+
+  await assert.rejects(
+    decideAdminBkashRecovery(
+      admin.token,
+      third.paymentId,
+      approval(trx3)
+    )
+  );
+
+  const afterDuplicate =
+    await inventory(paidId);
+
+  assert.equal(
+    afterDuplicate.reservedQuantity,
+    afterRecovery.reservedQuantity
+  );
+
+  assert.equal(
+    afterDuplicate.issuedQuantity,
+    afterRecovery.issuedQuantity
+  );
+
+  assert.equal(
+    (await adminDb
+      .collection(C.tickets)
+      .where('orderId', '==', third.orderId)
+      .get()).size,
+    1
+  );
+
+  pass('Duplicate recovery cannot issue extra tickets');
+
+  const recoveryAudits = await adminDb
+    .collection(P.auditLogs)
+    .where('resourceId', '==', eventId)
+    .get();
+
+  assert.equal(
+    recoveryAudits.docs
+      .map(doc => doc.data())
+      .filter(
+        item => item.action === 'bkash_recovery_approved'
+      ).length,
+    1
+  );
+
+  pass('Recovery financial audit recorded exactly once');
+
+  // L9C: Late bKash evidence recovery.
+
+  const {
+    expireUnpaidEventReservation,
+  } = require(
+    '../src/services/payments/event-unpaid-expiry.service.ts'
+  );
+
+  const {
+    submitLateEventBkashPayment,
+  } = require(
+    '../src/services/payments/bkash-late-submission.service.ts'
+  );
+
+  const late = await newPaidOrder();
+  const lateTrx = transactionId();
+
+  await getEventBkashPaymentInstructions(
+    late.orderId,
+    access
+  );
+
+  const lateInput = {
+    senderNumber,
+    transactionId: lateTrx,
+  };
+
+  await assert.rejects(
+    submitLateEventBkashPayment(
+      late.orderId,
+      access,
+      lateInput
+    )
+  );
+
+  pass('Late recovery cannot bypass active payment window');
+
+  const latePayment = await readRecord(
+    P.payments,
+    late.paymentId
+  );
+
+  const elapsedExpiryMs = Math.max(
+    latePayment.createdAt.toMillis(),
+    latePayment.bkashAccountSnapshot.capturedAt.toMillis()
+  ) + 1;
+
+  const expiryWaitMs = Math.max(
+    0,
+    elapsedExpiryMs - Date.now() + 20
+  );
+
+  if (expiryWaitMs > 0) {
+    await new Promise(
+      resolve => setTimeout(resolve, expiryWaitMs)
+    );
+  }
+
+  const elapsedExpiry =
+    Timestamp.fromMillis(elapsedExpiryMs);
+
+  const lateExpiryBatch = adminDb.batch();
+
+  for (const [collection, id] of [
+    [C.orders, late.orderId],
+    [C.reservations, late.reservationId],
+    [P.orders, late.paymentOrderId],
+  ]) {
+    lateExpiryBatch.update(
+      adminDb.collection(collection).doc(id),
+      { expiresAt: elapsedExpiry }
+    );
+  }
+
+  await lateExpiryBatch.commit();
+
+  const beforeLateExpiry =
+    await inventory(paidId);
+
+  const lateExpiry =
+    await expireUnpaidEventReservation(
+      late.reservationId
+    );
+
+  assert.equal(
+    lateExpiry.inventoryReleased,
+    true
+  );
+
+  assert.equal(
+    (await readRecord(
+      C.orders,
+      late.orderId
+    )).status,
+    'requires_review'
+  );
+
+  const afterLateExpiry =
+    await inventory(paidId);
+
+  assert.equal(
+    afterLateExpiry.reservedQuantity,
+    beforeLateExpiry.reservedQuantity - 1
+  );
+
+  assert.equal(
+    afterLateExpiry.issuedQuantity,
+    beforeLateExpiry.issuedQuantity
+  );
+
+  pass('Expired bKash payment preserves evidence recovery');
+
+  createdSubmissionIds.add(late.paymentId);
+
+  const lateResult =
+    await submitLateEventBkashPayment(
+      late.orderId,
+      access,
+      lateInput
+    );
+
+  assert.equal(
+    lateResult.status,
+    'requires_review'
+  );
+
+  const lateSubmission = await readRecord(
+    P.manualSubmissions,
+    late.paymentId
+  );
+
+  createdClaimIds.add(
+    lateSubmission.transactionClaimId
+  );
+
+  assert.equal(
+    lateSubmission.status,
+    'requires_review'
+  );
+
+  assert.equal(
+    lateSubmission.transactionId,
+    lateTrx
+  );
+
+  await assertRegistrationStatus(
+    late.orderId,
+    'requires_review'
+  );
+
+  pass('Late payment evidence accepted for manual review');
+
+  const lateReplay =
+    await submitLateEventBkashPayment(
+      late.orderId,
+      access,
+      lateInput
+    );
+
+  assert.equal(lateReplay.replayed, true);
+
+  assert.equal(
+    lateReplay.status,
+    'requires_review'
+  );
+
+  const afterLateReplay =
+    await inventory(paidId);
+
+  assert.equal(
+    afterLateReplay.reservedQuantity,
+    afterLateExpiry.reservedQuantity
+  );
+
+  assert.equal(
+    afterLateReplay.issuedQuantity,
+    afterLateExpiry.issuedQuantity
+  );
+
+  pass('Late submission replay preserves inventory');
+
+  // L9C: Insufficient capacity protection.
+
+  const lateDetails =
+    await getAdminBkashRecoveryDetails(
+      admin.token,
+      late.paymentId
+    );
+
+  assert.equal(
+    lateDetails.recoveryType,
+    'late_submission'
+  );
+
+  assert.equal(lateDetails.canApprove, true);
+
+  assert.ok(
+    lateDetails.availableQuantity > 0
+  );
+
+  pass('Late submission is eligible while capacity exists');
+
+  const capacityFillOrders = [];
+
+  for (
+    let i = 0;
+    i < lateDetails.availableQuantity;
+    i++
+  ) {
+    capacityFillOrders.push(
+      await newPaidOrder()
+    );
+  }
+
+  const fullInventory =
+    await inventory(paidId);
+
+  assert.equal(
+    fullInventory.reservedQuantity +
+      fullInventory.issuedQuantity,
+    fullInventory.capacity
+  );
+
+  const blockedRecovery =
+    await getAdminBkashRecoveryDetails(
+      admin.token,
+      late.paymentId
+    );
+
+  assert.equal(
+    blockedRecovery.availableQuantity,
+    0
+  );
+
+  assert.equal(
+    blockedRecovery.canApprove,
+    false
+  );
+
+  assert.ok(
+    blockedRecovery.approvalBlockers.includes(
+      'INSUFFICIENT_AVAILABLE_CAPACITY'
+    )
+  );
+
+  pass('Sold-out capacity blocks late recovery approval');
+
+  await assert.rejects(
+    decideAdminBkashRecovery(
+      admin.token,
+      late.paymentId,
+      approval(lateTrx)
+    )
+  );
+
+  const afterBlockedRecovery =
+    await inventory(paidId);
+
+  assert.equal(
+    afterBlockedRecovery.reservedQuantity,
+    fullInventory.reservedQuantity
+  );
+
+  assert.equal(
+    afterBlockedRecovery.issuedQuantity,
+    fullInventory.issuedQuantity
+  );
+
+  for (const [collection, id] of [
+    [P.payments, late.paymentId],
+    [P.orders, late.paymentOrderId],
+    [C.orders, late.orderId],
+    [P.manualSubmissions, late.paymentId],
+  ]) {
+    assert.equal(
+      (await readRecord(collection, id)).status,
+      'requires_review'
+    );
+  }
+
+  await assertRegistrationStatus(
+    late.orderId,
+    'requires_review'
+  );
+
+  const blockedTickets = await adminDb
+    .collection(C.tickets)
+    .where('orderId', '==', late.orderId)
+    .get();
+
+  assert.equal(blockedTickets.size, 0);
+
+  pass('Blocked recovery preserves payment and inventory without issuing tickets');
+
+
+
+
+
+
 
   const audits = await adminDb
     .collection(P.auditLogs)

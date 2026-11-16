@@ -24,12 +24,18 @@ export class EmailDeliveryError extends Error {
   }
 }
 
+export interface EmailPdfAttachment {
+  filename: string;
+  content: string;
+}
+
 export interface TransactionalEmailInput {
   to: string;
   subject: string;
   html: string;
   text: string;
   idempotencyKey: string;
+  attachments?: EmailPdfAttachment[];
 }
 
 export interface EmailDeliveryResult {
@@ -83,11 +89,72 @@ function getEmailConfiguration() {
   return { apiKey, from, replyTo };
 }
 
+function validAttachments(
+  attachments: EmailPdfAttachment[] | undefined
+): boolean {
+  if (attachments === undefined) {
+    return true;
+  }
+
+  if (
+    !Array.isArray(attachments) ||
+    attachments.length < 1 ||
+    attachments.length > 20
+  ) {
+    return false;
+  }
+
+  let totalBytes = 0;
+  const filenames = new Set<string>();
+
+  for (const attachment of attachments) {
+    if (
+      !attachment ||
+      typeof attachment.filename !== 'string' ||
+      !/^TabStartup-Ticket-TS-[A-F0-9]{64}\.pdf$/.test(
+        attachment.filename
+      ) ||
+      filenames.has(attachment.filename) ||
+      typeof attachment.content !== 'string' ||
+      attachment.content.length < 8 ||
+      attachment.content.length > 1400000 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(
+        attachment.content
+      )
+    ) {
+      return false;
+    }
+
+    const bytes = Buffer.from(
+      attachment.content,
+      'base64'
+    );
+
+    if (
+      bytes.length > 1024 * 1024 ||
+      bytes.toString('base64') !== attachment.content ||
+      bytes.subarray(0, 5).toString('ascii') !== '%PDF-'
+    ) {
+      return false;
+    }
+
+    filenames.add(attachment.filename);
+    totalBytes += bytes.length;
+
+    if (totalBytes > 8 * 1024 * 1024) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function validateInput(
   input: TransactionalEmailInput
 ): void {
   if (
     !validEmail(input.to) ||
+    !validAttachments(input.attachments) ||
     typeof input.subject !== 'string' ||
     !input.subject.trim() ||
     input.subject.length > 200 ||
@@ -145,6 +212,10 @@ export async function sendTransactionalEmail(
           subject: input.subject,
           html: input.html,
           text: input.text,
+
+          ...(input.attachments
+            ? { attachments: input.attachments }
+            : {}),
         }),
 
         cache: 'no-store',

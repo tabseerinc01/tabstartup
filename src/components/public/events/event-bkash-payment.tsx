@@ -27,6 +27,8 @@ type Props = {
   orderId: string;
   amountMinor: number;
   expiresAtMs: number | null;
+  recoveryMode?: boolean;
+  paymentWindowElapsed?: boolean;
   onSubmitted: () => void;
 };
 
@@ -83,6 +85,8 @@ export function EventBkashPayment({
   orderId,
   amountMinor,
   expiresAtMs,
+  recoveryMode = false,
+  paymentWindowElapsed = false,
   onSubmitted,
 }: Props) {
   const [instructions, setInstructions] =
@@ -129,14 +133,18 @@ export function EventBkashPayment({
 
     if (
       expiresAtMs === null ||
-      Date.now() >= expiresAtMs
+      (
+        recoveryMode
+          ? Date.now() < expiresAtMs
+          : Date.now() >= expiresAtMs
+      )
     ) {
       throw new Error('PAYMENT_WINDOW_EXPIRED');
     }
   }
 
   async function request(
-    action: 'instructions' | 'submit',
+    action: 'instructions' | 'submit' | 'recover',
     signal: AbortSignal,
     input?: {
       senderNumber: string;
@@ -194,7 +202,7 @@ export function EventBkashPayment({
   }
 
   async function loadInstructions() {
-    if (lock.current) return;
+    if (recoveryMode || lock.current) return;
 
     lock.current = true;
 
@@ -260,7 +268,7 @@ export function EventBkashPayment({
   async function submitPayment() {
     if (
       lock.current ||
-      !instructions ||
+      (!recoveryMode && !instructions) ||
       !confirmed ||
       submissionUncertain
     ) {
@@ -309,7 +317,7 @@ export function EventBkashPayment({
 
     try {
       const result = await request(
-        'submit',
+        recoveryMode ? 'recover' : 'submit',
         controller.signal,
         {
           senderNumber: sender,
@@ -321,7 +329,11 @@ export function EventBkashPayment({
         !result ||
         typeof result !== 'object' ||
         !('status' in result) ||
-        result.status !== 'pending_verification' ||
+        result.status !== (
+          recoveryMode
+            ? 'requires_review'
+            : 'pending_verification'
+        ) ||
         !('replayed' in result) ||
         typeof result.replayed !== 'boolean'
       ) {
@@ -358,7 +370,9 @@ export function EventBkashPayment({
     <div className="space-y-5 rounded-xl border p-5">
       <div>
         <p className="text-lg font-semibold text-pink-600">
-          Pay with bKash
+          {recoveryMode
+            ? 'Recover bKash payment'
+            : 'Pay with bKash'}
         </p>
 
         <p className="mt-1 text-sm text-muted-foreground">
@@ -366,7 +380,7 @@ export function EventBkashPayment({
         </p>
       </div>
 
-      {!instructions && (
+      {!paymentWindowElapsed && !recoveryMode && !instructions && (
         <button
           type="button"
           disabled={busy}
@@ -379,8 +393,10 @@ export function EventBkashPayment({
         </button>
       )}
 
-      {instructions && (
+      {!paymentWindowElapsed && (recoveryMode || instructions) && (
         <>
+          {!recoveryMode && instructions && (
+            <>
           <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
             <div>
               <p className="text-sm text-muted-foreground">
@@ -463,6 +479,18 @@ export function EventBkashPayment({
             bKash PIN or OTP.
           </p>
 
+            </>
+          )}
+
+          {recoveryMode && (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              Submit details only if you have already
+              sent the payment. Do not send money again.
+              Your payment and ticket availability require
+              manual review. Never share your PIN or OTP.
+            </p>
+          )}
+
           <div className="space-y-2">
             <label
               htmlFor="bkash-sender-number"
@@ -528,8 +556,9 @@ export function EventBkashPayment({
             />
 
             <span>
-              I have sent the exact amount to the
-              receiving account shown above.
+              {recoveryMode
+                ? 'I have already sent the payment for this order.'
+                : 'I have sent the exact amount to the receiving account shown above.'}
             </span>
           </label>
 
@@ -547,15 +576,28 @@ export function EventBkashPayment({
           >
             {busy
               ? 'Submitting...'
-              : 'Submit payment for verification'}
+              : recoveryMode
+                ? 'Submit payment for review'
+                : 'Submit payment for verification'}
           </button>
 
           <p className="text-xs text-muted-foreground">
-            Your registration will be confirmed
-            only after the payment has been
-            verified.
+            {recoveryMode
+              ? 'Submitting payment details does not guarantee a ticket. Our team will verify your payment and ticket availability.'
+              : 'Your registration will be confirmed only after the payment has been verified.'}
           </p>
         </>
+      )}
+
+      {paymentWindowElapsed && (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+        >
+          {busy
+            ? 'Your request is still processing. Please wait and do not send money again.'
+            : 'The payment window has ended. Do not send money. If you already paid, refresh your order to check payment recovery.'}
+        </div>
       )}
 
       {error && (

@@ -77,6 +77,7 @@ type EventOrder = {
   paidAtMs: number | null;
   fulfilledAtMs: number | null;
   paymentWindowElapsed: boolean;
+  canRecoverPayment: boolean;
 };
 
 const statusMessages: Record<
@@ -206,6 +207,17 @@ function readOrder(
       order.status
     ) ||
     typeof order.paymentRequired !== 'boolean' ||
+    typeof order.canRecoverPayment !== 'boolean' ||
+    (
+      order.canRecoverPayment &&
+      (
+        order.status !== 'requires_review' ||
+        order.paymentRequired !== true ||
+        order.provider !== 'bkash_manual' ||
+        order.currency !== 'BDT' ||
+        order.expiresAtMs === null
+      )
+    ) ||
     !Array.isArray(order.items) ||
     order.items.length !== 1 ||
     !Number.isSafeInteger(order.totalAmountMinor) ||
@@ -854,6 +866,17 @@ export function EventOrderStatus({
     order.status === 'awaiting_payment' &&
     !elapsed;
 
+  const keepBkashPaymentMounted =
+    order.paymentRequired &&
+    order.status === 'awaiting_payment' &&
+    order.provider === 'bkash_manual';
+
+  const recoveryAvailable =
+    order.canRecoverPayment &&
+    order.status === 'requires_review' &&
+    order.provider === 'bkash_manual' &&
+    order.paymentRequired;
+
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border bg-card p-6 sm:p-8">
@@ -875,7 +898,7 @@ export function EventOrderStatus({
 
             <p className="mt-2 text-muted-foreground">
               {elapsed
-                ? 'The payment deadline has passed. If you already sent money, do not pay again. Refresh your order or contact support with your order reference and Transaction ID.'
+                ? 'The payment deadline has passed. If you already sent money, do not pay again. Refresh your order in a moment to check whether payment recovery is available. If unavailable, contact support with your order reference and Transaction ID.'
                 : message.description}
             </p>
           </div>
@@ -970,11 +993,13 @@ export function EventOrderStatus({
         </div>
       </section>
 
-      {paymentPending && (
+      {(paymentPending || keepBkashPaymentMounted || recoveryAvailable) && (
         <section className="space-y-5 rounded-2xl border bg-card p-6">
           <h2 className="flex items-center gap-2 text-xl font-semibold">
             <CreditCard className="h-5 w-5" />
-            Payment method
+            {recoveryAvailable
+              ? 'Payment recovery'
+              : 'Payment method'}
           </h2>
 
           {order.provider === 'tabedge' ? (
@@ -1003,6 +1028,8 @@ export function EventOrderStatus({
               orderId={order.orderId}
               amountMinor={order.totalAmountMinor}
               expiresAtMs={order.expiresAtMs}
+              recoveryMode={recoveryAvailable}
+              paymentWindowElapsed={elapsed && !recoveryAvailable}
               onSubmitted={() =>
                 setRefresh(value => value + 1)
               }

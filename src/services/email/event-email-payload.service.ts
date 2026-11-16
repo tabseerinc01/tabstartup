@@ -1,5 +1,14 @@
 import 'server-only';
 
+import {
+  readConfirmedEmailTicketInputs,
+  generateConfirmedEmailAttachments,
+} from './event-ticket-attachment.service';
+
+import {
+  type EventTicketPdfInput,
+} from '@/services/event-ticket-pdf.service';
+
 import { createHash } from 'node:crypto';
 
 import {
@@ -92,6 +101,46 @@ export async function prepareClaimedEmailPayload(
     idempotencyKey: job.idempotencyKey,
   };
 
+  const { adminDb } = getFirebaseAdmin();
+
+  let ticketInputs: EventTicketPdfInput[] | null = null;
+
+  let attachmentPreparationFailed = false;
+
+  if (
+    !isEventInvitationEmailJob(job) &&
+    job.type === 'registration_confirmed'
+  ) {
+    try {
+      ticketInputs = await adminDb.runTransaction(
+        tx => readConfirmedEmailTicketInputs(
+          tx,
+          adminDb,
+          job,
+          Timestamp.now()
+        ),
+        { readOnly: true }
+      );
+
+      payload.attachments =
+        await generateConfirmedEmailAttachments(
+          ticketInputs
+        );
+    } catch {
+      attachmentPreparationFailed = true;
+    }
+  }
+
+  const attachmentDigests =
+    payload.attachments?.map(attachment => [
+      attachment.filename,
+      createHash('sha256')
+        .update(
+          Buffer.from(attachment.content, 'base64')
+        )
+        .digest('hex'),
+    ]);
+
   const payloadHash = createHash('sha256')
     .update(
       JSON.stringify([
@@ -110,12 +159,17 @@ export async function prepareClaimedEmailPayload(
         payload.text,
 
         payload.idempotencyKey,
+
+        ...(attachmentDigests
+          ? [
+              'ticket-attachments-v1',
+              attachmentDigests,
+            ]
+          : []),
       ]),
       'utf8'
     )
     .digest('hex');
-
-  const { adminDb } = getFirebaseAdmin();
 
   const ref = adminDb
     .collection(EVENT_COLLECTIONS.emailOutbox)
@@ -189,6 +243,63 @@ export async function prepareClaimedEmailPayload(
         return requireReview(
           'EMAIL_JOB_PAYLOAD_CHANGED'
         );
+      }
+
+      if (attachmentPreparationFailed) {
+        return requireReview(
+          'TICKET_ATTACHMENT_PREPARATION_FAILED'
+        );
+      }
+
+      if (
+        !isEventInvitationEmailJob(job) &&
+        job.type === 'registration_confirmed'
+      ) {
+        if (
+          !ticketInputs ||
+          !payload.attachments ||
+          payload.attachments.length !==
+            ticketInputs.length
+        ) {
+          return requireReview(
+            'TICKET_ATTACHMENTS_MISSING'
+          );
+        }
+
+        // Recheck all canonical ticket inputs
+        // immediately before binding delivery.
+
+        let latestInputs: EventTicketPdfInput[];
+
+        try {
+          latestInputs =
+            await readConfirmedEmailTicketInputs(
+              tx,
+              adminDb,
+              job,
+              Timestamp.now()
+            );
+        } catch {
+          return requireReview(
+            'TICKET_EMAIL_ELIGIBILITY_CHANGED'
+          );
+        }
+
+        if (
+          JSON.stringify(latestInputs) !==
+            JSON.stringify(ticketInputs)
+        ) {
+          return requireReview(
+            'TICKET_ATTACHMENT_DATA_CHANGED'
+          );
+        }
+
+        if (
+          current.leaseExpiresAt.toMillis() <=
+            Date.now() + MINIMUM_LEASE_REMAINING_MS
+        ) {
+          return { status: 'lease_lost' };
+        }
       }
 
       if (isEventInvitationEmailJob(job)) {

@@ -139,7 +139,10 @@ export async function claimEventEmailJob(
         job.schemaVersion !==
           EVENT_EMAIL_SCHEMA_VERSION ||
         job.emailId !== emailId ||
-        job.idempotencyKey !== emailId ||
+        job.idempotencyKey !==
+          (isEventInvitationEmailJob(job)
+            ? emailId
+            : 'tabstartup-event-email/' + emailId) ||
         job.provider !== 'resend' ||
         !Number.isSafeInteger(job.attemptCount) ||
         job.attemptCount < 0 ||

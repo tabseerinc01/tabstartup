@@ -64,8 +64,12 @@ const MESSAGES: Record<EventEmailType, EmailMessage> = {
     color: '#15803d',
     message:
       'Your event registration is confirmed. ' +
-      'Your admission ticket is now available.',
-    button: 'View & Download Ticket',
+      'Your admission ticket(s) are attached to this email as PDF files. ' +
+      'You can download and save the attachments without signing in to TabStartup. ' +
+      'Each ticket is non-transferable and valid only for the named participant. ' +
+      'Please present your ticket at the event. ' +
+      'Identity and registration status may be verified before admission.',
+    button: 'View Registration Details',
   },
 
   payment_submitted: {
@@ -309,9 +313,15 @@ export function buildEventEmailTemplate(
     message.subject + ' | TabStartup';
 
   const accessNote =
-    'Use the account or browser session used ' +
-    'during registration to access your order. ' +
-    'If you cannot access it, contact support.';
+    input.type === 'registration_confirmed'
+      ? 'Keep your attached PDF ticket(s) safe. ' +
+        'No TabStartup login is required to open the attachments. ' +
+        'To view your online registration details, use the account ' +
+        'or browser session used during registration. ' +
+        'If you need assistance, contact support.'
+      : 'Use the account or browser session used ' +
+        'during registration to access your order. ' +
+        'If you cannot access it, contact support.';
 
   const rows: Array<[string, string]> = [
     ['Event', input.eventTitle],
