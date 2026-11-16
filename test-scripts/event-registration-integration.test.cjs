@@ -1,6 +1,11 @@
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 
+assert.equal(process.env.GCLOUD_PROJECT, 'demo-tabstartup');
+assert.equal(process.env.FIRESTORE_EMULATOR_HOST, '127.0.0.1:8080');
+assert.equal(process.env.FIREBASE_AUTH_EMULATOR_HOST, '127.0.0.1:9099');
+assert.notEqual(process.env.VERCEL, '1');
+
 require('./identity-runtime-loader.cjs');
 
 const {
@@ -214,9 +219,48 @@ const registrationRoute = require("../src/app/api/events/registrations/route.ts"
 const guestRoute = require("../src/app/api/events/guest-session/route.ts");
 const orderRoute = require("../src/app/api/events/orders/[orderId]/route.ts");
 
+let settingsRef = null;
+let originalSettings = null;
+let settingsTouched = false;
+
 async function main() {
   const admin = await createAccount('admin');
   const founder = await createAccount('founder');
+
+  process.env.BKASH_MANUAL_PAYMENTS_ENABLED = 'true';
+  process.env.TABEDGE_PAYMENTS_ENABLED = 'true';
+
+  const { Timestamp } = require('firebase-admin/firestore');
+  const { PAYMENT_SCHEMA_VERSION } = require('../src/lib/payment-types.ts');
+
+  settingsRef = adminDb
+    .collection(P.providerSettings)
+    .doc('bkash_manual');
+
+  const previousSettings = await settingsRef.get();
+
+  originalSettings = previousSettings.exists
+    ? previousSettings.data()
+    : null;
+
+  const settingsNow = Timestamp.now();
+
+  settingsTouched = true;
+
+  await settingsRef.set({
+    schemaVersion: PAYMENT_SCHEMA_VERSION,
+    provider: 'bkash_manual',
+    currency: 'BDT',
+    enabled: true,
+    receivingNumber: '01800000001',
+    accountType: 'personal',
+    configVersion: 1,
+    createdAt: settingsNow,
+    updatedAt: settingsNow,
+    updatedByUid: admin.uid,
+  });
+
+  console.log('PASS: Emulator bKash configuration ready');
   const now = Date.now();
 
   const draft = {
@@ -697,6 +741,152 @@ async function main() {
 
   pass('Other guest and account cannot read guest order');
 
+  // L9: Verify free ticket and authorized PDF access.
+  assert.ok(Array.isArray(freeOrder.tickets));
+  assert.equal(freeOrder.tickets.length, 1);
+
+  const issuedFreeTicket = freeOrder.tickets[0];
+
+  assert.equal(issuedFreeTicket.status, 'issued');
+
+  assert.match(
+    issuedFreeTicket.ticketId,
+    /^ticket_[a-f0-9]{64}$/
+  );
+
+  assert.match(
+    issuedFreeTicket.ticketNumber,
+    /^TS-[A-F0-9]{64}$/
+  );
+
+  pass('Free registration replay preserves one issued ticket');
+
+  const pdfRoute = require(
+    '../src/app/api/events/orders/[orderId]/tickets/[ticketId]/pdf/route.ts'
+  );
+
+  assert.equal(typeof pdfRoute.GET, 'function');
+
+  // L9: Verify actual PDF download authorization.
+  async function downloadTestPdf(access, ticketId) {
+    const headers = {};
+
+    if (access.cookie) {
+      headers.Cookie = access.cookie;
+    }
+
+    if (access.token) {
+      headers.Authorization = 'Bearer ' + access.token;
+    }
+
+    const req = new NextRequest(
+      'http://localhost/api/events/orders/' +
+      free.orderId + '/tickets/' + ticketId + '/pdf',
+      {
+        method: 'GET',
+        headers,
+      }
+    );
+
+    return pdfRoute.GET(req, {
+      params: Promise.resolve({
+        orderId: free.orderId,
+        ticketId,
+      }),
+    });
+  }
+
+  const ownPdf = await downloadTestPdf(
+    { cookie: guest },
+    issuedFreeTicket.ticketId
+  );
+
+  assert.equal(ownPdf.status, 200);
+
+  assert.equal(
+    ownPdf.headers.get('content-type'),
+    'application/pdf'
+  );
+
+  assert.match(
+    ownPdf.headers.get('cache-control'),
+    /no-store/
+  );
+
+  const pdfBytes = Buffer.from(
+    await ownPdf.arrayBuffer()
+  );
+
+  assert.equal(
+    pdfBytes.subarray(0, 5).toString(),
+    '%PDF-'
+  );
+
+  pass('Authorized guest can download actual ticket PDF');
+
+  const otherGuestPdf = await downloadTestPdf(
+    { cookie: otherGuest },
+    issuedFreeTicket.ticketId
+  );
+
+  assert.equal(otherGuestPdf.status, 404);
+
+  const otherAccountPdf = await downloadTestPdf(
+    { token: founder.token },
+    issuedFreeTicket.ticketId
+  );
+
+  assert.equal(otherAccountPdf.status, 404);
+
+  pass('Unauthorized guest and account cannot download ticket PDF');
+
+  const missingTicketPdf = await downloadTestPdf(
+    { cookie: guest },
+    'ticket_' + '0'.repeat(64)
+  );
+
+  assert.equal(missingTicketPdf.status, 404);
+
+  pass('Unknown ticket PDF request rejected');
+
+  const freeTicketRecords = await adminDb
+    .collection(C.tickets)
+    .where('orderId', '==', free.orderId)
+    .get();
+
+  assert.equal(freeTicketRecords.size, 1);
+
+  assert.equal(
+    freeTicketRecords.docs[0].id,
+    issuedFreeTicket.ticketId
+  );
+
+  pass('Free registration has exactly one canonical ticket');
+
+  const freeEmailRecords = await adminDb
+    .collection(C.emailOutbox)
+    .where('orderId', '==', free.orderId)
+    .get();
+
+  const freeConfirmationJobs = freeEmailRecords.docs
+    .map(doc => doc.data())
+    .filter(job => job.type === 'registration_confirmed');
+
+  assert.equal(freeConfirmationJobs.length, 1);
+
+  assert.equal(
+    freeConfirmationJobs[0].status,
+    'pending'
+  );
+
+  assert.equal(
+    freeConfirmationJobs[0].attemptCount,
+    0
+  );
+
+  pass('Free confirmation email queued exactly once');
+
+
   failure(
     await register({
       ...payload(paidId, 'USD', 1500),
@@ -732,6 +922,48 @@ async function main() {
   );
 
   pass('Missing paid currency rejected');
+
+  // L9: Verify the BDT-only launch configuration.
+  const beforeDisabledUsd = await inventory(paidId);
+
+  const originalTabEdgeFlag =
+    process.env.TABEDGE_PAYMENTS_ENABLED;
+
+  try {
+    process.env.TABEDGE_PAYMENTS_ENABLED = 'false';
+
+    const disabledUsd = await register(
+      payload(paidId, 'USD', 1500, founderEmail),
+      { token: founder.token }
+    );
+
+    assert.equal(
+      disabledUsd.status,
+      503,
+      'Disabled USD provider must return HTTP 503'
+    );
+
+    const afterDisabledUsd = await inventory(paidId);
+
+    assert.equal(
+      afterDisabledUsd.reservedQuantity,
+      beforeDisabledUsd.reservedQuantity
+    );
+
+    assert.equal(
+      afterDisabledUsd.issuedQuantity,
+      beforeDisabledUsd.issuedQuantity
+    );
+
+    pass('Disabled USD registration cannot reserve inventory');
+  } finally {
+    if (originalTabEdgeFlag === undefined) {
+      delete process.env.TABEDGE_PAYMENTS_ENABLED;
+    } else {
+      process.env.TABEDGE_PAYMENTS_ENABLED =
+        originalTabEdgeFlag;
+    }
+  }
 
   const usd = success(
     await register(
@@ -990,6 +1222,14 @@ async function main() {
 }
 
 async function cleanup() {
+  if (settingsTouched && settingsRef) {
+    if (originalSettings) {
+      await settingsRef.set(originalSettings);
+    } else {
+      await settingsRef.delete();
+    }
+  }
+
   const matching = await adminDb
     .collection(C.events)
     .where('slug', '==', slug)
@@ -1019,6 +1259,8 @@ async function cleanup() {
       C.registrations,
       C.reservations,
       C.orders,
+      C.tickets,
+      C.emailOutbox,
       C.ticketTypes,
       C.inventory,
       C.publicTicketTypes,

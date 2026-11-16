@@ -1017,12 +1017,12 @@ async function main() {
 
   assert.equal(
     (await readRecord(C.orders, first.orderId)).status,
-    'paid'
+    'fulfilled'
   );
 
   assert.equal(
     (await readRecord(P.orders, first.paymentOrderId)).status,
-    'paid'
+    'fulfilled'
   );
 
   assert.equal(
@@ -1041,6 +1041,85 @@ async function main() {
   );
 
   pass('Concurrent approval consumes inventory exactly once');
+
+  // L9: Verify canonical ticket and email records.
+  const {
+    buildEventTicketId,
+  } = require(
+    '../src/services/event-ticket-issuance.service.ts'
+  );
+
+  const issuedTickets = await adminDb
+    .collection(C.tickets)
+    .where('orderId', '==', first.orderId)
+    .get();
+
+  assert.equal(issuedTickets.size, 1);
+
+  const issuedTicket = issuedTickets.docs[0].data();
+
+  assert.equal(issuedTicket.status, 'issued');
+  assert.equal(issuedTicket.orderId, first.orderId);
+  assert.equal(issuedTicket.ticketTypeId, paidId);
+
+  assert.equal(
+    issuedTicket.ticketId,
+    buildEventTicketId(issuedTicket.registrationId)
+  );
+
+  assert.equal(
+    issuedTickets.docs[0].id,
+    issuedTicket.ticketId
+  );
+
+  assert.match(
+    issuedTicket.ticketNumber,
+    /^TS-[A-F0-9]{64}$/
+  );
+
+  assert.match(
+    issuedTicket.qrTokenHash,
+    /^[a-f0-9]{64}$/
+  );
+
+  assert.equal(issuedTicket.checkedInAt, null);
+
+  pass('Exactly one canonical ticket issued');
+
+  const ticketAudit = await readRecord(
+    C.auditLogs,
+    'issued_' + issuedTicket.ticketId
+  );
+
+  assert.equal(ticketAudit.action, 'ticket_issued');
+  assert.equal(ticketAudit.resourceId, issuedTicket.ticketId);
+
+  pass('Ticket issuance audit verified');
+
+  const approvedEmails = await adminDb
+    .collection(C.emailOutbox)
+    .where('orderId', '==', first.orderId)
+    .get();
+
+  const confirmationEmails = approvedEmails.docs
+    .map(doc => doc.data())
+    .filter(job => job.type === 'registration_confirmed');
+
+  assert.equal(confirmationEmails.length, 1);
+
+  const confirmationEmail = confirmationEmails[0];
+
+  assert.equal(confirmationEmail.status, 'pending');
+  assert.equal(confirmationEmail.provider, 'resend');
+  assert.equal(confirmationEmail.attemptCount, 0);
+  assert.equal(confirmationEmail.providerEmailId, null);
+
+  assert.equal(
+    confirmationEmail.idempotencyKey,
+    'tabstartup-event-email/' + confirmationEmail.emailId
+  );
+
+  pass('Confirmation email queued exactly once');
 
   const trx2 = transactionId();
 
@@ -1104,6 +1183,37 @@ async function main() {
   );
 
   pass('Rejection releases inventory without issuing tickets');
+
+  const rejectedTickets = await adminDb
+    .collection(C.tickets)
+    .where('orderId', '==', second.orderId)
+    .get();
+
+  assert.equal(rejectedTickets.size, 0);
+
+  pass('Rejected payment has no ticket records');
+
+  const rejectedEmails = await adminDb
+    .collection(C.emailOutbox)
+    .where('orderId', '==', second.orderId)
+    .get();
+
+  const rejectionEmails = rejectedEmails.docs
+    .map(doc => doc.data())
+    .filter(job => job.type === 'payment_rejected');
+
+  assert.equal(rejectionEmails.length, 1);
+  assert.equal(rejectionEmails[0].status, 'pending');
+
+  assert.equal(
+    rejectedEmails.docs
+      .map(doc => doc.data())
+      .filter(job => job.type === 'registration_confirmed')
+      .length,
+    0
+  );
+
+  pass('Rejection email queued without confirmation email');
 
   const third = await newPaidOrder();
   const trx3 = transactionId();
@@ -1378,6 +1488,8 @@ async function cleanup() {
       C.registrations,
       C.reservations,
       C.orders,
+      C.tickets,
+      C.emailOutbox,
       C.ticketTypes,
       C.inventory,
       C.publicTicketTypes,
