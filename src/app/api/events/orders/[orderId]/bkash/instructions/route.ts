@@ -57,11 +57,29 @@ export async function POST(
     const { orderId } =
       await context.params;
 
+    // An empty POST may have a non-null body stream.
+    // Reject actual payload bytes without buffering the body.
     if (request.body !== null) {
-      return registrationApiError(
-        400,
-        'UNEXPECTED_REQUEST_BODY'
-      );
+      const reader = request.body.getReader();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) break;
+
+          if (value.byteLength > 0) {
+            void reader.cancel().catch(() => {});
+
+            return registrationApiError(
+              400,
+              'UNEXPECTED_REQUEST_BODY'
+            );
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
     }
 
     const instructions =
