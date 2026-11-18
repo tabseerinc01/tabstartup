@@ -33,6 +33,10 @@ const legacyProfile = loadTS(
   'src/lib/legacy-startup-profile.ts'
 );
 
+const sharedValidation = loadTS(
+  'src/lib/professional-profile-validation.ts'
+);
+
 const {
   evaluateProfileReadiness,
   evaluateAllProfileReadiness,
@@ -42,6 +46,8 @@ const {
   'src/lib/profile-readiness.ts',
   {
     '@/lib/legacy-startup-profile': legacyProfile,
+    '@/lib/professional-profile-validation':
+      sharedValidation,
   }
 );
 

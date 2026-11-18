@@ -3,6 +3,18 @@ import {
   resolveStartupProfessionalRoles,
 } from '@/lib/legacy-startup-profile';
 
+import {
+  PROFESSIONAL_NAME_MAX_LENGTH,
+  sanitizePublicText,
+  sanitizePublicStringArray,
+  sanitizePublicUrl,
+  isValidProfessionalProfileUid,
+  isPlainProfessionalRecord,
+  getOwnProfessionalValue,
+  hasOwnProfessionalTrue,
+  buildProfessionalIdentitySnapshot,
+} from '@/lib/professional-profile-validation';
+
 export const PROFILE_READINESS_VERSION = 1;
 
 export type ProfessionalProfileRole =
@@ -35,41 +47,41 @@ export type ProfileReadinessResult = {
   checks: ProfileReadinessCheck[];
 };
 
+/**
+ * Readiness and public projection must use
+ * the same field validation rules.
+ */
+
 function hasText(
   value: unknown,
-  maxLength = 10000
+  maxLength?: number
 ): boolean {
   return (
-    typeof value === 'string' &&
-    value.trim().length > 0 &&
-    value.length <= maxLength
+    sanitizePublicText(
+      value,
+      maxLength
+    ) !== undefined
   );
 }
 
-function hasValidStringArray(value: unknown): boolean {
+function hasValidStringArray(
+  value: unknown
+): boolean {
+  const sanitized =
+    sanitizePublicStringArray(value);
+
   return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.length <= 100 &&
-    value.every(item => hasText(item, 1000))
+    sanitized !== undefined &&
+    sanitized.length > 0
   );
 }
 
-function hasValidPhoto(value: unknown): boolean {
-  if (!hasText(value)) return false;
-
-  try {
-    const url = new URL((value as string).trim());
-
-    return (
-      url.protocol === 'https:' &&
-      url.hostname.length > 0 &&
-      !url.username &&
-      !url.password
-    );
-  } catch {
-    return false;
-  }
+function hasValidPhoto(
+  value: unknown
+): boolean {
+  return (
+    sanitizePublicUrl(value) !== undefined
+  );
 }
 
 export function isProfessionalProfileRole(
@@ -91,7 +103,23 @@ export function evaluateProfileReadiness(
     throw new Error('INVALID_PROFESSIONAL_ROLE');
   }
 
-  const data = profile ?? {};
+  if (!isPlainProfessionalRecord(context)) {
+    throw new Error(
+      'INVALID_READINESS_CONTEXT'
+    );
+  }
+
+  const identity =
+    buildProfessionalIdentitySnapshot(profile);
+
+  function readField(
+    key: string
+  ): unknown {
+    return getOwnProfessionalValue(
+      profile,
+      key
+    );
+  }
   const checks: ProfileReadinessCheck[] = [];
   const blockers: string[] = [];
 
@@ -103,24 +131,32 @@ export function evaluateProfileReadiness(
     checks.push({ key, label, completed });
   }
 
-  const validUid =
-    typeof context.uid === 'string' &&
-    context.uid.trim().length > 0 &&
-    !context.uid.includes('/');
+  const uid = getOwnProfessionalValue(
+    context,
+    'uid'
+  );
+
+  const accountActive =
+    hasOwnProfessionalTrue(
+      context,
+      'accountActive'
+    );
 
   if (
-    !validUid ||
-    context.accountActive !== true ||
+    !isValidProfessionalProfileUid(uid) ||
+    !accountActive ||
+    !identity ||
     resolveLegacyStartupStatus(
-      context.uid,
-      profile
+      uid,
+      identity
     ) !== 'active'
   ) {
     blockers.push('ACCOUNT_NOT_ACTIVE');
   }
 
   if (
-    !resolveStartupProfessionalRoles(profile)
+    !identity ||
+    !resolveStartupProfessionalRoles(identity)
       .includes(role)
   ) {
     blockers.push('ROLE_NOT_OWNED');
@@ -129,39 +165,45 @@ export function evaluateProfileReadiness(
   add(
     'fullName',
     'Full Name',
-    hasText(data.fullName, 120)
+    hasText(
+      readField('fullName'),
+      PROFESSIONAL_NAME_MAX_LENGTH
+    )
   );
 
   add(
     'imageUrl',
     'Profile Photo',
-    hasValidPhoto(data.imageUrl)
+    hasValidPhoto(readField('imageUrl'))
   );
 
   add(
     'emailVerified',
     'Email Verification',
-    context.emailVerified === true
+    hasOwnProfessionalTrue(
+      context,
+      'emailVerified'
+    )
   );
 
   add(
     'location',
     'Location',
-    hasText(data.location)
+    hasText(readField('location'))
   );
 
   if (role === 'investor') {
     add(
       'investorHeadline',
       'Investor Headline',
-      hasText(data.investorHeadline) ||
-        hasText(data.headline)
+      hasText(readField('investorHeadline')) ||
+        hasText(readField('headline'))
     );
   } else {
     add(
       'headline',
       'Professional Headline',
-      hasText(data.headline)
+      hasText(readField('headline'))
     );
   }
 
@@ -170,13 +212,13 @@ export function evaluateProfileReadiness(
       add(
         'bio',
         'Founder Bio',
-        hasText(data.bio)
+        hasText(readField('bio'))
       );
 
       add(
         'skills',
         'Professional Skills',
-        hasValidStringArray(data.skills)
+        hasValidStringArray(readField('skills'))
       );
       break;
 
@@ -184,25 +226,25 @@ export function evaluateProfileReadiness(
       add(
         'investorBio',
         'Investor Bio',
-        hasText(data.investorBio)
+        hasText(readField('investorBio'))
       );
 
       add(
         'investmentFocus',
         'Investment Focus',
-        hasValidStringArray(data.investmentFocus)
+        hasValidStringArray(readField('investmentFocus'))
       );
 
       add(
         'preferredStage',
         'Preferred Investment Stage',
-        hasValidStringArray(data.preferredStage)
+        hasValidStringArray(readField('preferredStage'))
       );
 
       add(
         'ticketSize',
         'Investment Ticket Size',
-        hasText(data.ticketSize)
+        hasText(readField('ticketSize'))
       );
       break;
 
@@ -210,25 +252,25 @@ export function evaluateProfileReadiness(
       add(
         'mentorBio',
         'Mentor Bio',
-        hasText(data.mentorBio)
+        hasText(readField('mentorBio'))
       );
 
       add(
         'mentorSkills',
         'Mentoring Skills',
-        hasValidStringArray(data.mentorSkills)
+        hasValidStringArray(readField('mentorSkills'))
       );
 
       add(
         'yearsOfExperience',
         'Years of Experience',
-        hasText(data.yearsOfExperience)
+        hasText(readField('yearsOfExperience'))
       );
 
       add(
         'mentorAvailability',
         'Mentor Availability',
-        hasText(data.mentorAvailability)
+        hasText(readField('mentorAvailability'))
       );
       break;
   }
@@ -265,7 +307,20 @@ export function evaluateAllProfileReadiness(
   profile: Record<string, unknown> | undefined,
   context: ProfileReadinessContext
 ): ProfileReadinessResult[] {
-  return resolveStartupProfessionalRoles(profile)
+  if (!isPlainProfessionalRecord(context)) {
+    throw new Error(
+      'INVALID_READINESS_CONTEXT'
+    );
+  }
+
+  const identity =
+    buildProfessionalIdentitySnapshot(profile);
+
+  if (!identity) {
+    return [];
+  }
+
+  return resolveStartupProfessionalRoles(identity)
     .map(role =>
       evaluateProfileReadiness(
         profile,
