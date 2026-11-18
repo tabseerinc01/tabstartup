@@ -1,6 +1,16 @@
 'use client';
 
-import { ShieldCheck, Bell, Search, Settings, ArrowRight } from 'lucide-react';
+import { useState } from 'react';
+import { ShieldCheck, Bell, Search, Settings, ArrowRight, Menu } from 'lucide-react';
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet';
+import { AdminSidebar } from '@/components/admin/admin-sidebar';
 import Link from 'next/link';
 import type { AccountAccessResponse } from '@/lib/account-access-client';
 import { getAvailableAccountPortals } from '@/lib/safe-account-redirect';
@@ -23,6 +33,7 @@ export function AdminHeader({
   account: AccountAccessResponse | null;
 }) {
   const { user } = useUser();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const switchablePortals =
     account && account.uid === user?.uid
@@ -33,13 +44,40 @@ export function AdminHeader({
   const displayName = user?.displayName || user?.email?.split('@')[0] || "Admin";
 
   return (
-    <header className="h-16 border-b bg-white flex items-center justify-between px-6 sticky top-0 z-40">
-      <div className="flex items-center gap-4">
-        <h2 className="font-bold text-slate-800 flex items-center gap-2">
+    <header className="h-16 shrink-0 border-b bg-white flex items-center justify-between gap-2 px-3 md:px-6 sticky top-0 z-40">
+      <div className="flex min-w-0 items-center gap-2 md:gap-4">
+        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden shrink-0"
+              aria-label="Open admin navigation"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent
+            side="left"
+            className="flex flex-col gap-0 w-72 max-w-[90vw] p-0 bg-slate-950 text-slate-100 [&>button]:text-white [&>button]:bg-slate-800"
+          >
+            <SheetHeader className="sr-only">
+              <SheetTitle>Admin Navigation</SheetTitle>
+              <SheetDescription>
+                Access control panel sections and administrative tools.
+              </SheetDescription>
+            </SheetHeader>
+            <AdminSidebar
+              mobile
+              onNavigate={() => setIsMobileMenuOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
+        <h2 className="font-bold text-sm md:text-base text-slate-800 flex items-center gap-2 whitespace-nowrap">
           <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
           System Active
         </h2>
-        <div className="h-4 w-px bg-slate-200" />
+        <div className="hidden lg:block h-4 w-px bg-slate-200" />
         <div className="relative hidden lg:block w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
           <Input
@@ -50,8 +88,8 @@ export function AdminHeader({
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 border border-green-100 rounded-full text-[10px] font-bold">
+      <div className="flex shrink-0 items-center gap-1 md:gap-4">
+        <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 border border-green-100 rounded-full text-[10px] font-bold">
            <ShieldCheck className="h-3.3 w-3" /> SECURITY VERIFIED
         </div>
         
@@ -59,7 +97,7 @@ export function AdminHeader({
           <Bell className="h-5 w-5" />
         </Button>
 
-        <div className="flex items-center gap-3 pl-2">
+        <div className="flex items-center gap-2 md:gap-3 md:pl-2">
            <div className="text-right hidden sm:block">
               <p className="text-xs font-bold text-slate-800">{displayName}</p>
               <p className="text-[10px] text-slate-500 uppercase tracking-widest">Root Access</p>

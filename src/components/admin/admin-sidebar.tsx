@@ -23,7 +23,15 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Logo } from '@/components/logo';
 
-export function AdminSidebar() {
+type AdminSidebarProps = {
+  mobile?: boolean;
+  onNavigate?: () => void;
+};
+
+export function AdminSidebar({
+  mobile = false,
+  onNavigate,
+}: AdminSidebarProps) {
   const pathname = usePathname();
 
   const adminMenuItems = [
@@ -46,7 +54,12 @@ export function AdminSidebar() {
   };
 
   return (
-    <aside className="hidden md:flex flex-col w-64 border-r bg-slate-950 text-slate-100 h-screen sticky top-0">
+    <aside className={cn(
+      "flex-col bg-slate-950 text-slate-100",
+      mobile
+        ? "flex h-full min-h-0 w-full"
+        : "hidden md:flex w-64 shrink-0 border-r h-screen sticky top-0"
+    )}>
       <div className="p-6 border-b border-slate-800">
         <div className="bg-white rounded-xl px-3 py-2 mb-4">
           <Logo />
@@ -60,11 +73,12 @@ export function AdminSidebar() {
         <p className="text-[10px] text-slate-500 font-mono">TABSTARTUP ENGINE v1.2</p>
       </div>
       
-      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+      <nav className="flex-1 min-h-0 px-4 py-6 space-y-1 overflow-y-auto">
         {adminMenuItems.map((item) => (
           <Link
             key={item.label}
             href={item.href}
+            onClick={onNavigate}
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group",
               isActive(item) 
@@ -84,7 +98,7 @@ export function AdminSidebar() {
           className="w-full justify-start gap-3 bg-transparent border-slate-700 text-slate-300 hover:bg-slate-900 hover:text-white rounded-xl" 
           asChild
         >
-          <Link href="/dashboard">
+          <Link href="/dashboard" onClick={onNavigate}>
             <ArrowLeft className="h-4 w-4" />
             Back to Dashboard
           </Link>

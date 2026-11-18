@@ -100,11 +100,11 @@ export default function AdminLayout({
     <div className="flex min-h-screen w-full bg-slate-50">
       <AdminSidebar />
 
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col">
         <AdminHeader account={access.account} />
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8">
-          <div className="max-w-7xl mx-auto space-y-8">
+        <main className="min-w-0 flex-1 overflow-x-auto p-3 sm:p-4 lg:p-8">
+          <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6 lg:space-y-8">
             {children}
           </div>
         </main>
