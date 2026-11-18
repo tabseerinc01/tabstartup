@@ -112,7 +112,28 @@ export async function POST(request: Request) {
     });
 
   } catch (error) {
+    const authErrorCode =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error
+        ? error.code
+        : undefined;
+
+    if (authErrorCode === 'auth/user-not-found') {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
     if (error instanceof Error) {
+      if (error.message === 'ACCOUNT_NOT_ACTIVE') {
+        return NextResponse.json(
+          { error: 'ACCOUNT_NOT_ACTIVE' },
+          { status: 403 }
+        );
+      }
+
       if (error.message === 'USER_NOT_FOUND') {
         return NextResponse.json(
           { error: 'User not found' },

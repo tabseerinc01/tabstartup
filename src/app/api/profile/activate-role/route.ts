@@ -77,6 +77,7 @@ export async function POST(request: Request) {
     const statuses: Record<string, number> = {
       INVALID_ROLE: 400,
       USER_NOT_FOUND: 404,
+      ACCOUNT_NOT_ACTIVE: 403,
       USER_SUSPENDED: 403,
       INVALID_STARTUP_PROFILE: 403,
       INVALID_ACCOUNT_IDENTITY: 403,

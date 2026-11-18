@@ -49,10 +49,24 @@ async function main() {
     const eventOrganizerRef = adminDb
       .collection('eventOrganizerProfiles').doc(uid);
 
+    const publicRef = adminDb
+      .collection('publicProfiles').doc(uid);
+
+    const professionalRefs = [
+      'founder',
+      'investor',
+      'mentor',
+    ].map(role => adminDb
+      .collection('professionalProfiles')
+      .doc(role + '_' + uid)
+    );
+
     fixtures.push(
       identityRef,
       startupRef,
-      eventOrganizerRef
+      eventOrganizerRef,
+      publicRef,
+      ...professionalRefs
     );
 
     const batch = adminDb.batch();
@@ -86,6 +100,23 @@ async function main() {
       });
     }
 
+    if (options.publications === true) {
+      batch.set(publicRef, {
+        uid,
+        roles: ['founder', 'investor', 'mentor'],
+      });
+
+      for (const document of professionalRefs) {
+        batch.set(document, {
+          uid,
+          role: document.id.split('_')[0],
+          schemaVersion: 1,
+          visibility: 'public',
+          status: 'published',
+        });
+      }
+    }
+
     await batch.commit();
 
     return {
@@ -93,7 +124,26 @@ async function main() {
       identityRef,
       startupRef,
       eventOrganizerRef,
+      publicRef,
+      professionalRefs,
     };
+  }
+
+  async function assertNoPublication(fixture) {
+    const snapshots = await Promise.all([
+      fixture.publicRef.get(),
+      ...fixture.professionalRefs.map(
+        document => document.get()
+      ),
+    ]);
+
+    for (const snapshot of snapshots) {
+      assert.equal(
+        snapshot.exists,
+        false,
+        'Unexpected publication: ' + snapshot.ref.path
+      );
+    }
   }
 
   async function verifyBlocked(
@@ -131,6 +181,7 @@ async function main() {
   try {
     const active = await seed('active_account', {
       startup: {},
+      publications: true,
     });
 
     const original =
@@ -168,7 +219,10 @@ async function main() {
       'suspended'
     );
 
+    await assertNoPublication(active);
+
     pass('active_identity_suspended');
+    pass('global_suspension_removes_all_publications');
 
     const reactivated =
       await setGlobalAccountStatus(
@@ -189,7 +243,10 @@ async function main() {
       'active'
     );
 
+    await assertNoPublication(active);
+
     pass('suspended_identity_reactivated');
+    pass('global_reactivation_does_not_republish');
 
     const beforeRepeat =
       await active.identityRef.get();
@@ -208,6 +265,8 @@ async function main() {
       beforeRepeat.data()
     );
 
+    await assertNoPublication(active);
+
     pass('repeated_status_update_idempotent');
 
     const legacy = await seed(
@@ -215,6 +274,7 @@ async function main() {
       {
         identity: { status: 'suspended' },
         startup: { status: 'suspended' },
+        publications: true,
       }
     );
 
@@ -243,6 +303,8 @@ async function main() {
       (await legacy.startupRef.get()).data(),
       legacyBefore.data()
     );
+
+    await assertNoPublication(legacy);
 
     pass('legacy_suspension_preserved');
 
@@ -282,6 +344,7 @@ async function main() {
     const dual = await seed('dual_profiles', {
       startup: {},
       eventOrganizer: {},
+      publications: true,
     });
 
     const startupBefore =
@@ -314,6 +377,8 @@ async function main() {
       (await dual.eventOrganizerRef.get()).data(),
       organizerBefore.data()
     );
+
+    await assertNoPublication(dual);
 
     pass('dual_profiles_preserved');
 
@@ -373,7 +438,11 @@ async function main() {
     pass('invalid_uid_inputs');
 
     const concurrent = await seed(
-      'concurrent_suspension'
+      'concurrent_suspension',
+      {
+        startup: {},
+        publications: true,
+      }
     );
 
     const results = await Promise.all(
@@ -407,6 +476,8 @@ async function main() {
       (await concurrent.identityRef.get()).data().status,
       'suspended'
     );
+
+    await assertNoPublication(concurrent);
 
     pass('concurrent_suspension_single_change');
 

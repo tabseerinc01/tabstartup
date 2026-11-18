@@ -4,7 +4,7 @@ import {
   hasActiveStartupProfile,
 } from '@/lib/legacy-startup-profile';
 
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from '@/firebase/admin';
 
 import {
@@ -15,6 +15,12 @@ import {
   assertGlobalAccountNotSuspended,
 } from '@/services/account-suspension-guard.service';
 import { buildPublicProfile } from '@/lib/public-profile';
+
+import {
+  readProfessionalPublicationSnapshots,
+  prepareProfessionalPublicationSync,
+  applyProfessionalPublicationSync,
+} from '@/services/professional-profile-publishing.service';
 import { validateProfileUpdate } from '@/lib/profile-update-validation';
 
 export async function updateOwnProfile(
@@ -27,20 +33,50 @@ export async function updateOwnProfile(
 
   const updates = validateProfileUpdate(input);
 
-  const { adminDb } = getFirebaseAdmin();
+  const { adminDb, adminAuth } = getFirebaseAdmin();
+
+  const authUser = await adminAuth
+    .getUser(uid)
+    .catch((error: unknown) => {
+      const code =
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error
+          ? error.code
+          : undefined;
+
+      if (code === 'auth/user-not-found') {
+        throw new Error('ACCOUNT_NOT_ACTIVE');
+      }
+
+      throw error;
+    });
+
+  if (authUser.uid !== uid || authUser.disabled) {
+    throw new Error('ACCOUNT_NOT_ACTIVE');
+  }
+
+  const emailVerified =
+    authUser.emailVerified === true;
 
   const identityRef = adminDb
     .collection(ACCOUNT_IDENTITIES_COLLECTION)
     .doc(uid);
 
   const userRef = adminDb.collection('users').doc(uid);
-  const publicRef = adminDb.collection('publicProfiles').doc(uid);
 
   return adminDb.runTransaction(async transaction => {
     const identitySnap =
       await transaction.get(identityRef);
 
     const userSnap = await transaction.get(userRef);
+
+    const professionalPublications =
+      await readProfessionalPublicationSnapshots(
+        transaction,
+        adminDb,
+        uid
+      );
 
     assertGlobalAccountNotSuspended(
       uid,
@@ -72,6 +108,17 @@ export async function updateOwnProfile(
     };
 
     const projection = buildPublicProfile(uid, merged);
+
+    const publicationActions =
+      prepareProfessionalPublicationSync(
+        merged,
+        professionalPublications,
+        {
+          uid,
+          emailVerified,
+          accountActive: true,
+        }
+      );
 
     const profileComplete = [
       merged.fullName,
@@ -113,20 +160,14 @@ export async function updateOwnProfile(
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    if (
-      !Array.isArray(projection.roles) ||
-      projection.roles.length === 0
-    ) {
-      transaction.delete(publicRef);
-    } else {
-      transaction.set(publicRef, {
-        ...projection,
-        createdAt: current.createdAt instanceof Timestamp
-          ? current.createdAt
-          : null,
-        isVerified: current.isVerified === true,
-      });
-    }
+    // Legacy projections are frozen until the
+    // controlled relationship and discovery migration.
+    // Private profile updates must never refresh them.
+
+    applyProfessionalPublicationSync(
+      transaction,
+      publicationActions
+    );
 
     return {
       success: true,
@@ -149,20 +190,50 @@ export async function activateOwnProfessionalRole(
     throw new Error('INVALID_ROLE');
   }
 
-  const { adminDb } = getFirebaseAdmin();
+  const { adminDb, adminAuth } = getFirebaseAdmin();
+
+  const authUser = await adminAuth
+    .getUser(uid)
+    .catch((error: unknown) => {
+      const code =
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error
+          ? error.code
+          : undefined;
+
+      if (code === 'auth/user-not-found') {
+        throw new Error('ACCOUNT_NOT_ACTIVE');
+      }
+
+      throw error;
+    });
+
+  if (authUser.uid !== uid || authUser.disabled) {
+    throw new Error('ACCOUNT_NOT_ACTIVE');
+  }
+
+  const emailVerified =
+    authUser.emailVerified === true;
 
   const identityRef = adminDb
     .collection(ACCOUNT_IDENTITIES_COLLECTION)
     .doc(uid);
 
   const userRef = adminDb.collection('users').doc(uid);
-  const publicRef = adminDb.collection('publicProfiles').doc(uid);
 
   return adminDb.runTransaction(async transaction => {
     const identitySnap =
       await transaction.get(identityRef);
 
     const userSnap = await transaction.get(userRef);
+
+    const professionalPublications =
+      await readProfessionalPublicationSnapshots(
+        transaction,
+        adminDb,
+        uid
+      );
 
     assertGlobalAccountNotSuspended(
       uid,
@@ -198,10 +269,23 @@ export async function activateOwnProfessionalRole(
 
     const roles = [...new Set([...existingRoles, role])];
 
-    const projection = buildPublicProfile(uid, {
+    const merged = {
       ...current,
       roles,
-    });
+    };
+
+    const projection = buildPublicProfile(uid, merged);
+
+    const publicationActions =
+      prepareProfessionalPublicationSync(
+        current,
+        professionalPublications,
+        {
+          uid,
+          emailVerified,
+          accountActive: true,
+        }
+      );
 
     transaction.update(userRef, {
       roles,
@@ -209,13 +293,12 @@ export async function activateOwnProfessionalRole(
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    transaction.set(publicRef, {
-      ...projection,
-      createdAt: current.createdAt instanceof Timestamp
-        ? current.createdAt
-        : null,
-      isVerified: current.isVerified === true,
-    });
+    // Role activation grants private role ownership,
+    // not public publication authorization.
+    applyProfessionalPublicationSync(
+      transaction,
+      publicationActions
+    );
 
     return {
       success: true,

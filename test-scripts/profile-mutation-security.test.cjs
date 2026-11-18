@@ -28,14 +28,39 @@ const {
   deleteApp,
 } = require('firebase-admin/app');
 
+const {
+  syncPublicProfile,
+  setUserProfessionalRole,
+  setUserSuspension,
+} = require(
+  '../src/services/public-profile.service.ts'
+);
+
+const {
+  buildProfessionalProfile,
+  getProfessionalProfileId,
+} = require(
+  '../src/lib/professional-profile.ts'
+);
+
+const {
+  Timestamp,
+} = require('firebase-admin/firestore');
+
 async function main() {
-  const { adminDb, adminApp } =
+  const { adminDb, adminApp, adminAuth } =
     getFirebaseAdmin();
 
   const prefix =
     'profile-security-' + randomUUID();
 
+  assert.equal(
+    adminApp.options.projectId,
+    'demo-tabstartup'
+  );
+
   const cleanup = new Map();
+  const authCleanup = new Set();
 
   let passed = 0;
 
@@ -63,6 +88,27 @@ async function main() {
     const userRef = ref('users', uid);
     const publicRef = ref('publicProfiles', uid);
     const identityRef = ref('accountIdentities', uid);
+
+    const professionalRefs = Object.fromEntries(
+      ['founder', 'investor', 'mentor'].map(role => [
+        role,
+        ref(
+          'professionalProfiles',
+          getProfessionalProfileId(uid, role)
+        ),
+      ])
+    );
+
+    if (options.auth !== false) {
+      await adminAuth.createUser({
+        uid,
+        email: uid + '@example.test',
+        emailVerified: options.emailVerified !== false,
+        disabled: options.disabled === true,
+      });
+
+      authCleanup.add(uid);
+    }
 
     if (options.startup !== false) {
       await userRef.set({
@@ -107,7 +153,74 @@ async function main() {
       userRef,
       publicRef,
       identityRef,
+      professionalRefs,
     };
+  }
+
+  async function assertNoPublication(fixture) {
+    const snapshots = await Promise.all([
+      fixture.publicRef.get(),
+      ...Object.values(
+        fixture.professionalRefs
+      ).map(document => document.get()),
+    ]);
+
+    for (const snapshot of snapshots) {
+      assert.equal(
+        snapshot.exists,
+        false,
+        'Unexpected publication: ' + snapshot.ref.path
+      );
+    }
+  }
+
+  const readyProfile = {
+    fullName: 'Publication Test Founder',
+    bio: 'Building a technology startup.',
+    location: 'Dhaka',
+    headline: 'Technology Founder',
+    imageUrl: 'https://example.com/photo.jpg',
+    skills: ['Technology'],
+    investorBio: 'Investing in technology startups.',
+    investmentFocus: ['Technology'],
+    preferredStage: ['Seed'],
+    ticketSize: '$10,000 - $50,000',
+    mentorBio: 'Supporting startup founders.',
+    mentorSkills: ['Business Strategy'],
+    yearsOfExperience: '10 years',
+    mentorAvailability: 'Available',
+  };
+
+  async function seedPublication(
+    fixture,
+    role,
+    overrides = {}
+  ) {
+    const canonical = {
+      ...(await fixture.userRef.get()).data(),
+      ...overrides,
+    };
+
+    const projection = buildProfessionalProfile(
+      canonical,
+      role,
+      {
+        uid: fixture.uid,
+        emailVerified: true,
+        accountActive: true,
+        publicationAuthorized: true,
+      }
+    );
+
+    const publishedAt = Timestamp.now();
+
+    await fixture.professionalRefs[role].set({
+      ...projection,
+      publishedAt,
+      updatedAt: publishedAt,
+    });
+
+    return publishedAt;
   }
 
   async function referral(
@@ -153,10 +266,7 @@ async function main() {
       completedProfile.bio
     );
 
-    assert.equal(
-      (await valid.publicRef.get()).exists,
-      true
-    );
+    await assertNoPublication(valid);
 
     pass('Valid Startup profile mutation');
 
@@ -171,6 +281,8 @@ async function main() {
       (await valid.userRef.get())
         .data().roles.includes('mentor')
     );
+
+    await assertNoPublication(valid);
 
     pass('Valid professional role activation');
 
@@ -547,6 +659,337 @@ async function main() {
 
     pass('Direct reward field mutation denied');
 
+    // 18. Ready private profile must remain private.
+
+    const draft = await seed('ready-draft', {
+      startup: readyProfile,
+    });
+
+    await updateOwnProfile(draft.uid, {
+      headline: 'Updated Technology Founder',
+    });
+
+    await syncPublicProfile(draft.uid);
+    await assertNoPublication(draft);
+
+    pass('Ready profile save and sync do not publish');
+
+    // 19. Existing publication synchronization.
+
+    const published = await seed('published', {
+      startup: readyProfile,
+    });
+
+    const originalPublishedAt =
+      await seedPublication(published, 'founder');
+
+    await updateOwnProfile(published.uid, {
+      headline: 'Updated Published Founder',
+    });
+
+    const updatedPublication = (
+      await published.professionalRefs.founder.get()
+    ).data();
+
+    assert.equal(
+      updatedPublication.headline,
+      'Updated Published Founder'
+    );
+
+    assert.deepEqual(
+      updatedPublication.publishedAt,
+      originalPublishedAt
+    );
+
+    assert.equal(
+      (await published.publicRef.get()).exists,
+      false
+    );
+
+    pass('Published profile sync preserves publication time');
+
+    // 20. Required field removal.
+
+    await updateOwnProfile(published.uid, {
+      bio: '',
+    });
+
+    await assertNoPublication(published);
+
+    pass('Required field removal unpublishes founder');
+
+    await updateOwnProfile(published.uid, {
+      bio: readyProfile.bio,
+    });
+
+    await assertNoPublication(published);
+
+    pass('Restoring readiness does not republish');
+
+    // 21. Email verification loss.
+
+    const unverified = await seed('unverified', {
+      startup: readyProfile,
+      emailVerified: false,
+    });
+
+    await seedPublication(unverified, 'founder');
+
+    await updateOwnProfile(unverified.uid, {
+      headline: 'Unverified Founder',
+    });
+
+    await assertNoPublication(unverified);
+
+    pass('Unverified email removes existing publication');
+
+    // 22. Stale publication on self role activation.
+
+    const stale = await seed('stale-role', {
+      startup: readyProfile,
+    });
+
+    await seedPublication(stale, 'mentor', {
+      roles: ['founder', 'mentor'],
+    });
+
+    await activateOwnProfessionalRole(
+      stale.uid,
+      'mentor'
+    );
+
+    assert.ok(
+      (await stale.userRef.get())
+        .data().roles.includes('mentor')
+    );
+
+    await assertNoPublication(stale);
+
+    pass('Self role activation removes stale publication');
+
+    // 23. Admin role enablement does not publish.
+
+    const adminRole = await seed('admin-role', {
+      startup: readyProfile,
+    });
+
+    await setUserProfessionalRole(
+      adminRole.uid,
+      'mentor',
+      true
+    );
+
+    await assertNoPublication(adminRole);
+
+    pass('Admin role enablement does not publish');
+
+    // 24. Role removal preserves other publications.
+
+    await seedPublication(adminRole, 'founder');
+    await seedPublication(adminRole, 'mentor');
+
+    await setUserProfessionalRole(
+      adminRole.uid,
+      'mentor',
+      false
+    );
+
+    assert.equal(
+      (await adminRole.professionalRefs.mentor.get())
+        .exists,
+      false
+    );
+
+    assert.equal(
+      (await adminRole.professionalRefs.founder.get())
+        .exists,
+      true
+    );
+
+    pass('Admin role removal preserves unaffected role');
+
+    await assert.rejects(
+      setUserProfessionalRole(
+        adminRole.uid,
+        'founder',
+        false
+      ),
+      /LAST_PROFESSIONAL_ROLE/
+    );
+
+    pass('Last professional role removal denied');
+
+    // 25. Legacy suspension and reactivation.
+
+    const suspension = await seed('suspension', {
+      startup: {
+        ...readyProfile,
+        roles: ['founder', 'investor', 'mentor'],
+      },
+    });
+
+    for (const role of [
+      'founder', 'investor', 'mentor'
+    ]) {
+      await seedPublication(suspension, role);
+    }
+
+    await suspension.publicRef.set({
+      uid: suspension.uid,
+      roles: ['founder', 'investor', 'mentor'],
+    });
+
+    await setUserSuspension(suspension.uid, true);
+
+    await assertNoPublication(suspension);
+
+    pass('Legacy suspension removes all publications');
+
+    await setUserSuspension(suspension.uid, false);
+
+    await assertNoPublication(suspension);
+
+    pass('Legacy reactivation does not republish');
+
+    // 26. Missing Auth account cleanup.
+
+    const missingAuth = await seed('missing-auth', {
+      startup: readyProfile,
+      auth: false,
+    });
+
+    await seedPublication(missingAuth, 'founder');
+
+    await missingAuth.publicRef.set({
+      uid: missingAuth.uid,
+      roles: ['founder'],
+    });
+
+    await syncPublicProfile(missingAuth.uid);
+
+    await assertNoPublication(missingAuth);
+
+    pass('Missing Auth account sync removes publications');
+
+    await assert.rejects(
+      setUserProfessionalRole(
+        missingAuth.uid,
+        'mentor',
+        true
+      ),
+      /ACCOUNT_NOT_ACTIVE/
+    );
+
+    pass('Missing Auth account cannot enable role');
+
+    // Missing Auth must also block self mutation.
+
+    await assert.rejects(
+      updateOwnProfile(
+        missingAuth.uid,
+        completedProfile
+      ),
+      /ACCOUNT_NOT_ACTIVE/
+    );
+
+    await assert.rejects(
+      activateOwnProfessionalRole(
+        missingAuth.uid,
+        'mentor'
+      ),
+      /ACCOUNT_NOT_ACTIVE/
+    );
+
+    pass('Missing Auth account cannot mutate profile');
+
+    // Internal administrative cleanup must remain
+    // possible without an authentication record.
+
+    const orphanRole = await seed(
+      'orphan-role-removal',
+      {
+        auth: false,
+        startup: {
+          ...readyProfile,
+          roles: ['founder', 'mentor'],
+        },
+      }
+    );
+
+    await seedPublication(orphanRole, 'founder');
+    await seedPublication(orphanRole, 'mentor');
+
+    await orphanRole.publicRef.set({
+      uid: orphanRole.uid,
+      roles: ['founder', 'mentor'],
+    });
+
+    await setUserProfessionalRole(
+      orphanRole.uid,
+      'mentor',
+      false
+    );
+
+    assert.deepEqual(
+      (await orphanRole.userRef.get()).data().roles,
+      ['founder']
+    );
+
+    await assertNoPublication(orphanRole);
+
+    pass('Missing Auth internal role removal cleans publications');
+
+    // 27. Disabled Auth account.
+
+    const disabled = await seed('disabled-auth', {
+      startup: readyProfile,
+      disabled: true,
+    });
+
+    await assert.rejects(
+      updateOwnProfile(disabled.uid, completedProfile),
+      /ACCOUNT_NOT_ACTIVE/
+    );
+
+    await assert.rejects(
+      activateOwnProfessionalRole(disabled.uid, 'mentor'),
+      /ACCOUNT_NOT_ACTIVE/
+    );
+
+    pass('Disabled Auth account cannot mutate profile');
+
+    // 28. Frozen legacy projection.
+
+    const frozen = await seed('frozen-legacy', {
+      startup: readyProfile,
+    });
+
+    const legacyData = {
+      uid: frozen.uid,
+      fullName: 'Original Legacy Name',
+      roles: ['founder'],
+    };
+
+    await frozen.publicRef.set(legacyData);
+
+    await updateOwnProfile(frozen.uid, {
+      fullName: 'New Private Name',
+    });
+
+    await activateOwnProfessionalRole(
+      frozen.uid,
+      'mentor'
+    );
+
+    await syncPublicProfile(frozen.uid);
+
+    assert.deepEqual(
+      (await frozen.publicRef.get()).data(),
+      legacyData
+    );
+
+    pass('Legacy projection remains frozen');
+
     console.log(
       'TOTAL PROFILE MUTATION SECURITY CHECKS PASSED:',
       passed
@@ -574,7 +1017,13 @@ async function main() {
         await batch.commit();
       }
     } finally {
-      await deleteApp(adminApp);
+      try {
+        for (const uid of authCleanup) {
+          await adminAuth.deleteUser(uid);
+        }
+      } finally {
+        await deleteApp(adminApp);
+      }
     }
   }
 }

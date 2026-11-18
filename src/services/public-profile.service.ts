@@ -5,7 +5,12 @@ import {
 } from '@/lib/legacy-startup-profile';
 
 import { getFirebaseAdmin } from '@/firebase/admin';
-import { buildPublicProfile } from '@/lib/public-profile';
+import {
+  readProfessionalPublicationSnapshots,
+  prepareProfessionalPublicationSync,
+  prepareProfessionalPublicationRemoval,
+  applyProfessionalPublicationSync,
+} from '@/services/professional-profile-publishing.service';
 
 import {
   ACCOUNT_IDENTITIES_COLLECTION,
@@ -15,12 +20,57 @@ import {
   isGlobalAccountEligible,
 } from '@/services/account-suspension-guard.service';
 
+async function readPublicationAuthState(
+  uid: string
+): Promise<{
+  authActive: boolean;
+  emailVerified: boolean;
+}> {
+  const { adminAuth } = getFirebaseAdmin();
+
+  try {
+    const authUser = await adminAuth.getUser(uid);
+
+    return {
+      authActive:
+        authUser.uid === uid && !authUser.disabled,
+      emailVerified:
+        authUser.uid === uid &&
+        !authUser.disabled &&
+        authUser.emailVerified === true,
+    };
+  } catch (error: unknown) {
+    const code =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error
+        ? error.code
+        : undefined;
+
+    if (code === 'auth/user-not-found') {
+      return {
+        authActive: false,
+        emailVerified: false,
+      };
+    }
+
+    // Infrastructure failures are not equivalent
+    // to a confirmed missing authentication account.
+    throw error;
+  }
+}
+
 export async function syncPublicProfile(uid: string) {
   if (!uid || uid.includes('/')) {
     throw new Error('Invalid user UID');
   }
 
   const { adminDb } = getFirebaseAdmin();
+
+  const {
+    authActive,
+    emailVerified,
+  } = await readPublicationAuthState(uid);
 
   const identityRef = adminDb
     .collection(ACCOUNT_IDENTITIES_COLLECTION)
@@ -33,41 +83,51 @@ export async function syncPublicProfile(uid: string) {
     const identitySnap =
       await transaction.get(identityRef);
 
-    const userSnap = await transaction.get(userRef);
+    const userSnap =
+      await transaction.get(userRef);
 
-    if (!userSnap.exists) {
+    const publications =
+      await readProfessionalPublicationSnapshots(
+        transaction,
+        adminDb,
+        uid
+      );
+
+    const data = userSnap.data();
+
+    const accountActive =
+      authActive &&
+      userSnap.exists &&
+      resolveLegacyStartupStatus(uid, data) === 'active' &&
+      isGlobalAccountEligible(uid, identitySnap);
+
+    const actions =
+      prepareProfessionalPublicationSync(
+        data,
+        publications,
+        {
+          uid,
+          emailVerified,
+          accountActive,
+        }
+      );
+
+    if (!accountActive) {
       transaction.delete(publicRef);
-      return { status: 'removed' as const };
     }
 
-    const data = userSnap.data()!;
+    // Compatibility endpoint: synchronize existing
+    // professional publications only.
+    // Never create or refresh a legacy public document.
 
-    if (
-      resolveLegacyStartupStatus(
-        uid,
-        data
-      ) !== 'active' ||
-      !isGlobalAccountEligible(uid, identitySnap)
-    ) {
-      transaction.delete(publicRef);
-      return { status: 'removed' as const };
-    }
+    applyProfessionalPublicationSync(
+      transaction,
+      actions
+    );
 
-    const projection = buildPublicProfile(uid, data);
-
-    if (!Array.isArray(projection.roles) ||
-        projection.roles.length === 0) {
-      transaction.delete(publicRef);
-      return { status: 'removed' as const };
-    }
-
-    transaction.set(publicRef, {
-      ...projection,
-      createdAt: data.createdAt ?? null,
-      isVerified: data.isVerified === true,
-    });
-
-    return { status: 'synced' as const };
+    return accountActive
+      ? { status: 'synced' as const }
+      : { status: 'removed' as const };
   });
 }
 
@@ -100,6 +160,13 @@ export async function setUserSuspension(
 
     const snapshot = await transaction.get(userRef);
 
+    const publications =
+      await readProfessionalPublicationSnapshots(
+        transaction,
+        adminDb,
+        uid
+      );
+
     if (!snapshot.exists) {
       throw new Error('USER_NOT_FOUND');
     }
@@ -107,34 +174,37 @@ export async function setUserSuspension(
     const data = snapshot.data()!;
     const status = suspended ? 'suspended' : 'active';
 
+    const removePublications =
+      suspended ||
+      data.status === 'suspended' ||
+      resolveLegacyStartupStatus(
+        uid,
+        { ...data, status }
+      ) !== 'active' ||
+      !isGlobalAccountEligible(uid, identitySnap);
+
+    const actions = removePublications
+      ? prepareProfessionalPublicationRemoval(
+          publications,
+          uid
+        )
+      : [];
+
     transaction.update(userRef, {
       status,
       updatedAt: new Date(),
     });
 
-    if (
-      suspended ||
-      resolveLegacyStartupStatus(
-        uid,
-        { ...data, status }
-      ) !== 'active' ||
-      !isGlobalAccountEligible(uid, identitySnap)
-    ) {
+    if (removePublications) {
       transaction.delete(publicRef);
-    } else {
-      const projection = buildPublicProfile(uid, data);
 
-      if (Array.isArray(projection.roles) &&
-          projection.roles.length > 0) {
-        transaction.set(publicRef, {
-          ...projection,
-          createdAt: data.createdAt ?? null,
-          isVerified: data.isVerified === true,
-        });
-      } else {
-        transaction.delete(publicRef);
-      }
+      applyProfessionalPublicationSync(
+        transaction,
+        actions
+      );
     }
+
+    // Reactivation never creates public profiles.
 
     return { status };
   });
@@ -159,6 +229,15 @@ export async function setUserProfessionalRole(
 
   const { adminDb } = getFirebaseAdmin();
 
+  const {
+    authActive,
+    emailVerified,
+  } = await readPublicationAuthState(uid);
+
+  if (enabled && !authActive) {
+    throw new Error('ACCOUNT_NOT_ACTIVE');
+  }
+
   const identityRef = adminDb
     .collection(ACCOUNT_IDENTITIES_COLLECTION)
     .doc(uid);
@@ -171,6 +250,13 @@ export async function setUserProfessionalRole(
       await transaction.get(identityRef);
 
     const snapshot = await transaction.get(userRef);
+
+    const publications =
+      await readProfessionalPublicationSnapshots(
+        transaction,
+        adminDb,
+        uid
+      );
 
     if (!snapshot.exists) {
       throw new Error('USER_NOT_FOUND');
@@ -223,26 +309,42 @@ export async function setUserProfessionalRole(
       updatedAt: new Date(),
     };
 
+    const accountActive =
+      authActive &&
+      resolveLegacyStartupStatus(uid, data) === 'active' &&
+      isGlobalAccountEligible(uid, identitySnap);
+
+    // A newly enabled role must not inherit a stale
+    // publication from a previous ownership state.
+    const synchronizationData = enabled
+      ? data
+      : { ...data, ...updates };
+
+    const actions =
+      prepareProfessionalPublicationSync(
+        synchronizationData,
+        publications,
+        {
+          uid,
+          emailVerified,
+          accountActive,
+        }
+      );
+
     transaction.update(userRef, updates);
 
-    if (
-      resolveLegacyStartupStatus(
-        uid,
-        data
-      ) !== 'active' ||
-      !isGlobalAccountEligible(uid, identitySnap)
-    ) {
+    if (!accountActive || !enabled) {
+      // Legacy documents combine multiple roles.
+      // Remove rather than expose a removed role.
       transaction.delete(publicRef);
-    } else {
-      transaction.set(publicRef, {
-        ...buildPublicProfile(uid, {
-          ...data,
-          ...updates,
-        }),
-        createdAt: data.createdAt ?? null,
-        isVerified: data.isVerified === true,
-      });
     }
+
+    applyProfessionalPublicationSync(
+      transaction,
+      actions
+    );
+
+    // Administrative role enablement does not publish.
 
     return { roles, role: nextRole, primaryRole };
   });

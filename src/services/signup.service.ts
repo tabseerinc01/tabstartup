@@ -7,7 +7,10 @@ import {
 import { randomInt } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from '@/firebase/admin';
-import { buildPublicProfile } from '@/lib/public-profile';
+import {
+  PROFESSIONAL_PROFILES_COLLECTION,
+  getProfessionalProfileId,
+} from '@/lib/professional-profile';
 import type { ValidatedSignup } from '@/lib/signup-validation';
 
 import {
@@ -42,7 +45,17 @@ export async function createSignupProfile(
     .doc(uid);
 
   const userRef = adminDb.collection('users').doc(uid);
+  // Legacy public document is read only for
+  // signup recovery protection.
   const publicRef = adminDb.collection('publicProfiles').doc(uid);
+
+  const professionalRefs = (
+    ['founder', 'investor', 'mentor'] as const
+  ).map(role =>
+    adminDb
+      .collection(PROFESSIONAL_PROFILES_COLLECTION)
+      .doc(getProfessionalProfileId(uid, role))
+  );
   const referralRef = adminDb.collection('referrals').doc(`referral_${uid}`);
 
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -57,6 +70,9 @@ export async function createSignupProfile(
         const identitySnap = await transaction.get(identityRef);
         const userSnap = await transaction.get(userRef);
         const publicSnap = await transaction.get(publicRef);
+
+        const professionalSnaps =
+          await transaction.getAll(...professionalRefs);
         const codeSnap = await transaction.get(codeRef);
         const existingReferral = await transaction.get(referralRef);
 
@@ -67,6 +83,7 @@ export async function createSignupProfile(
         if (
           identitySnap.exists ||
           publicSnap.exists ||
+          professionalSnaps.some(snapshot => snapshot.exists) ||
           existingReferral.exists
         ) {
           throw new Error('RECOVERY_VERIFICATION_REQUIRED');
@@ -159,8 +176,6 @@ export async function createSignupProfile(
           updatedAt: FieldValue.serverTimestamp()
         };
 
-        const projection = buildPublicProfile(uid, userData);
-
         transaction.create(identityRef, {
           uid,
           email: input.email,
@@ -172,11 +187,9 @@ export async function createSignupProfile(
 
         transaction.create(userRef, userData);
 
-        transaction.create(publicRef, {
-          ...projection,
-          isVerified: false,
-          createdAt: FieldValue.serverTimestamp()
-        });
+        // Professional profiles remain private until
+        // the owner explicitly publishes an eligible role.
+        // Signup must never create a public projection.
 
         transaction.create(codeRef, {
           ownerUid: uid,

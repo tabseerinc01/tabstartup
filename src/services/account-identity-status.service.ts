@@ -6,7 +6,11 @@ import {
 
 import { FieldValue } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from '@/firebase/admin';
-import { buildPublicProfile } from '@/lib/public-profile';
+import {
+  readProfessionalPublicationSnapshots,
+  prepareProfessionalPublicationRemoval,
+  applyProfessionalPublicationSync,
+} from '@/services/professional-profile-publishing.service';
 
 import {
   ACCOUNT_IDENTITIES_COLLECTION,
@@ -66,6 +70,13 @@ export async function setGlobalAccountStatus(
     const identitySnap = await transaction.get(identityRef);
     const startupSnap = await transaction.get(startupRef);
 
+    const publications =
+      await readProfessionalPublicationSnapshots(
+        transaction,
+        adminDb,
+        uid
+      );
+
     if (!identitySnap.exists) {
       throw new Error('ACCOUNT_IDENTITY_NOT_FOUND');
     }
@@ -95,6 +106,25 @@ export async function setGlobalAccountStatus(
 
     const changed = previousStatus !== status;
 
+    const startup = startupSnap.data();
+
+    const removePublications =
+      effectiveStatus === 'suspended' ||
+      previousStatus === 'suspended' ||
+      !startupSnap.exists ||
+      !startup ||
+      resolveLegacyStartupStatus(
+        uid,
+        startup
+      ) !== 'active';
+
+    const actions = removePublications
+      ? prepareProfessionalPublicationRemoval(
+          publications,
+          uid
+        )
+      : [];
+
     if (changed) {
       transaction.update(identityRef, {
         status,
@@ -102,39 +132,17 @@ export async function setGlobalAccountStatus(
       });
     }
 
-    const startup = startupSnap.data();
-
-    // Reconcile visibility even when the requested
-    // global status is already set.
-    if (
-      effectiveStatus === 'suspended' ||
-      !startupSnap.exists ||
-      !startup ||
-      resolveLegacyStartupStatus(
-        uid,
-        startup
-      ) !== 'active'
-    ) {
+    if (removePublications) {
       transaction.delete(publicRef);
-    } else {
-      const projection = buildPublicProfile(
-        uid,
-        startup
-      );
 
-      if (
-        Array.isArray(projection.roles) &&
-        projection.roles.length > 0
-      ) {
-        transaction.set(publicRef, {
-          ...projection,
-          createdAt: startup.createdAt ?? null,
-          isVerified: startup.isVerified === true,
-        });
-      } else {
-        transaction.delete(publicRef);
-      }
+      applyProfessionalPublicationSync(
+        transaction,
+        actions
+      );
     }
+
+    // Global reactivation never republishes a role.
+    // Event organizer profile ownership is unchanged.
 
     return {
       uid,

@@ -59,4 +59,50 @@ assert.match(
 assert.match(frontend, /RECOVERY_VERIFICATION_REQUIRED/);
 pass('Incomplete profile recovery guard present');
 
+assert.doesNotMatch(
+  service,
+  /\bbuildPublicProfile\s*\(/
+);
+pass('Automatic legacy projection builder removed');
+
+assert.doesNotMatch(
+  service,
+  /transaction\.(create|set|update)\s*\(\s*publicRef\b/
+);
+pass('Automatic legacy public writes removed');
+
+assert.doesNotMatch(
+  service,
+  /\bpublishOwnProfessionalProfile\s*\(/
+);
+pass('Signup cannot invoke explicit publishing');
+
+assert.match(
+  service,
+  /transaction\.getAll\s*\(\s*\.\.\.professionalRefs\s*\)/
+);
+pass('Professional recovery documents read transactionally');
+
+assert.match(
+  service,
+  /professionalSnaps\.some\s*\(\s*snapshot\s*=>\s*snapshot\.exists\s*\)/
+);
+pass('Existing professional projection recovery guard present');
+
+assert.match(
+  service,
+  /publicSnap\.exists/
+);
+pass('Legacy public recovery guard preserved');
+
+assert.match(
+  service,
+  /transaction\.create\s*\(\s*identityRef\b/
+);
+assert.match(
+  service,
+  /transaction\.create\s*\(\s*userRef\b/
+);
+pass('Private account and identity creation preserved');
+
 console.log('\nTOTAL PASSED:', passed);

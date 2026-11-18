@@ -68,6 +68,18 @@ async function main() {
       public: adminDb
         .collection('publicProfiles').doc(uid),
 
+      professionalFounder: adminDb
+        .collection('professionalProfiles')
+        .doc('founder_' + uid),
+
+      professionalInvestor: adminDb
+        .collection('professionalProfiles')
+        .doc('investor_' + uid),
+
+      professionalMentor: adminDb
+        .collection('professionalProfiles')
+        .doc('mentor_' + uid),
+
       referral: adminDb
         .collection('referrals')
         .doc('referral_' + uid),
@@ -129,19 +141,29 @@ async function main() {
       identity,
       startup,
       publicProfile,
+      professionalFounder,
+      professionalInvestor,
+      professionalMentor,
       code,
       referral,
     ] = await adminDb.getAll(
       fixture.refs.identity,
       fixture.refs.startup,
       fixture.refs.public,
+      fixture.refs.professionalFounder,
+      fixture.refs.professionalInvestor,
+      fixture.refs.professionalMentor,
       codeRef,
       fixture.refs.referral
     );
 
     assert.equal(identity.exists, true);
     assert.equal(startup.exists, true);
-    assert.equal(publicProfile.exists, true);
+    assert.equal(publicProfile.exists, false);
+
+    assert.equal(professionalFounder.exists, false);
+    assert.equal(professionalInvestor.exists, false);
+    assert.equal(professionalMentor.exists, false);
     assert.equal(code.exists, true);
 
     assert.equal(
@@ -151,7 +173,6 @@ async function main() {
 
     const identityData = identity.data();
     const startupData = startup.data();
-    const publicData = publicProfile.data();
 
     assert.equal(identityData.uid, fixture.uid);
     assert.equal(identityData.email, fixture.input.email);
@@ -188,10 +209,6 @@ async function main() {
       startupData.referralCode,
       result.referralCode
     );
-
-    assert.equal(publicData.uid, fixture.uid);
-    assert.equal(publicData.role, fixture.input.role);
-    assert.equal(publicData.isVerified, false);
 
     assert.equal(
       code.data().ownerUid,
@@ -435,6 +452,35 @@ async function main() {
     );
 
     pass('existing_public_profile_protected');
+
+    for (const [role, refKey] of [
+      ['founder', 'professionalFounder'],
+      ['investor', 'professionalInvestor'],
+      ['mentor', 'professionalMentor'],
+    ]) {
+      const existingProfessional = await seed(
+        'existing_professional_' + role
+      );
+
+      await existingProfessional.refs[refKey].set({
+        uid: existingProfessional.uid,
+        role,
+        schemaVersion: 1,
+        visibility: 'public',
+        status: 'published',
+      });
+
+      await verifyBlocked(
+        existingProfessional,
+        /RECOVERY_VERIFICATION_REQUIRED/
+      );
+
+      pass(
+        'existing_professional_' +
+        role +
+        '_protected'
+      );
+    }
 
     const existingReferral = await seed(
       'existing_referral'

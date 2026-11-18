@@ -74,6 +74,7 @@ export async function POST(request: Request) {
     }
 
     if (
+      message === 'ACCOUNT_NOT_ACTIVE' ||
       message === 'USER_SUSPENDED' ||
       message === 'INVALID_STARTUP_PROFILE' ||
       message === 'INVALID_ACCOUNT_IDENTITY'
