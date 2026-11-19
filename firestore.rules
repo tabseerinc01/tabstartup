@@ -96,6 +96,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Global email verification: trusted server only.
+    // Server-managed account email verification authority.
+    match /accountEmailVerifications/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /emailVerificationChallenges/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /emailVerificationRateLimits/{document=**} {
+      allow read, write: if false;
+    }
+
     // Global Account Identity.
     // Trusted server-side access only.
     match /accountIdentities/{userId} {

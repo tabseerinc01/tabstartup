@@ -1,6 +1,10 @@
 import 'server-only';
 
 import {
+  readTransactionalEmailVerification,
+} from '@/services/email/email-verification-transaction.service';
+
+import {
   hasActiveStartupProfile,
 } from '@/lib/legacy-startup-profile';
 
@@ -56,9 +60,6 @@ export async function updateOwnProfile(
     throw new Error('ACCOUNT_NOT_ACTIVE');
   }
 
-  const emailVerified =
-    authUser.emailVerified === true;
-
   const identityRef = adminDb
     .collection(ACCOUNT_IDENTITIES_COLLECTION)
     .doc(uid);
@@ -108,6 +109,15 @@ export async function updateOwnProfile(
     };
 
     const projection = buildPublicProfile(uid, merged);
+
+    const { emailVerified } =
+      await readTransactionalEmailVerification({
+        transaction,
+        db: adminDb,
+        uid,
+        authUser,
+        accountActive: true,
+      });
 
     const publicationActions =
       prepareProfessionalPublicationSync(
@@ -213,9 +223,6 @@ export async function activateOwnProfessionalRole(
     throw new Error('ACCOUNT_NOT_ACTIVE');
   }
 
-  const emailVerified =
-    authUser.emailVerified === true;
-
   const identityRef = adminDb
     .collection(ACCOUNT_IDENTITIES_COLLECTION)
     .doc(uid);
@@ -275,6 +282,15 @@ export async function activateOwnProfessionalRole(
     };
 
     const projection = buildPublicProfile(uid, merged);
+
+    const { emailVerified } =
+      await readTransactionalEmailVerification({
+        transaction,
+        db: adminDb,
+        uid,
+        authUser,
+        accountActive: true,
+      });
 
     const publicationActions =
       prepareProfessionalPublicationSync(

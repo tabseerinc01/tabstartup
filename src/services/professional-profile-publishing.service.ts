@@ -1,6 +1,10 @@
 import 'server-only';
 
 import {
+  readTransactionalEmailVerification,
+} from '@/services/email/email-verification-transaction.service';
+
+import {
   FieldValue,
   Timestamp,
   type Transaction,
@@ -66,7 +70,8 @@ function assertUid(
  * Authenticate the owner of a professional profile.
  *
  * Never accept a client-provided UID or verification flag.
- * Firebase Auth is authoritative for email verification.
+ * Firebase Auth supplies the trusted account snapshot.
+ * Publication verification is evaluated transactionally.
  */
 async function authenticatePublishingOwner(
   idToken: string
@@ -93,8 +98,7 @@ async function authenticatePublishingOwner(
 
   return {
     uid: account.uid,
-    emailVerified:
-      authUser.emailVerified === true,
+    authUser,
   };
 }
 
@@ -146,7 +150,7 @@ export async function publishOwnProfessionalProfile(
   const owner =
     await authenticatePublishingOwner(idToken);
 
-  const { uid, emailVerified } = owner;
+  const { uid, authUser } = owner;
 
   const { adminDb } = getFirebaseAdmin();
 
@@ -189,6 +193,15 @@ export async function publishOwnProfessionalProfile(
           uid,
           identitySnap
         );
+
+      const { emailVerified } =
+        await readTransactionalEmailVerification({
+          transaction,
+          db: adminDb,
+          uid,
+          authUser,
+          accountActive: accountActive,
+        });
 
       const readinessContext = {
         uid,
@@ -389,7 +402,7 @@ export async function unpublishOwnProfessionalProfile(
 export async function getOwnProfessionalPublicationStatus(
   idToken: string
 ) {
-  const { uid, emailVerified } =
+  const { uid, authUser } =
     await authenticatePublishingOwner(idToken);
 
   const { adminDb } = getFirebaseAdmin();
@@ -430,6 +443,15 @@ export async function getOwnProfessionalPublicationStatus(
         );
 
       const data = userSnap.data()!;
+
+      const { emailVerified } =
+        await readTransactionalEmailVerification({
+          transaction,
+          db: adminDb,
+          uid,
+          authUser,
+          accountActive: accountActive,
+        });
 
       const roles = PROFESSIONAL_ROLES.map(
         (role, index) => {

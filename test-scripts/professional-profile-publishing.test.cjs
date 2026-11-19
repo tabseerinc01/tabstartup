@@ -288,6 +288,10 @@ function createHarness(options = {}) {
 
       return {
         uid,
+        email: "private@example.com",
+        metadata: {
+          creationTime: "Thu, 01 Jan 2026 00:00:00 GMT",
+        },
         disabled: options.disabled === true,
         emailVerified:
           options.emailVerified !== false,
@@ -315,6 +319,46 @@ function createHarness(options = {}) {
       '@/lib/account-identity': {
         ACCOUNT_IDENTITIES_COLLECTION:
           'accountIdentities',
+      },
+
+      '@/services/email/email-verification-transaction.service': {
+        async readTransactionalEmailVerification(input) {
+          assert.equal(input.uid, UID);
+          assert.equal(input.db, adminDb);
+          assert.ok(input.transaction);
+
+          if (
+            !input.accountActive ||
+            !input.authUser ||
+            input.authUser.uid !== input.uid ||
+            input.authUser.disabled !== false
+          ) {
+            return {
+              emailVerified: false,
+              source: 'none',
+              reason: 'account_not_active',
+            };
+          }
+
+          // Exercise the caller's transaction contract.
+          // Actual verification logic is tested separately.
+          await input.transaction.get(
+            input.db
+              .collection('accountEmailVerifications')
+              .doc(input.uid)
+          );
+
+          return input.authUser.emailVerified === true
+            ? {
+                emailVerified: true,
+                source: 'firebase_auth',
+              }
+            : {
+                emailVerified: false,
+                source: 'none',
+                reason: 'verification_missing',
+              };
+        },
       },
 
       '@/lib/profile-readiness': readiness,

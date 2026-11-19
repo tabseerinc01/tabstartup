@@ -47,6 +47,24 @@ const {
   Timestamp,
 } = require('firebase-admin/firestore');
 
+const {
+  createAccountEmailVerification,
+} = require(
+  '../src/services/email/account-email-verification-schema.ts'
+);
+
+const {
+  normalizeAuthAccountCreatedAt,
+} = require(
+  '../src/lib/email-verification.ts'
+);
+
+const {
+  isCustomEmailVerificationPublicationReady,
+} = require(
+  '../src/services/email/email-verification-transaction.service.ts'
+);
+
 async function main() {
   const { adminDb, adminApp, adminAuth } =
     getFirebaseAdmin();
@@ -221,6 +239,53 @@ async function main() {
     });
 
     return publishedAt;
+  }
+
+  async function seedEmailAuthority(
+    fixture,
+    options = {}
+  ) {
+    const authUser = await adminAuth.getUser(
+      fixture.uid
+    );
+
+    assert.equal(authUser.uid, fixture.uid);
+    assert.ok(authUser.email);
+    assert.equal(authUser.disabled, false);
+
+    const authorityRef = ref(
+      'accountEmailVerifications',
+      fixture.uid
+    );
+
+    const record =
+      createAccountEmailVerification({
+        uid: fixture.uid,
+        email: authUser.email,
+        authAccountCreatedAt:
+          normalizeAuthAccountCreatedAt(
+            authUser.metadata.creationTime
+          ),
+        challengeId: 'b'.repeat(64),
+        nowMs: Date.now(),
+      });
+
+    if (options.revoked === true) {
+      const revokedAt = Timestamp.fromMillis(
+        Math.max(
+          Date.now(),
+          record.verifiedAt.toMillis()
+        )
+      );
+
+      record.status = 'revoked';
+      record.revokedAt = revokedAt;
+      record.updatedAt = revokedAt;
+    }
+
+    await authorityRef.set(record);
+
+    return authorityRef;
   }
 
   async function referral(
@@ -989,6 +1054,243 @@ async function main() {
     );
 
     pass('Legacy projection remains frozen');
+
+
+    // 29. Custom OTP authority cannot authorize
+    // publication while the release gate is closed.
+
+    assert.equal(
+      isCustomEmailVerificationPublicationReady(),
+      false,
+      'CUSTOM_PUBLICATION_GATE_MUST_REMAIN_CLOSED'
+    );
+
+    const customMutation = await seed(
+      'custom-mutation',
+      {
+        startup: readyProfile,
+        emailVerified: false,
+      }
+    );
+
+    await seedEmailAuthority(customMutation);
+
+    await seedPublication(
+      customMutation,
+      'founder'
+    );
+
+    await updateOwnProfile(
+      customMutation.uid,
+      {
+        headline: 'Custom OTP Founder',
+      }
+    );
+
+    await assertNoPublication(customMutation);
+
+    assert.equal(
+      (await adminAuth.getUser(
+        customMutation.uid
+      )).emailVerified,
+      false
+    );
+
+    pass(
+      'Custom OTP cannot preserve publication while gate closed'
+    );
+
+    // 30. Custom OTP cannot bypass public sync.
+
+    const customSync = await seed(
+      'custom-sync',
+      {
+        startup: readyProfile,
+        emailVerified: false,
+      }
+    );
+
+    await seedEmailAuthority(customSync);
+
+    await seedPublication(
+      customSync,
+      'founder'
+    );
+
+    await syncPublicProfile(customSync.uid);
+
+    await assertNoPublication(customSync);
+
+    pass(
+      'Custom OTP cannot bypass publication synchronization gate'
+    );
+
+    // 31. Role activation remains independent
+    // from publication authorization.
+
+    const customRole = await seed(
+      'custom-role',
+      {
+        startup: readyProfile,
+        emailVerified: false,
+      }
+    );
+
+    await seedEmailAuthority(customRole);
+
+    await activateOwnProfessionalRole(
+      customRole.uid,
+      'mentor'
+    );
+
+    const customRoleData =
+      (await customRole.userRef.get()).data();
+
+    assert.ok(
+      customRoleData.roles.includes('mentor')
+    );
+
+    await assertNoPublication(customRole);
+
+    pass(
+      'Custom OTP role activation does not publish profiles'
+    );
+
+    // 32. Revoked authority cannot preserve
+    // an existing professional publication.
+
+    const revokedCustom = await seed(
+      'revoked-custom',
+      {
+        startup: readyProfile,
+        emailVerified: false,
+      }
+    );
+
+    await seedEmailAuthority(
+      revokedCustom,
+      { revoked: true }
+    );
+
+    await seedPublication(
+      revokedCustom,
+      'founder'
+    );
+
+    await syncPublicProfile(revokedCustom.uid);
+
+    await assertNoPublication(revokedCustom);
+
+    pass(
+      'Revoked custom authority removes existing publication'
+    );
+
+    // 33. Native verification remains independent
+    // from malformed custom authority.
+
+    const nativeMalformed = await seed(
+      'native-malformed',
+      {
+        startup: readyProfile,
+        emailVerified: true,
+      }
+    );
+
+    await ref(
+      'accountEmailVerifications',
+      nativeMalformed.uid
+    ).set({
+      schemaVersion: 999,
+      invalid: true,
+    });
+
+    const nativePublishedAt =
+      await seedPublication(
+        nativeMalformed,
+        'founder'
+      );
+
+    await updateOwnProfile(
+      nativeMalformed.uid,
+      {
+        headline: 'Native Verified Founder',
+      }
+    );
+
+    const nativeMalformedSnap =
+      await nativeMalformed
+        .professionalRefs.founder.get();
+
+    assert.equal(
+      nativeMalformedSnap.exists,
+      true
+    );
+
+    assert.equal(
+      nativeMalformedSnap
+        .data().headline,
+      'Native Verified Founder'
+    );
+
+    assert.equal(
+      nativeMalformedSnap
+        .data().publishedAt.toMillis(),
+      nativePublishedAt.toMillis()
+    );
+
+    pass(
+      'Native verification survives malformed custom authority'
+    );
+
+    // 34. Revoking custom authority must not
+    // revoke independent native verification.
+
+    const nativeRevoked = await seed(
+      'native-revoked',
+      {
+        startup: readyProfile,
+        emailVerified: true,
+      }
+    );
+
+    await seedEmailAuthority(
+      nativeRevoked,
+      { revoked: true }
+    );
+
+    const nativeRevokedPublishedAt =
+      await seedPublication(
+        nativeRevoked,
+        'founder'
+      );
+
+    await syncPublicProfile(nativeRevoked.uid);
+
+    const nativeRevokedSnap =
+      await nativeRevoked
+        .professionalRefs.founder.get();
+
+    assert.equal(
+      nativeRevokedSnap.exists,
+      true
+    );
+
+    assert.equal(
+      nativeRevokedSnap
+        .data().publishedAt.toMillis(),
+      nativeRevokedPublishedAt.toMillis()
+    );
+
+    assert.equal(
+      (await adminAuth.getUser(
+        nativeRevoked.uid
+      )).emailVerified,
+      true
+    );
+
+    pass(
+      'Native verification survives revoked custom authority'
+    );
 
     console.log(
       'TOTAL PROFILE MUTATION SECURITY CHECKS PASSED:',

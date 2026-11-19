@@ -1,6 +1,10 @@
 import 'server-only';
 
 import {
+  revokeTransactionalEmailVerification,
+} from '@/services/email/email-verification-revocation.service';
+
+import {
   resolveLegacyStartupStatus,
 } from '@/lib/legacy-startup-profile';
 
@@ -124,6 +128,36 @@ export async function setGlobalAccountStatus(
           uid
         )
       : [];
+
+    // Global suspension invalidates custom email
+    // authority and outstanding OTP challenges.
+    //
+    // Reactivation also invalidates stale authority
+    // inherited from a previously suspended account.
+    //
+    // Startup-only suspension does not independently
+    // trigger global email authority revocation.
+
+    const revokeGlobalVerification =
+      status === 'suspended' ||
+      previousStatus === 'suspended';
+
+    if (revokeGlobalVerification) {
+      if (!removePublications) {
+        throw new Error(
+          'GLOBAL_REVOCATION_REQUIRES_PUBLICATION_REMOVAL'
+        );
+      }
+
+      await revokeTransactionalEmailVerification({
+        transaction,
+        db: adminDb,
+        uid,
+        publicationPolicy: 'caller_removes',
+      });
+    }
+
+    // No additional transaction reads below.
 
     if (changed) {
       transaction.update(identityRef, {

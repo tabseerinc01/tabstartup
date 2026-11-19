@@ -75,6 +75,9 @@ import { createNotification } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 import { calculateProfileStrength, calculateTrustScore } from '@/lib/profile-utils';
+import { useEffect as useEmailStatusEffect, useState as useEmailStatusState } from 'react';
+import { fetchEmailVerificationStatus } from '@/lib/email-verification-client';
+
 
 export default function DashboardOverviewPage() {
   const { user, isUserLoading } = useUser();
@@ -324,18 +327,125 @@ export default function DashboardOverviewPage() {
     return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [recentNotifications, recentTasks, recentInvoices]);
 
+  // Effective email verification is resolved
+  // by the server, not by a client Auth flag.
+  const emailVerificationUid = user?.uid;
+  const emailVerificationAddress = user?.email;
+
+  const emailVerificationKey =
+    JSON.stringify([
+      emailVerificationUid,
+      emailVerificationAddress,
+    ]);
+
+  const [
+    dashboardEmailVerification,
+    setDashboardEmailVerification,
+  ] = useEmailStatusState<{
+    key: string;
+    verified: boolean | null;
+  } | null>(null);
+
+  useEmailStatusEffect(() => {
+    if (!user) {
+      setDashboardEmailVerification(null);
+      return;
+    }
+
+    const controller =
+      new AbortController();
+
+    let active = true;
+    let requestVersion = 0;
+
+    async function refreshVerification() {
+      if (!user || !active) return;
+
+      const version = ++requestVersion;
+
+      try {
+        const result =
+          await fetchEmailVerificationStatus(
+            user,
+            controller.signal
+          );
+
+        if (
+          active &&
+          !controller.signal.aborted &&
+          version === requestVersion
+        ) {
+          setDashboardEmailVerification({
+            key: emailVerificationKey,
+            verified: result.emailVerified,
+          });
+        }
+      } catch {
+        if (
+          active &&
+          !controller.signal.aborted &&
+          version === requestVersion
+        ) {
+          setDashboardEmailVerification({
+            key: emailVerificationKey,
+            verified: null,
+          });
+        }
+      }
+    }
+
+    setDashboardEmailVerification(null);
+
+    void refreshVerification();
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        void refreshVerification();
+      }
+    }
+
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibilityChange
+    );
+
+    return () => {
+      active = false;
+      controller.abort();
+
+      document.removeEventListener(
+        'visibilitychange',
+        handleVisibilityChange
+      );
+    };
+  }, [user, emailVerificationKey]);
+
+  const effectiveEmailVerified =
+    dashboardEmailVerification?.key ===
+      emailVerificationKey
+      ? dashboardEmailVerification.verified
+      : null;
+
   // Founder Growth Insights
   const recommendations = useMemo(() => {
     if (!profile) return [];
     const items = [];
     if (startup && !startup.website) items.push({ id: 'web', label: 'Complete Startup Website', href: '/dashboard/startup' });
-    if (!user?.emailVerified) items.push({ id: 'email', label: 'Verify Primary Email', href: '/dashboard/profile' });
+    if (effectiveEmailVerified !== true) {
+      items.push({
+        id: 'email',
+        label: effectiveEmailVerified === false
+          ? 'Verify Primary Email'
+          : 'Check Email Verification',
+        href: '/dashboard/profile#email-verification',
+      });
+    }
     if (startup && !startup.imageUrl) items.push({ id: 'logo', label: 'Upload Startup Logo', href: '/dashboard/startup' });
     if (startup && (!startup.shortDescription || startup.shortDescription.length < 20)) items.push({ id: 'desc', label: 'Improve Startup Description', href: '/dashboard/startup' });
     if (stats.connectedInvestors < 3) items.push({ id: 'pitch', label: 'Reach out to more Investors', href: '/investors' });
     if (profile && calculateProfileStrength(profile) < 100) items.push({ id: 'prof', label: 'Complete Founder Profile', href: '/dashboard/profile' });
     return items;
-  }, [profile, startup, user, stats]);
+  }, [profile, startup, user, stats, effectiveEmailVerified]);
 
   const roles = (profile?.roles || (profile?.role ? [profile.role] : ['user'])).filter(Boolean) as string[];
   const isFounder = roles.includes('founder');

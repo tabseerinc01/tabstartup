@@ -1,10 +1,15 @@
 import 'server-only';
 
 import {
+  readTransactionalEmailVerification,
+} from '@/services/email/email-verification-transaction.service';
+
+import {
   resolveLegacyStartupStatus,
 } from '@/lib/legacy-startup-profile';
 
 import { getFirebaseAdmin } from '@/firebase/admin';
+import type { UserRecord } from 'firebase-admin/auth';
 import {
   readProfessionalPublicationSnapshots,
   prepareProfessionalPublicationSync,
@@ -24,7 +29,7 @@ async function readPublicationAuthState(
   uid: string
 ): Promise<{
   authActive: boolean;
-  emailVerified: boolean;
+  authUser: UserRecord | null;
 }> {
   const { adminAuth } = getFirebaseAdmin();
 
@@ -34,10 +39,7 @@ async function readPublicationAuthState(
     return {
       authActive:
         authUser.uid === uid && !authUser.disabled,
-      emailVerified:
-        authUser.uid === uid &&
-        !authUser.disabled &&
-        authUser.emailVerified === true,
+      authUser,
     };
   } catch (error: unknown) {
     const code =
@@ -50,7 +52,7 @@ async function readPublicationAuthState(
     if (code === 'auth/user-not-found') {
       return {
         authActive: false,
-        emailVerified: false,
+        authUser: null,
       };
     }
 
@@ -69,7 +71,7 @@ export async function syncPublicProfile(uid: string) {
 
   const {
     authActive,
-    emailVerified,
+    authUser,
   } = await readPublicationAuthState(uid);
 
   const identityRef = adminDb
@@ -100,6 +102,15 @@ export async function syncPublicProfile(uid: string) {
       userSnap.exists &&
       resolveLegacyStartupStatus(uid, data) === 'active' &&
       isGlobalAccountEligible(uid, identitySnap);
+
+    const { emailVerified } =
+      await readTransactionalEmailVerification({
+        transaction,
+        db: adminDb,
+        uid,
+        authUser,
+        accountActive: accountActive,
+      });
 
     const actions =
       prepareProfessionalPublicationSync(
@@ -231,7 +242,7 @@ export async function setUserProfessionalRole(
 
   const {
     authActive,
-    emailVerified,
+    authUser,
   } = await readPublicationAuthState(uid);
 
   if (enabled && !authActive) {
@@ -319,6 +330,15 @@ export async function setUserProfessionalRole(
     const synchronizationData = enabled
       ? data
       : { ...data, ...updates };
+
+    const { emailVerified } =
+      await readTransactionalEmailVerification({
+        transaction,
+        db: adminDb,
+        uid,
+        authUser,
+        accountActive: accountActive,
+      });
 
     const actions =
       prepareProfessionalPublicationSync(

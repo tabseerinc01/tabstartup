@@ -17,6 +17,37 @@ const {
   resolveAccountIdentity,
 } = require('../src/services/account-identity.service.ts');
 
+const {
+  createAccountEmailVerification,
+  parseAccountEmailVerification,
+} = require('../src/services/email/account-email-verification-schema.ts');
+
+const {
+  createPendingEmailOtpChallenge,
+} = require('../src/services/email/email-otp-schema.ts');
+
+const {
+  ACCOUNT_EMAIL_VERIFICATIONS_COLLECTION,
+  EMAIL_VERIFICATION_CHALLENGES_COLLECTION,
+} = require('../src/lib/email-verification.ts');
+
+const {
+  revokeTransactionalEmailVerification,
+} = require('../src/services/email/email-verification-revocation.service.ts');
+
+const {
+  prepareEmailOtpRateLimit,
+} = require('../src/services/email/email-otp-rate-limit.service.ts');
+
+const {
+  createEmailOtpRateLimitKey,
+} = require('../src/services/email/email-otp-crypto.service.ts');
+
+const {
+  EMAIL_VERIFICATION_RATE_LIMITS_COLLECTION,
+  EMAIL_OTP_POLICY,
+} = require('../src/lib/email-verification.ts');
+
 async function main() {
   const { adminApp, adminDb } = getFirebaseAdmin();
 
@@ -127,6 +158,93 @@ async function main() {
       publicRef,
       professionalRefs,
     };
+  }
+
+  async function seedOtp(fixture, malformed = false) {
+    const authorityRef = adminDb
+      .collection(ACCOUNT_EMAIL_VERIFICATIONS_COLLECTION)
+      .doc(fixture.uid);
+
+    const challengeRef = adminDb
+      .collection(EMAIL_VERIFICATION_CHALLENGES_COLLECTION)
+      .doc(fixture.uid);
+
+    fixtures.push(authorityRef, challengeRef);
+
+    const nowMs = Date.now();
+
+    const binding = {
+      uid: fixture.uid,
+      email: fixture.uid + '@example.com',
+      authAccountCreatedAt:
+        new Date(nowMs - 86400000).toISOString(),
+    };
+
+    const authority = createAccountEmailVerification({
+      ...binding,
+      challengeId: 'a'.repeat(64),
+      nowMs,
+    });
+
+    const challenge = createPendingEmailOtpChallenge({
+      ...binding,
+      challengeId: 'b'.repeat(64),
+      codeDigest: 'c'.repeat(64),
+      nowMs,
+    });
+
+    const batch = adminDb.batch();
+
+    batch.set(
+      authorityRef,
+      malformed
+        ? { ...authority, schemaVersion: 999 }
+        : authority
+    );
+
+    batch.set(challengeRef, challenge);
+
+    await batch.commit();
+
+    return { authorityRef, challengeRef, authority };
+  }
+
+  async function assertOtpRevoked(fixture, otp) {
+    const snapshot = await otp.authorityRef.get();
+
+    assert.equal(snapshot.exists, true);
+
+    const record = parseAccountEmailVerification(
+      fixture.uid,
+      snapshot.data()
+    );
+
+    assert.equal(record.status, 'revoked');
+    assert.equal(
+      record.verifiedEmail,
+      otp.authority.verifiedEmail
+    );
+
+    assert.equal(
+      record.verificationChallengeId,
+      otp.authority.verificationChallengeId
+    );
+
+    assert.deepEqual(
+      record.verifiedAt,
+      otp.authority.verifiedAt
+    );
+
+    assert.ok(record.revokedAt);
+
+    assert.equal(
+      (await otp.challengeRef.get()).exists,
+      false
+    );
+
+    await assertNoPublication(fixture);
+
+    return record;
   }
 
   async function assertNoPublication(fixture) {
@@ -480,6 +598,314 @@ async function main() {
     await assertNoPublication(concurrent);
 
     pass('concurrent_suspension_single_change');
+
+    const otpFixture = await seed('otp_revocation', {
+      startup: {},
+      eventOrganizer: {},
+      publications: true,
+    });
+
+    const otp = await seedOtp(otpFixture);
+
+    const organizerBeforeOtp =
+      await otpFixture.eventOrganizerRef.get();
+
+    await setGlobalAccountStatus(
+      otpFixture.uid,
+      'suspended'
+    );
+
+    const revoked = await assertOtpRevoked(
+      otpFixture,
+      otp
+    );
+
+    pass('global_suspension_revokes_otp_authority');
+    pass('global_suspension_invalidates_otp_challenge');
+
+    await setGlobalAccountStatus(
+      otpFixture.uid,
+      'active'
+    );
+
+    const reactivatedAuthority =
+      await assertOtpRevoked(otpFixture, otp);
+
+    assert.deepEqual(reactivatedAuthority, revoked);
+
+    assert.deepEqual(
+      (await otpFixture.eventOrganizerRef.get()).data(),
+      organizerBeforeOtp.data()
+    );
+
+    pass('reactivation_does_not_restore_otp_authority');
+    pass('otp_revocation_preserves_organizer_profile');
+
+    const malformedFixture = await seed(
+      'malformed_otp_authority',
+      { startup: {}, publications: true }
+    );
+
+    const malformedOtp = await seedOtp(
+      malformedFixture,
+      true
+    );
+
+    await setGlobalAccountStatus(
+      malformedFixture.uid,
+      'suspended'
+    );
+
+    assert.equal(
+      (await malformedOtp.authorityRef.get()).exists,
+      false
+    );
+
+    assert.equal(
+      (await malformedOtp.challengeRef.get()).exists,
+      false
+    );
+
+    await assertNoPublication(malformedFixture);
+
+    pass('malformed_otp_authority_removed_on_suspension');
+
+    const concurrentOtpFixture = await seed(
+      'concurrent_otp_revocation',
+      { startup: {}, publications: true }
+    );
+
+    const concurrentOtp = await seedOtp(
+      concurrentOtpFixture
+    );
+
+    const concurrentOtpResults = await Promise.all(
+      Array.from(
+        { length: 5 },
+        () => setGlobalAccountStatus(
+          concurrentOtpFixture.uid,
+          'suspended'
+        )
+      )
+    );
+
+    assert.equal(
+      concurrentOtpResults.filter(r => r.changed).length,
+      1
+    );
+
+    await assertOtpRevoked(
+      concurrentOtpFixture,
+      concurrentOtp
+    );
+
+    pass('concurrent_suspension_revokes_otp_safely');
+
+    const replacementFixture = await seed(
+      'otp_atomic_replacement',
+      { startup: {}, publications: true }
+    );
+
+    const replacementOtp =
+      await seedOtp(replacementFixture);
+
+    const freshChallenge =
+      createPendingEmailOtpChallenge({
+        uid: replacementFixture.uid,
+        email: 'changed-' + replacementFixture.uid + '@example.com',
+        authAccountCreatedAt:
+          replacementOtp.authority.authAccountCreatedAt,
+        challengeId: 'd'.repeat(64),
+        codeDigest: 'e'.repeat(64),
+        nowMs: Date.now(),
+      });
+
+    await adminDb.runTransaction(async transaction => {
+      const result =
+        await revokeTransactionalEmailVerification({
+          transaction,
+          db: adminDb,
+          uid: replacementFixture.uid,
+          publicationPolicy: 'remove',
+        });
+
+      assert.equal(result.authorityRevoked, true);
+      assert.equal(result.challengeInvalidated, true);
+      assert.equal(result.publicationsRemoved, 3);
+
+      transaction.set(
+        replacementOtp.challengeRef,
+        freshChallenge
+      );
+    });
+
+    const replacedAuthority =
+      parseAccountEmailVerification(
+        replacementFixture.uid,
+        (await replacementOtp.authorityRef.get()).data()
+      );
+
+    assert.equal(replacedAuthority.status, 'revoked');
+
+    const replacedChallenge =
+      (await replacementOtp.challengeRef.get()).data();
+
+    assert.deepEqual(replacedChallenge, freshChallenge);
+
+    for (const ref of replacementFixture.professionalRefs) {
+      assert.equal((await ref.get()).exists, false);
+    }
+
+    pass('atomic_revocation_and_fresh_challenge_replacement');
+
+    const rollbackFixture = await seed(
+      'otp_revocation_rollback',
+      { startup: {}, publications: true }
+    );
+
+    const rollbackOtp = await seedOtp(rollbackFixture);
+
+    const beforeAuthority =
+      (await rollbackOtp.authorityRef.get()).data();
+
+    const beforeChallenge =
+      (await rollbackOtp.challengeRef.get()).data();
+
+    await assert.rejects(
+      () => adminDb.runTransaction(async transaction => {
+        await revokeTransactionalEmailVerification({
+          transaction,
+          db: adminDb,
+          uid: rollbackFixture.uid,
+          publicationPolicy: 'remove',
+        });
+
+        throw new Error('INTENTIONAL_ROLLBACK');
+      }),
+      /INTENTIONAL_ROLLBACK/
+    );
+
+    assert.deepEqual(
+      (await rollbackOtp.authorityRef.get()).data(),
+      beforeAuthority
+    );
+
+    assert.deepEqual(
+      (await rollbackOtp.challengeRef.get()).data(),
+      beforeChallenge
+    );
+
+    for (const ref of rollbackFixture.professionalRefs) {
+      assert.equal((await ref.get()).exists, true);
+    }
+
+    pass('failed_transaction_preserves_authority_and_challenge');
+
+    // Test-only HMAC secret. Never use production credentials.
+    process.env.EMAIL_OTP_SECRET = 'f'.repeat(64);
+
+    const rateFixture = await seed(
+      'otp_rate_concurrency',
+      { startup: {} }
+    );
+
+    const rateInput = {
+      action: 'send',
+      uid: rateFixture.uid,
+      email: rateFixture.uid + '@example.com',
+      ip: '192.0.2.10',
+    };
+
+    const rateRefs = [
+      ['uid', rateInput.uid],
+      ['email', rateInput.email],
+      ['ip', rateInput.ip],
+    ].map(([scope, value]) =>
+      adminDb
+        .collection(EMAIL_VERIFICATION_RATE_LIMITS_COLLECTION)
+        .doc(createEmailOtpRateLimitKey('send', scope, value))
+    );
+
+    // Fail safely if the test namespace already exists.
+    for (const ref of rateRefs) {
+      assert.equal((await ref.get()).exists, false);
+    }
+
+    fixtures.push(...rateRefs);
+
+    const rateResults = await Promise.all(
+      Array.from(
+        { length: EMAIL_OTP_POLICY.maxSendPerUid + 2 },
+        () => adminDb.runTransaction(async transaction => {
+          const limit = await prepareEmailOtpRateLimit(
+            transaction,
+            adminDb,
+            rateInput,
+            Date.now()
+          );
+
+          if (limit.result.allowed) {
+            limit.apply();
+          }
+
+          return limit.result;
+        })
+      )
+    );
+
+    assert.equal(
+      rateResults.filter(r => r.allowed).length,
+      EMAIL_OTP_POLICY.maxSendPerUid
+    );
+
+    assert.equal(
+      rateResults.filter(r => !r.allowed).length,
+      2
+    );
+
+    for (const ref of rateRefs) {
+      assert.equal(
+        (await ref.get()).data().count,
+        EMAIL_OTP_POLICY.maxSendPerUid
+      );
+    }
+
+    pass('concurrent_otp_rate_limit_enforced');
+
+    const rateBefore = await Promise.all(
+      rateRefs.map(ref => ref.get())
+    );
+
+    const blocked = await adminDb.runTransaction(
+      async transaction => {
+        const limit = await prepareEmailOtpRateLimit(
+          transaction,
+          adminDb,
+          rateInput,
+          Date.now()
+        );
+
+        assert.equal(limit.result.allowed, false);
+
+        assert.throws(
+          () => limit.apply(),
+          /EMAIL_OTP_RATE_LIMIT_EXCEEDED/
+        );
+
+        return limit.result;
+      }
+    );
+
+    assert.ok(blocked.retryAfterSeconds > 0);
+
+    for (let i = 0; i < rateRefs.length; i++) {
+      assert.deepEqual(
+        (await rateRefs[i].get()).data(),
+        rateBefore[i].data()
+      );
+    }
+
+    pass('blocked_rate_limit_does_not_modify_counters');
 
     console.log('\nTOTAL PASSED: ' + passed);
 
