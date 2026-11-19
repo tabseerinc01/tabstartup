@@ -74,7 +74,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { createNotification } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
-import { calculateProfileStrength, calculateTrustScore } from '@/lib/profile-utils';
+import { useProfessionalPublication } from '@/hooks/use-professional-publication';
+import { ProfessionalPublicationCard } from '@/components/account/professional-publication-card';
 import { useEffect as useEmailStatusEffect, useState as useEmailStatusState } from 'react';
 import { fetchEmailVerificationStatus } from '@/lib/email-verification-client';
 
@@ -426,7 +427,9 @@ export default function DashboardOverviewPage() {
       ? dashboardEmailVerification.verified
       : null;
 
-  // Founder Growth Insights
+  const publication = useProfessionalPublication(user);
+
+  // Professional Growth Insights
   const recommendations = useMemo(() => {
     if (!profile) return [];
     const items = [];
@@ -443,17 +446,56 @@ export default function DashboardOverviewPage() {
     if (startup && !startup.imageUrl) items.push({ id: 'logo', label: 'Upload Startup Logo', href: '/dashboard/startup' });
     if (startup && (!startup.shortDescription || startup.shortDescription.length < 20)) items.push({ id: 'desc', label: 'Improve Startup Description', href: '/dashboard/startup' });
     if (stats.connectedInvestors < 3) items.push({ id: 'pitch', label: 'Reach out to more Investors', href: '/investors' });
-    if (profile && calculateProfileStrength(profile) < 100) items.push({ id: 'prof', label: 'Complete Founder Profile', href: '/dashboard/profile' });
+    if (!publication.status) {
+      items.push({
+        id: 'publication-status',
+        label: 'Check Professional Profile Status',
+        href: '/dashboard/profile#profile-publication',
+      });
+    } else {
+      for (const entry of publication.status.roles) {
+        if (!entry.readiness.eligible) continue;
+
+        const roleLabel =
+          entry.role.charAt(0).toUpperCase() +
+          entry.role.slice(1);
+
+        if (entry.requiresReconciliation) {
+          items.push({
+            id: 'review-' + entry.role,
+            label: 'Review ' + roleLabel + ' Publication',
+            href: '/dashboard/profile#profile-publication',
+          });
+        } else if (!entry.readiness.ready) {
+          items.push({
+            id: 'complete-' + entry.role,
+            label: 'Complete ' + roleLabel + ' Profile',
+            href: '/dashboard/profile#profile-publication',
+          });
+        } else if (entry.publicationStatus !== 'published') {
+          items.push({
+            id: 'publish-' + entry.role,
+            label: 'Publish ' + roleLabel + ' Profile',
+            href: '/dashboard/profile#profile-publication',
+          });
+        }
+      }
+    }
     return items;
-  }, [profile, startup, user, stats, effectiveEmailVerified]);
+  }, [
+    profile,
+    startup,
+    user,
+    stats,
+    effectiveEmailVerified,
+    publication.status,
+  ]);
 
   const roles = (profile?.roles || (profile?.role ? [profile.role] : ['user'])).filter(Boolean) as string[];
   const isFounder = roles.includes('founder');
   const isInvestor = roles.includes('investor');
   const isMentor = roles.includes('mentor');
 
-  const strength = profile ? calculateProfileStrength(profile, startup) : 0;
-  const trust = profile ? calculateTrustScore(profile, startup) : 0;
   const displayName = profile?.fullName || user?.displayName || user?.email?.split('@')[0];
 
   if (isUserLoading) {
@@ -507,27 +549,11 @@ export default function DashboardOverviewPage() {
             </div>
           </div>
 
-          <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Card className="bg-white/5 border-white/10 rounded-3xl p-6 flex flex-col justify-between group hover:bg-white/10 transition-colors">
-              <div className="flex justify-between items-center mb-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Profile Integrity</p>
-                <Zap className="h-4 w-4 text-primary" />
-              </div>
-              <div className="space-y-3">
-                 <p className="text-4xl font-black">{strength}%</p>
-                 <Progress value={strength} className="h-1 bg-white/10" />
-              </div>
-            </Card>
-            <Card className="bg-white/5 border-white/10 rounded-3xl p-6 flex flex-col justify-between group hover:bg-white/10 transition-colors">
-              <div className="flex justify-between items-center mb-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Network Trust</p>
-                <ShieldCheck className="h-4 w-4 text-primary" />
-              </div>
-              <div className="space-y-1">
-                 <p className="text-4xl font-black">{trust}/100</p>
-                 <p className="text-[10px] font-bold text-slate-500 uppercase">Verification Level</p>
-              </div>
-            </Card>
+          <div className="lg:col-span-5">
+            <ProfessionalPublicationCard
+              publication={publication}
+              emailVerified={effectiveEmailVerified}
+            />
           </div>
         </div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none" />

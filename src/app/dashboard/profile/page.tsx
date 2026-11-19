@@ -4,7 +4,7 @@
 import { mutateOwnProfile } from '@/lib/profile-mutation-client';
 import { EmailVerificationCard } from '@/components/account/email-verification-card';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,7 +20,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { validateImage, uploadProfileImage } from '@/lib/storage-helpers';
-import { ProfileStrengthWidget } from '@/components/dashboard/profile-strength-widget';
+import { ProfessionalPublicationCard } from '@/components/account/professional-publication-card';
+import { useProfessionalPublication } from '@/hooks/use-professional-publication';
 
 const AVAILABLE_ROLES = [
   { id: 'founder', label: 'Founder', icon: Zap },
@@ -29,8 +30,22 @@ const AVAILABLE_ROLES = [
 ];
 
 export default function ProfilePage() {
-  const { toast } = useToast();
   const { user } = useUser();
+
+  return (
+    <ProfileEditor
+      key={JSON.stringify([user?.uid, user?.email])}
+      user={user}
+    />
+  );
+}
+
+function ProfileEditor({
+  user,
+}: {
+  user: ReturnType<typeof useUser>['user'];
+}) {
+  const { toast } = useToast();
   const firestore = useFirestore();
   const storage = useStorage();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,7 +58,32 @@ export default function ProfilePage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [isActivatingRole, setIsActivatingRole] = useState<string | null>(null);
-  const [startup, setStartup] = useState<any>(null);
+  const publication = useProfessionalPublication(user);
+
+  const [effectiveEmailVerified, setEffectiveEmailVerified] =
+    useState<boolean | null>(null);
+
+  const onVerificationChange = useCallback(
+    (verified: boolean | null) => {
+      setEffectiveEmailVerified(verified);
+    },
+    []
+  );
+
+  const refreshPublication = publication.refresh;
+
+  useEffect(() => {
+    void refreshPublication();
+  }, [effectiveEmailVerified, refreshPublication]);
+  const mutationLock = useRef(false);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   
   const [formData, setFormData] = useState({
     fullName: '',
@@ -88,7 +128,36 @@ export default function ProfilePage() {
     achievements: [''],
   });
 
+  const [savedFormData, setSavedFormData] =
+    useState<typeof formData | null>(null);
+
+  const hasUnsavedChanges =
+    savedFormData === null ||
+    JSON.stringify(formData) !== JSON.stringify(savedFormData);
+
+  const editorBusy =
+    isSaving ||
+    isUploading ||
+    !!isActivatingRole ||
+    publication.busy;
+
+  function beginMutation() {
+    if (
+      mutationLock.current ||
+      !mountedRef.current ||
+      !profileLoaded ||
+      editorBusy
+    ) {
+      return false;
+    }
+
+    mutationLock.current = true;
+    return true;
+  }
+
   useEffect(() => {
+    let cancelled = false;
+
     async function loadProfile() {
       if (!firestore || !user?.uid) return;
       setIsLoading(true);
@@ -98,26 +167,21 @@ export default function ProfilePage() {
           doc(firestore, 'users', user.uid)
         );
 
-        setStartup(null);
-
-        try {
-          const startupSnap = await getDoc(
-            doc(firestore, 'startups', user.uid)
-          );
-
-          if (startupSnap.exists()) {
-            setStartup(startupSnap.data());
-          }
-        } catch (startupError) {
-          console.warn('Startup data unavailable:', startupError);
-        }
+        if (cancelled) return;
 
         if (snap.exists()) {
           const profile = snap.data();
-          setProfileLoaded(true);
-          const roles = Array.isArray(profile.roles) ? profile.roles : (profile.role ? [profile.role] : ['founder']);
+          const roles = (
+            Array.isArray(profile.roles)
+              ? profile.roles
+              : profile.role ? [profile.role] : []
+          ).filter((role: string) =>
+            AVAILABLE_ROLES.some(item => item.id === role)
+          );
+
           setUserRoles(roles);
-          setFormData({
+
+          const loadedForm: typeof formData = {
             fullName: profile.fullName?.trim() || user.displayName?.trim() || '',
             imageUrl: profile.imageUrl || '',
             coverImageUrl: profile.coverImageUrl || '',
@@ -150,15 +214,28 @@ export default function ProfilePage() {
             availability: profile.availability || { openToInvestment: false, hiring: false, coFounder: false },
             experience: profile.experience && profile.experience.length > 0 ? profile.experience : [{ company: '', role: '', duration: '', description: '' }],
             achievements: profile.achievements && profile.achievements.length > 0 ? profile.achievements : [''],
-          });
+          };
+
+          setFormData(loadedForm);
+          setSavedFormData(loadedForm);
+          setProfileLoaded(true);
         }
       } catch (error) {
         console.error("Error loading profile:", error);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
-    loadProfile();
+
+    if (user?.uid && firestore) {
+      void loadProfile();
+    } else {
+      setIsLoading(false);
+    }
+
+    return () => {
+      cancelled = true;
+    };
   }, [firestore, user?.uid]);
 
 
@@ -172,25 +249,40 @@ export default function ProfilePage() {
       return;
     }
 
+    if (!beginMutation()) return;
+
     setIsUploading(true);
     setUploadProgress(0);
 
     try {
       const downloadURL = await uploadProfileImage(storage, user.uid, file, (progress) => {
-        setUploadProgress(progress);
+        if (mountedRef.current) setUploadProgress(progress);
       });
+
+      if (!mountedRef.current) return;
 
       const field = isCover ? 'coverImageUrl' : 'imageUrl';
       await mutateOwnProfile(user, 'update', {
         [field]: downloadURL,
       });
 
+      if (!mountedRef.current) return;
+
       setFormData(prev => ({ ...prev, [field]: downloadURL }));
+      setSavedFormData(prev =>
+        prev ? { ...prev, [field]: downloadURL } : prev
+      );
       toast({ title: isCover ? "Cover Updated" : "Photo Updated" });
     } catch (error: any) {
       toast({ title: "Upload Failed", variant: "destructive" });
     } finally {
+      mutationLock.current = false;
+
+      if (!mountedRef.current) return;
+
       setIsUploading(false);
+      void publication.refresh();
+
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (coverInputRef.current) coverInputRef.current.value = '';
     }
@@ -208,6 +300,10 @@ export default function ProfilePage() {
       });
       return;
     }
+
+    if (!beginMutation()) return;
+
+    const submittedForm = formData;
 
     setIsSaving(true);
     try {
@@ -230,6 +326,10 @@ export default function ProfilePage() {
       const { isMentor, ...profileFields } = updatedData;
       await mutateOwnProfile(user, 'update', profileFields);
 
+      if (!mountedRef.current) return;
+
+      setSavedFormData(submittedForm);
+
       toast({
         title: "Success",
         description: "Profile updated successfully.",
@@ -241,13 +341,20 @@ export default function ProfilePage() {
         description: "Failed to update profile.",
       });
     } finally {
-      setIsSaving(false);
+      mutationLock.current = false;
+
+      if (mountedRef.current) {
+        setIsSaving(false);
+        void publication.refresh();
+      }
     }
   };
 
   const activateRole = async (roleId: string) => {
     if (!firestore || !user?.uid || isActivatingRole) return;
     
+    if (!beginMutation()) return;
+
     setIsActivatingRole(roleId);
 
 
@@ -255,16 +362,24 @@ export default function ProfilePage() {
       await mutateOwnProfile(user, 'activate-role', {
         role: roleId,
       });
+      if (!mountedRef.current) return;
+
       setUserRoles(prev => [...new Set([...prev, roleId])]);
       toast({ title: "Role Activated", description: `You have successfully joined the ecosystem as a ${roleId}.` });
     } catch (error: any) {
       toast({ title: "Activation Failed", variant: "destructive" });
     } finally {
-      setIsActivatingRole(null);
+      mutationLock.current = false;
+
+      if (mountedRef.current) {
+        setIsActivatingRole(null);
+        void publication.refresh();
+      }
     }
   };
 
   const addExperience = () => {
+    if (mutationLock.current || editorBusy || !profileLoaded) return;
     setFormData({
       ...formData,
       experience: [...formData.experience, { company: '', role: '', duration: '', description: '' }]
@@ -272,12 +387,14 @@ export default function ProfilePage() {
   };
 
   const removeExperience = (index: number) => {
+    if (mutationLock.current || editorBusy || !profileLoaded) return;
     const newExp = [...formData.experience];
     newExp.splice(index, 1);
     setFormData({ ...formData, experience: newExp });
   };
 
   const updateExperience = (index: number, field: string, value: string) => {
+    if (mutationLock.current || editorBusy || !profileLoaded) return;
     const newExp = [...formData.experience];
     newExp[index] = { ...newExp[index], [field]: value };
     setFormData({ ...formData, experience: newExp });
@@ -306,13 +423,16 @@ export default function ProfilePage() {
             ))}
           </div>
         </div>
-        <Button onClick={handleSave} disabled={isSaving || isUploading} className="rounded-xl h-11 px-8 font-bold shadow-lg shadow-primary/20">
+        <Button onClick={handleSave} disabled={editorBusy || !profileLoaded} className="rounded-xl h-11 px-8 font-bold shadow-lg shadow-primary/20">
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
           Save Changes
         </Button>
       </div>
       
-      <EmailVerificationCard user={user} />
+      <EmailVerificationCard
+        user={user}
+        onVerificationChange={onVerificationChange}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
@@ -334,7 +454,7 @@ export default function ProfilePage() {
                       variant={isActive ? "default" : "outline"}
                       className={`h-auto py-5 flex-col gap-2 rounded-2xl transition-all ${isActive ? 'bg-white text-primary shadow-sm hover:bg-white border-none' : 'border-dashed border-primary/20 hover:bg-primary/5'}`}
                       onClick={() => !isActive && activateRole(role.id)}
-                      disabled={isActive || isActivatingRole === role.id}
+                      disabled={isActive || editorBusy || !profileLoaded}
                     >
                       {isActivatingRole === role.id ? (
                         <Loader2 className="h-6 w-6 animate-spin" />
@@ -353,7 +473,7 @@ export default function ProfilePage() {
           <Card className="border-none shadow-xl rounded-[2.5rem] bg-background ring-1 ring-slate-100 overflow-hidden">
             <CardHeader className="p-8 pb-4">
               <CardTitle className="text-xl font-black">Basic Information</CardTitle>
-              <CardDescription>Your public identity in the community directory.</CardDescription>
+              <CardDescription>Complete your profile before publishing it to the community directory.</CardDescription>
             </CardHeader>
             <CardContent className="p-8 space-y-8">
               <div className="space-y-6">
@@ -369,8 +489,8 @@ export default function ProfilePage() {
                     </div>
                   )}
                   <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <input type="file" ref={coverInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, true)} />
-                    <Button variant="secondary" size="sm" className="rounded-xl h-8 text-[10px] font-bold" onClick={() => coverInputRef.current?.click()} disabled={isUploading}>
+                    <input disabled={editorBusy || !profileLoaded} type="file" ref={coverInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, true)} />
+                    <Button variant="secondary" size="sm" className="rounded-xl h-8 text-[10px] font-bold" onClick={() => coverInputRef.current?.click()} disabled={editorBusy || !profileLoaded}>
                       {isUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3 mr-1" />}
                       Update Cover
                     </Button>
@@ -386,7 +506,7 @@ export default function ProfilePage() {
                     <button 
                       onClick={() => fileInputRef.current?.click()}
                       className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"
-                      disabled={isUploading}
+                      disabled={editorBusy || !profileLoaded}
                     >
                       <Camera className="h-6 w-6 text-white" />
                     </button>
@@ -394,7 +514,7 @@ export default function ProfilePage() {
                   
                   <div className="flex-1 space-y-4 w-full text-center sm:text-left">
                     <div className="space-y-1">
-                      <input 
+                      <input disabled={editorBusy || !profileLoaded}
                         type="file" 
                         ref={fileInputRef} 
                         className="hidden" 
@@ -406,7 +526,7 @@ export default function ProfilePage() {
                         size="sm" 
                         className="w-full sm:w-fit rounded-xl gap-2 h-9 font-bold border-slate-200 bg-white"
                         onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
+                        disabled={editorBusy || !profileLoaded}
                       >
                         {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-3 w-3" />}
                         {formData.imageUrl ? 'Change Avatar' : 'Upload Photo'}
@@ -420,7 +540,8 @@ export default function ProfilePage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-xs font-bold uppercase tracking-wide text-slate-500">Full Name</Label>
-                  <Input 
+                  <Input
+                    disabled={editorBusy || !profileLoaded}
                     id="name" 
                     className="h-12 rounded-xl border-slate-100 bg-slate-50/50"
                     value={formData.fullName} 
@@ -429,7 +550,8 @@ export default function ProfilePage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="location" className="text-xs font-bold uppercase tracking-wide text-slate-500">Current Location</Label>
-                  <Input 
+                  <Input
+                    disabled={editorBusy || !profileLoaded}
                     id="location" 
                     placeholder="e.g. Dhaka, BD"
                     className="h-12 rounded-xl border-slate-100 bg-slate-50/50"
@@ -441,7 +563,8 @@ export default function ProfilePage() {
               
               <div className="space-y-2">
                 <Label htmlFor="headline" className="text-xs font-bold uppercase tracking-wide text-slate-500">Professional Headline</Label>
-                <Input 
+                <Input
+                    disabled={editorBusy || !profileLoaded}
                   id="headline" 
                   placeholder="e.g. Founder building the future of Fintech in Bangladesh"
                   className="h-12 rounded-xl border-slate-100 bg-slate-50/50"
@@ -451,7 +574,8 @@ export default function ProfilePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="bio" className="text-xs font-bold uppercase tracking-wide text-slate-500">Personal Biography</Label>
-                <Textarea 
+                <Textarea
+                    disabled={editorBusy || !profileLoaded}
                   id="bio" 
                   rows={4} 
                   placeholder="Share your story, achievements and mission with the community..."
@@ -462,7 +586,8 @@ export default function ProfilePage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="skills" className="text-xs font-bold uppercase tracking-wide text-slate-500">Skills / Interests (Comma separated)</Label>
-                <Input 
+                <Input
+                    disabled={editorBusy || !profileLoaded}
                   id="skills" 
                   placeholder="e.g. Strategy, Fundraising, Product"
                   className="h-12 rounded-xl border-slate-100 bg-slate-50/50"
@@ -472,6 +597,217 @@ export default function ProfilePage() {
               </div>
             </CardContent>
           </Card>
+
+
+          {userRoles.includes('investor') && (
+            <Card id="investor-profile-fields" className="border-none shadow-xl rounded-[2rem] bg-background ring-1 ring-slate-100">
+              <CardHeader className="p-6 pb-4 sm:p-8">
+                <CardTitle className="text-xl font-black">
+                  Investor Profile
+                </CardTitle>
+                <CardDescription>
+                  Complete your investment preferences before publishing your investor profile.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-6 pt-0 sm:p-8 sm:pt-0 space-y-5">
+
+                <div className="space-y-2">
+                  <Label htmlFor="investorHeadline" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Investor Headline
+                  </Label>
+                  <Input
+                    disabled={editorBusy || !profileLoaded}
+                    id="investorHeadline"
+                    placeholder="Angel investor focused on early-stage startups"
+
+                    maxLength={10000}
+                    className="rounded-xl border-slate-100 bg-slate-50/50"
+                    value={formData.investorHeadline}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      investorHeadline: e.target.value,
+                    }))}
+                  />
+
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="investorBio" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Investor Bio
+                  </Label>
+                  <Textarea
+                    disabled={editorBusy || !profileLoaded}
+                    id="investorBio"
+                    placeholder="Describe your investment background and approach"
+                    rows={4}
+                    maxLength={10000}
+                    className="rounded-xl border-slate-100 bg-slate-50/50"
+                    value={formData.investorBio}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      investorBio: e.target.value,
+                    }))}
+                  />
+
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="investmentFocus" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Investment Focus
+                  </Label>
+                  <Input
+                    disabled={editorBusy || !profileLoaded}
+                    id="investmentFocus"
+                    placeholder="Fintech, SaaS, Healthcare"
+
+                    maxLength={10000}
+                    className="rounded-xl border-slate-100 bg-slate-50/50"
+                    value={formData.investmentFocus}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      investmentFocus: e.target.value,
+                    }))}
+                  />
+                  <p className="text-xs text-slate-500">Separate entries with commas.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="preferredStage" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Preferred Investment Stage
+                  </Label>
+                  <Input
+                    disabled={editorBusy || !profileLoaded}
+                    id="preferredStage"
+                    placeholder="Pre-seed, Seed, Series A"
+
+                    maxLength={10000}
+                    className="rounded-xl border-slate-100 bg-slate-50/50"
+                    value={formData.preferredStage}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      preferredStage: e.target.value,
+                    }))}
+                  />
+                  <p className="text-xs text-slate-500">Separate entries with commas.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="ticketSize" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Investment Ticket Size
+                  </Label>
+                  <Input
+                    disabled={editorBusy || !profileLoaded}
+                    id="ticketSize"
+                    placeholder="e.g. USD 10,000–50,000"
+
+                    maxLength={10000}
+                    className="rounded-xl border-slate-100 bg-slate-50/50"
+                    value={formData.ticketSize}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      ticketSize: e.target.value,
+                    }))}
+                  />
+
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {userRoles.includes('mentor') && (
+            <Card id="mentor-profile-fields" className="border-none shadow-xl rounded-[2rem] bg-background ring-1 ring-slate-100">
+              <CardHeader className="p-6 pb-4 sm:p-8">
+                <CardTitle className="text-xl font-black">
+                  Mentor Profile
+                </CardTitle>
+                <CardDescription>
+                  Complete your mentoring information before publishing your mentor profile.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-6 pt-0 sm:p-8 sm:pt-0 space-y-5">
+
+                <div className="space-y-2">
+                  <Label htmlFor="mentorBio" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Mentor Bio
+                  </Label>
+                  <Textarea
+                    disabled={editorBusy || !profileLoaded}
+                    id="mentorBio"
+                    placeholder="Describe your mentoring background and expertise"
+                    rows={4}
+                    maxLength={10000}
+                    className="rounded-xl border-slate-100 bg-slate-50/50"
+                    value={formData.mentorBio}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      mentorBio: e.target.value,
+                    }))}
+                  />
+
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="mentorSkills" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Mentoring Skills
+                  </Label>
+                  <Input
+                    disabled={editorBusy || !profileLoaded}
+                    id="mentorSkills"
+                    placeholder="Strategy, Product, Fundraising"
+
+                    maxLength={10000}
+                    className="rounded-xl border-slate-100 bg-slate-50/50"
+                    value={formData.mentorSkills}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      mentorSkills: e.target.value,
+                    }))}
+                  />
+                  <p className="text-xs text-slate-500">Separate entries with commas.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="yearsOfExperience" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Years of Experience
+                  </Label>
+                  <Input
+                    disabled={editorBusy || !profileLoaded}
+                    id="yearsOfExperience"
+                    placeholder="e.g. 10 years"
+
+                    maxLength={10000}
+                    className="rounded-xl border-slate-100 bg-slate-50/50"
+                    value={formData.yearsOfExperience}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      yearsOfExperience: e.target.value,
+                    }))}
+                  />
+
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="mentorAvailability" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Mentor Availability
+                  </Label>
+                  <Input
+                    disabled={editorBusy || !profileLoaded}
+                    id="mentorAvailability"
+                    placeholder="e.g. 2 hours per week"
+
+                    maxLength={10000}
+                    className="rounded-xl border-slate-100 bg-slate-50/50"
+                    value={formData.mentorAvailability}
+                    onChange={e => setFormData(prev => ({
+                      ...prev,
+                      mentorAvailability: e.target.value,
+                    }))}
+                  />
+
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="border-none shadow-xl rounded-[2.5rem] bg-background ring-1 ring-slate-100 overflow-hidden">
             <CardHeader className="p-8 pb-4">
@@ -492,7 +828,8 @@ export default function ProfilePage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-[10px] font-bold uppercase tracking-tight text-slate-400">Organization</Label>
-                        <Input 
+                        <Input
+                    disabled={editorBusy || !profileLoaded}
                           value={exp.company} 
                           className="h-10 rounded-xl"
                           onChange={e => updateExperience(index, 'company', e.target.value)}
@@ -500,7 +837,8 @@ export default function ProfilePage() {
                       </div>
                       <div className="space-y-2">
                         <Label className="text-[10px] font-bold uppercase tracking-tight text-slate-400">Position</Label>
-                        <Input 
+                        <Input
+                    disabled={editorBusy || !profileLoaded}
                           value={exp.role} 
                           className="h-10 rounded-xl"
                           onChange={e => updateExperience(index, 'role', e.target.value)}
@@ -509,7 +847,8 @@ export default function ProfilePage() {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-[10px] font-bold uppercase tracking-tight text-slate-400">Duration</Label>
-                      <Input 
+                      <Input
+                    disabled={editorBusy || !profileLoaded}
                         value={exp.duration} 
                         placeholder="e.g. Jan 2020 - Present"
                         className="h-10 rounded-xl"
@@ -519,7 +858,7 @@ export default function ProfilePage() {
                   </div>
                 ))}
               </div>
-              <Button type="button" variant="outline" className="w-full h-14 rounded-2xl border-dashed border-slate-200 text-slate-400 hover:bg-slate-50 font-bold gap-2" onClick={addExperience}>
+              <Button type="button" variant="outline" className="w-full h-14 rounded-2xl border-dashed border-slate-200 text-slate-400 hover:bg-slate-50 font-bold gap-2" disabled={editorBusy || !profileLoaded} onClick={addExperience}>
                 <Plus className="h-5 w-5" /> Add Professional Milestone
               </Button>
             </CardContent>
@@ -527,13 +866,38 @@ export default function ProfilePage() {
         </div>
 
         <div className="space-y-6">
-          {/* Profile Strength Widget */}
-          <ProfileStrengthWidget profile={formData} startup={startup} />
+          {/* Professional Publication Status */}
+          <ProfessionalPublicationCard
+            publication={{
+              ...publication,
+              changePublication: async (role, action) => {
+                if (
+                  action === 'publish' &&
+                  hasUnsavedChanges
+                ) return null;
+
+                if (!beginMutation()) return null;
+
+                try {
+                  return await publication.changePublication(
+                    role,
+                    action
+                  );
+                } finally {
+                  mutationLock.current = false;
+                }
+              },
+            }}
+            editable
+            disabled={editorBusy || !profileLoaded}
+            hasUnsavedChanges={hasUnsavedChanges}
+            emailVerified={effectiveEmailVerified}
+          />
 
           <Card className="border-none shadow-xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden relative group">
             <CardHeader className="pb-4 relative z-10">
               <CardTitle className="text-lg font-black flex items-center gap-2">
-                <Globe className="h-5 w-5 text-primary" /> Public Status
+                <Globe className="h-5 w-5 text-primary" /> Availability Preferences
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6 relative z-10">
@@ -541,9 +905,10 @@ export default function ProfilePage() {
                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10 group-hover:bg-white/10 transition-colors">
                   <div className="space-y-0.5">
                     <Label htmlFor="investment" className="font-bold text-sm cursor-pointer">Open to Investment</Label>
-                    <p className="text-[9px] text-slate-400 uppercase tracking-tighter">Visible to global investors</p>
+                    <p className="text-[9px] text-slate-400 uppercase tracking-tighter">Investment availability preference</p>
                   </div>
-                  <Checkbox 
+                  <Checkbox
+                    disabled={editorBusy || !profileLoaded}
                     id="investment" 
                     className="border-white/20 data-[state=checked]:bg-primary"
                     checked={formData.availability.openToInvestment}
@@ -558,7 +923,8 @@ export default function ProfilePage() {
                     <Label htmlFor="hiring" className="font-bold text-sm cursor-pointer">Currently Hiring</Label>
                     <p className="text-[9px] text-slate-400 uppercase tracking-tighter">Attract elite startup talent</p>
                   </div>
-                  <Checkbox 
+                  <Checkbox
+                    disabled={editorBusy || !profileLoaded}
                     id="hiring" 
                     className="border-white/20 data-[state=checked]:bg-primary"
                     checked={formData.availability.hiring}
@@ -582,7 +948,8 @@ export default function ProfilePage() {
                 <Label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
                   <Linkedin className="h-3.5 w-3.5 text-primary" /> LinkedIn Profile
                 </Label>
-                <Input 
+                <Input
+                    disabled={editorBusy || !profileLoaded}
                   placeholder="https://linkedin.com/in/..."
                   className="h-11 rounded-xl bg-slate-50/50 border-slate-100"
                   value={formData.linkedinUrl}
@@ -596,7 +963,8 @@ export default function ProfilePage() {
                 <Label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
                   <Globe className="h-3.5 w-3.5 text-primary" /> Personal Website
                 </Label>
-                <Input 
+                <Input
+                    disabled={editorBusy || !profileLoaded}
                   placeholder="https://..."
                   className="h-11 rounded-xl bg-slate-50/50 border-slate-100"
                   value={formData.website}

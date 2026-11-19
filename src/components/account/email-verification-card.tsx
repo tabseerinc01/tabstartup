@@ -1,6 +1,6 @@
 'use client';
 
-import { useId } from 'react';
+import { useEffect, useId } from 'react';
 
 import type { User } from 'firebase/auth';
 
@@ -44,8 +44,10 @@ function formatCountdown(seconds: number) {
 
 function VerificationCardContent({
   user,
+  onVerificationChange,
 }: {
   user: User;
+  onVerificationChange?: (verified: boolean | null) => void;
 }) {
   const verification =
     useEmailVerification(user);
@@ -70,6 +72,13 @@ function VerificationCardContent({
 
   const verified =
     status?.emailVerified === true;
+
+  const effectiveVerification =
+    status?.emailVerified ?? null;
+
+  useEffect(() => {
+    onVerificationChange?.(effectiveVerification);
+  }, [effectiveVerification, onVerificationChange]);
 
   return (
     <Card
@@ -280,8 +289,10 @@ function VerificationCardContent({
 
 export function EmailVerificationCard({
   user,
+  onVerificationChange,
 }: {
   user: User | null;
+  onVerificationChange?: (verified: boolean | null) => void;
 }) {
   if (!user) return null;
 
@@ -289,6 +300,7 @@ export function EmailVerificationCard({
     <VerificationCardContent
       key={JSON.stringify([user.uid, user.email])}
       user={user}
+      onVerificationChange={onVerificationChange}
     />
   );
 }
