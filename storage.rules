@@ -6,10 +6,39 @@ service firebase.storage {
 
     // প্রোফাইল ইমেজের জন্য রুলস
     // পাথ: profile-images/{userId}/{fileName}
+    // Preserve individual legacy image reads.
+    // Never allow listing or object mutation.
     match /profile-images/{userId}/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null
-                   && request.auth.uid == userId;
+      allow get: if true;
+      allow list: if false;
+      allow update, delete: if false;
+    }
+
+    function isValidProfileImageUpload(fileName) {
+      return request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && (
+          (
+            fileName.matches('^[0-9]{13}[.](jpg|jpeg)$')
+            && request.resource.contentType in [
+              'image/jpeg',
+              'image/jpg'
+            ]
+          ) || (
+            fileName.matches('^[0-9]{13}[.]png$')
+            && request.resource.contentType == 'image/png'
+          ) || (
+            fileName.matches('^[0-9]{13}[.]webp$')
+            && request.resource.contentType == 'image/webp'
+          )
+        );
+    }
+
+    match /profile-images/{userId}/{fileName} {
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && resource == null
+        && isValidProfileImageUpload(fileName);
     }
 
     // অন্য সব পাথের জন্য ডিফল্ট ডিনাই

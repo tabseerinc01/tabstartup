@@ -13,6 +13,65 @@ if (
 
 require('./identity-runtime-loader.cjs');
 
+// Test-only image verifier.
+// Never access production Firebase Storage.
+const imageTestModule = require('node:module');
+
+const imageTestOriginalLoad =
+  imageTestModule._load;
+
+const imageTestFixtureUrl =
+  'https://example.com/photo.jpg';
+
+imageTestModule._load = function (
+  request,
+  parent,
+  isMain
+) {
+  if (
+    request ===
+    '@/services/profile-image-verification.service'
+  ) {
+    if (
+      process.env.FIRESTORE_EMULATOR_HOST !==
+        '127.0.0.1:8080' ||
+      process.env.FIREBASE_AUTH_EMULATOR_HOST !==
+        '127.0.0.1:9099' ||
+      process.env.VERCEL === '1'
+    ) {
+      throw new Error(
+        'LOCAL_EMULATOR_REQUIRED'
+      );
+    }
+
+    return {
+      async verifyTrustedProfileImage(value, uid) {
+        assert.equal(typeof uid, 'string');
+
+        assert.ok(
+          uid.startsWith('profile-security-')
+        );
+
+        if (value === imageTestFixtureUrl) {
+          return { valid: true };
+        }
+
+        return {
+          valid: false,
+          reason: 'invalid_reference',
+        };
+      },
+    };
+  }
+
+  return imageTestOriginalLoad.call(
+    this,
+    request,
+    parent,
+    isMain
+  );
+};
+
 const {
   getFirebaseAdmin,
 } = require('../src/firebase/admin.ts');

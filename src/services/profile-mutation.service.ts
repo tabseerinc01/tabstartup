@@ -1,6 +1,10 @@
 import 'server-only';
 
 import {
+  verifyTrustedProfileImage,
+} from '@/services/profile-image-verification.service';
+
+import {
   readTransactionalEmailVerification,
 } from '@/services/email/email-verification-transaction.service';
 
@@ -22,7 +26,7 @@ import { buildPublicProfile } from '@/lib/public-profile';
 
 import {
   readProfessionalPublicationSnapshots,
-  prepareProfessionalPublicationSync,
+  prepareVerifiedProfessionalPublicationSync,
   applyProfessionalPublicationSync,
 } from '@/services/professional-profile-publishing.service';
 import { validateProfileUpdate } from '@/lib/profile-update-validation';
@@ -103,6 +107,32 @@ export async function updateOwnProfile(
       throw new Error('INVALID_STARTUP_PROFILE');
     }
 
+    // Validate newly assigned image references.
+    // Preserve unchanged legacy references and
+    // allow explicit image removal.
+    for (const field of ['imageUrl', 'coverImageUrl']) {
+      if (
+        !Object.prototype.hasOwnProperty.call(
+          updates,
+          field
+        ) ||
+        updates[field] === current[field] ||
+        updates[field] === ''
+      ) {
+        continue;
+      }
+
+      const verification =
+        await verifyTrustedProfileImage(
+          updates[field],
+          uid
+        );
+
+      if (!verification.valid) {
+        throw new Error('INVALID_PROFILE_IMAGE');
+      }
+    }
+
     const merged = {
       ...current,
       ...updates,
@@ -120,7 +150,7 @@ export async function updateOwnProfile(
       });
 
     const publicationActions =
-      prepareProfessionalPublicationSync(
+      await prepareVerifiedProfessionalPublicationSync(
         merged,
         professionalPublications,
         {
@@ -293,7 +323,7 @@ export async function activateOwnProfessionalRole(
       });
 
     const publicationActions =
-      prepareProfessionalPublicationSync(
+      await prepareVerifiedProfessionalPublicationSync(
         current,
         professionalPublications,
         {

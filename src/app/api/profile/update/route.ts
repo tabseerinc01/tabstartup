@@ -59,7 +59,10 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
 
-    if (message === 'INVALID_PROFILE_UPDATE') {
+    if (
+      message === 'INVALID_PROFILE_UPDATE' ||
+      message === 'INVALID_PROFILE_IMAGE'
+    ) {
       return NextResponse.json(
         { error: message },
         { status: 400 }
@@ -82,6 +85,19 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: message },
         { status: 403 }
+      );
+    }
+
+    if (
+      message === 'PROFILE_IMAGE_VERIFICATION_UNAVAILABLE' ||
+      message === 'PROFILE_IMAGE_STORAGE_TEST_ADAPTER_REQUIRED'
+    ) {
+      return NextResponse.json(
+        { error: 'PROFILE_IMAGE_VERIFICATION_UNAVAILABLE' },
+        {
+          status: 503,
+          headers: { 'Cache-Control': 'no-store' },
+        }
       );
     }
 

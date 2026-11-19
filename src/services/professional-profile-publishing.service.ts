@@ -1,6 +1,10 @@
 import 'server-only';
 
 import {
+  evaluateVerifiedProfileReadiness,
+} from '@/services/professional-profile-image-readiness.service';
+
+import {
   readTransactionalEmailVerification,
 } from '@/services/email/email-verification-transaction.service';
 
@@ -210,7 +214,7 @@ export async function publishOwnProfessionalProfile(
       };
 
       const readiness =
-        evaluateProfileReadiness(
+        await evaluateVerifiedProfileReadiness(
           data,
           role,
           readinessContext
@@ -453,10 +457,11 @@ export async function getOwnProfessionalPublicationStatus(
           accountActive: accountActive,
         });
 
-      const roles = PROFESSIONAL_ROLES.map(
-        (role, index) => {
+      const roles = await Promise.all(
+        PROFESSIONAL_ROLES.map(
+        async (role, index) => {
           const readiness =
-            evaluateProfileReadiness(
+            await evaluateVerifiedProfileReadiness(
               data,
               role,
               {
@@ -501,7 +506,7 @@ export async function getOwnProfessionalPublicationStatus(
               ),
           };
         }
-      );
+      ));
 
       return {
         uid,
@@ -589,7 +594,7 @@ export async function readProfessionalPublicationSnapshots(
  *
  * No Firestore reads or writes occur here.
  */
-export function prepareProfessionalPublicationSync(
+function prepareProfessionalPublicationSync(
   canonical: Record<string, unknown> | undefined,
   publications: PublicationSnapshot[],
   context: PublicationSyncContext
@@ -808,5 +813,55 @@ export function prepareProfessionalPublicationRemoval(
       emailVerified: false,
       accountActive: false,
     }
+  );
+}
+
+
+/**
+ * Verify photo readiness before synchronizing
+ * existing professional publications.
+ *
+ * No implicit publication.
+ * Infrastructure failures abort synchronization.
+ */
+export async function prepareVerifiedProfessionalPublicationSync(
+  canonical: Record<string, unknown> | undefined,
+  publications: PublicationSnapshot[],
+  context: PublicationSyncContext
+): Promise<PublicationSyncAction[]> {
+  const actions = prepareProfessionalPublicationSync(
+    canonical,
+    publications,
+    context
+  );
+
+  if (!canonical) {
+    return actions;
+  }
+
+  return Promise.all(
+    actions.map(async (action): Promise<PublicationSyncAction> => {
+      if (action.kind !== 'update') {
+        return action;
+      }
+
+      const readiness =
+        await evaluateVerifiedProfileReadiness(
+          canonical,
+          action.role,
+          context
+        );
+
+      if (!readiness.ready) {
+        return {
+          kind: 'remove',
+          role: action.role,
+          ref: action.ref,
+          reason: 'PROFILE_IMAGE_NOT_VERIFIED',
+        };
+      }
+
+      return action;
+    })
   );
 }

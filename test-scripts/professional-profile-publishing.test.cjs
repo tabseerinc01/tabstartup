@@ -388,6 +388,38 @@ function createHarness(options = {}) {
         },
       },
 
+      '@/services/professional-profile-image-readiness.service':
+        loadTS(
+          'src/services/professional-profile-image-readiness.service.ts',
+          {
+            'server-only': {},
+            '@/lib/profile-readiness': readiness,
+            '@/services/profile-image-verification.service': {
+              async verifyTrustedProfileImage(value, uid) {
+                assert.equal(uid, UID);
+
+                if (options.imageVerificationUnavailable) {
+                  throw new Error(
+                    'PROFILE_IMAGE_VERIFICATION_UNAVAILABLE'
+                  );
+                }
+
+                if (
+                  options.invalidImage ||
+                  value !== 'https://example.com/photo.jpg'
+                ) {
+                  return {
+                    valid: false,
+                    reason: 'invalid_reference',
+                  };
+                }
+
+                return { valid: true };
+              },
+            },
+          }
+        ),
+
       '@/services/account-suspension-guard.service': {
         isGlobalAccountEligible(uid, snapshot) {
           if (snapshot.id !== uid) {
@@ -423,7 +455,7 @@ function createHarness(options = {}) {
             );
 
         const actions =
-          service.prepareProfessionalPublicationSync(
+          await service.prepareVerifiedProfessionalPublicationSync(
             canonical,
             snapshots,
             syncContext
@@ -1152,8 +1184,8 @@ test('mismatched snapshot path fails closed', async () => {
           path: 'users/another-user',
         };
 
-        h.service
-          .prepareProfessionalPublicationSync(
+        await h.service
+          .prepareVerifiedProfessionalPublicationSync(
             createProfile(),
             snapshots,
             context
@@ -1163,6 +1195,211 @@ test('mismatched snapshot path fails closed', async () => {
     /INVALID_PUBLICATION_SNAPSHOT/
   );
 
+  assert.equal(h.calls.sets, 0);
+  assert.equal(h.calls.deletes, 0);
+});
+
+
+test('invalid image blocks explicit publication', async () => {
+  const h = createHarness({ invalidImage: true });
+
+  const result =
+    await h.service.publishOwnProfessionalProfile(
+      TOKEN,
+      'founder'
+    );
+
+  assert.equal(result.status, 'not_ready');
+  assert.equal(result.readiness.ready, false);
+  assert.ok(
+    result.readiness.missingFields.includes('imageUrl')
+  );
+  assert.equal(h.calls.sets, 0);
+  assert.equal(
+    h.documents.has(profilePath('founder')),
+    false
+  );
+});
+
+test('invalid image removes stale publication', async () => {
+  const h = createHarness({ invalidImage: true });
+
+  h.documents.set(
+    profilePath('founder'),
+    makePublished('founder')
+  );
+
+  const result =
+    await h.service.publishOwnProfessionalProfile(
+      TOKEN,
+      'founder'
+    );
+
+  assert.equal(result.status, 'not_ready');
+  assert.equal(result.publicationRemoved, true);
+  assert.equal(
+    h.documents.has(profilePath('founder')),
+    false
+  );
+});
+
+test('invalid image sync removes existing roles', async () => {
+  const h = createHarness({ invalidImage: true });
+
+  for (const role of ROLES) {
+    h.documents.set(
+      profilePath(role),
+      makePublished(role)
+    );
+  }
+
+  await h.sync(createProfile());
+
+  for (const role of ROLES) {
+    assert.equal(
+      h.documents.has(profilePath(role)),
+      false
+    );
+  }
+
+  assert.equal(h.calls.sets, 0);
+});
+
+test('image verification outage blocks publication', async () => {
+  const h = createHarness({
+    imageVerificationUnavailable: true,
+  });
+
+  await assert.rejects(
+    h.service.publishOwnProfessionalProfile(
+      TOKEN,
+      'founder'
+    ),
+    /PROFILE_IMAGE_VERIFICATION_UNAVAILABLE/
+  );
+
+  assert.equal(h.calls.sets, 0);
+  assert.equal(h.calls.deletes, 0);
+});
+
+test('image verification outage preserves existing publication', async () => {
+  const h = createHarness({
+    imageVerificationUnavailable: true,
+  });
+
+  const path = profilePath('founder');
+  const original = makePublished('founder');
+
+  h.documents.set(path, original);
+
+  await assert.rejects(
+    h.service.publishOwnProfessionalProfile(
+      TOKEN,
+      'founder'
+    ),
+    /PROFILE_IMAGE_VERIFICATION_UNAVAILABLE/
+  );
+
+  assert.deepEqual(
+    h.documents.get(path),
+    original
+  );
+
+  assert.equal(h.calls.sets, 0);
+  assert.equal(h.calls.deletes, 0);
+});
+
+test('image verification outage aborts sync atomically', async () => {
+  const h = createHarness({
+    imageVerificationUnavailable: true,
+  });
+
+  for (const role of ROLES) {
+    h.documents.set(
+      profilePath(role),
+      makePublished(role)
+    );
+  }
+
+  const before = new Map(h.documents);
+
+  await assert.rejects(
+    h.sync(createProfile()),
+    /PROFILE_IMAGE_VERIFICATION_UNAVAILABLE/
+  );
+
+  assert.deepEqual(h.documents, before);
+  assert.equal(h.calls.sets, 0);
+  assert.equal(h.calls.deletes, 0);
+});
+
+
+test('status detects invalid image without writing', async () => {
+  const h = createHarness({ invalidImage: true });
+
+  const path = profilePath('founder');
+  const original = makePublished('founder');
+
+  h.documents.set(path, original);
+
+  const result =
+    await h.service
+      .getOwnProfessionalPublicationStatus(TOKEN);
+
+  const founder = result.roles.find(
+    item => item.role === 'founder'
+  );
+
+  assert.ok(founder);
+  assert.equal(founder.readiness.ready, false);
+
+  assert.ok(
+    founder.readiness.missingFields.includes('imageUrl')
+  );
+
+  assert.equal(
+    founder.publicationStatus,
+    'unpublished'
+  );
+
+  assert.equal(
+    founder.storedPublicationStatus,
+    'published'
+  );
+
+  assert.equal(
+    founder.requiresReconciliation,
+    true
+  );
+
+  assert.deepEqual(
+    h.documents.get(path),
+    original
+  );
+
+  assert.equal(h.calls.sets, 0);
+  assert.equal(h.calls.deletes, 0);
+});
+
+test('status fails safely during image verification outage', async () => {
+  const h = createHarness({
+    imageVerificationUnavailable: true,
+  });
+
+  h.documents.set(
+    profilePath('founder'),
+    makePublished('founder')
+  );
+
+  const before = new Map(h.documents);
+
+  await assert.rejects(
+    h.service
+      .getOwnProfessionalPublicationStatus(TOKEN),
+    /PROFILE_IMAGE_VERIFICATION_UNAVAILABLE/
+  );
+
+  assert.deepEqual(h.documents, before);
   assert.equal(h.calls.sets, 0);
   assert.equal(h.calls.deletes, 0);
 });

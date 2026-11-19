@@ -12,7 +12,7 @@ import { getFirebaseAdmin } from '@/firebase/admin';
 import type { UserRecord } from 'firebase-admin/auth';
 import {
   readProfessionalPublicationSnapshots,
-  prepareProfessionalPublicationSync,
+  prepareVerifiedProfessionalPublicationSync,
   prepareProfessionalPublicationRemoval,
   applyProfessionalPublicationSync,
 } from '@/services/professional-profile-publishing.service';
@@ -113,7 +113,7 @@ export async function syncPublicProfile(uid: string) {
       });
 
     const actions =
-      prepareProfessionalPublicationSync(
+      await prepareVerifiedProfessionalPublicationSync(
         data,
         publications,
         {
@@ -341,7 +341,7 @@ export async function setUserProfessionalRole(
       });
 
     const actions =
-      prepareProfessionalPublicationSync(
+      await prepareVerifiedProfessionalPublicationSync(
         synchronizationData,
         publications,
         {
