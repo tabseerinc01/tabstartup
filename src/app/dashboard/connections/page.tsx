@@ -45,6 +45,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
+import type { RelationshipIdentity } from '@/lib/relationship-identity';
 
 type ConnType = 'all' | 'investor' | 'mentor' | 'cofounder' | 'service' | 'founder';
 
@@ -55,7 +56,11 @@ export default function ConnectionsManagerPage() {
   const { toast } = useToast();
 
   const [activeType, setActiveType] = useState<ConnType>('all');
-  const [profiles, setProfiles] = useState<Record<string, any>>({});
+  const [identityState, setIdentityState] = useState<{
+    ownerUid: string;
+    connectionKey: string;
+    profiles: Record<string, RelationshipIdentity>;
+  }>({ ownerUid: '', connectionKey: '', profiles: {} });
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
 
   // 1. Unified Connections Queries - Only loading networking connections here
@@ -113,39 +118,167 @@ export default function ConnectionsManagerPage() {
     });
   }, [incoming, outgoing]);
 
-  // Load profiles
+  const connectionKey = JSON.stringify(
+    allConns
+      .filter(c => c.status === 'accepted')
+      .map(c => [c.id, c.status, c.initiatorUid, c.recipientUid])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+  );
+
+  const profiles = identityState.ownerUid === user?.uid &&
+    identityState.connectionKey === connectionKey
+    ? identityState.profiles
+    : {};
+
+  // Load published identities only for accepted connections.
   useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
     async function loadProfiles() {
-      if (!firestore || allConns.length === 0) return;
-      const uidsToFetch = new Set<string>();
-      allConns.forEach(c => {
-        if (c.initiatorUid && c.initiatorUid !== user?.uid) uidsToFetch.add(c.initiatorUid);
-        if (c.recipientUid && c.recipientUid !== user?.uid) uidsToFetch.add(c.recipientUid);
+      setIdentityState({
+        ownerUid: user?.uid || '',
+        connectionKey,
+        profiles: {},
       });
 
-      const fetchPromises = Array.from(uidsToFetch)
-        .filter(uid => !profiles[uid])
-        .map(async (uid) => {
+      if (
+        !user ||
+        isUserLoading ||
+        isIncomingLoading ||
+        isOutgoingLoading
+      ) return;
+
+      const acceptedConnections = allConns.filter(
+        c => c.status === 'accepted' && typeof c.id === 'string'
+      );
+
+      if (acceptedConnections.length === 0) return;
+
+      try {
+        const token = await user.getIdToken();
+        const resolved: Record<string, RelationshipIdentity> = {};
+
+        for (let i = 0; i < acceptedConnections.length; i += 5) {
+          if (cancelled) return;
+
+          const batch = acceptedConnections.slice(i, i + 5);
           try {
-            const snap = await getDoc(doc(firestore, 'publicProfiles', uid));
-            return snap.exists() ? { uid, data: snap.data() } : null;
-          } catch (e) { return null; }
-        });
+          const response = await fetch(
+            '/api/profile/relationship-identities',
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contexts: batch.map(c => ({
+                  contextType: 'connection',
+                  contextId: c.id,
+                })),
+              }),
+              cache: 'no-store',
+              signal: controller.signal,
+            }
+          );
 
-      const results = await Promise.all(fetchPromises);
-      const newProfiles = { ...profiles };
-      let changed = false;
-      results.forEach(res => {
-        if (res) {
-          newProfiles[res.uid] = res.data;
-          changed = true;
+          if (cancelled || controller.signal.aborted) return;
+
+          if (response.status === 401 || response.status === 403) {
+            setIdentityState({
+              ownerUid: user.uid,
+              connectionKey,
+              profiles: {},
+            });
+            return;
+          }
+
+          if (!response.ok) continue;
+
+          const payload: unknown = await response.json();
+
+          if (
+            !payload ||
+            typeof payload !== 'object' ||
+            !('results' in payload) ||
+            !Array.isArray(payload.results)
+          ) {
+            continue;
+          }
+
+          for (const result of payload.results) {
+            if (
+              !result ||
+              result.status !== 'ok' ||
+              result.context?.contextType !== 'connection' ||
+              typeof result.context.contextId !== 'string' ||
+              !Array.isArray(result.participants)
+            ) {
+              continue;
+            }
+
+            const connection = batch.find(
+              c => c.id === result.context.contextId
+            );
+
+            if (!connection) continue;
+
+            const otherUid =
+              connection.initiatorUid === user.uid
+                ? connection.recipientUid
+                : connection.initiatorUid;
+
+            const identity = result.participants.find(
+              (p: RelationshipIdentity) =>
+                p?.uid === otherUid &&
+                p.isPubliclyAvailable === true &&
+                p.availability === 'published'
+            );
+
+            if (identity) {
+              resolved[connection.id] = identity;
+            }
+          }
+          } catch {
+            if (cancelled || controller.signal.aborted) return;
+            // This batch is unavailable; continue with other batches.
+          }
         }
-      });
-      if (changed) setProfiles(newProfiles);
-    }
-    loadProfiles();
-  }, [firestore, allConns, user?.uid, profiles]);
 
+        if (!cancelled) {
+          setIdentityState({
+            ownerUid: user.uid,
+            connectionKey,
+            profiles: resolved,
+          });
+        }
+      } catch {
+        // Fail closed: never restore legacy profile data.
+        if (!cancelled) {
+          setIdentityState({
+            ownerUid: user?.uid || '',
+            connectionKey,
+            profiles: {},
+          });
+        }
+      }
+    }
+
+    void loadProfiles();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [
+    allConns,
+    user,
+    connectionKey,
+    isUserLoading,
+    isIncomingLoading,
+    isOutgoingLoading,
+  ]);
 
   const acceptInvestorConnectionAtomic = async (conn: any) => {
     if (!firestore || !user) {
@@ -258,7 +391,7 @@ export default function ConnectionsManagerPage() {
             actorUid: user.uid,
             type: 'connection',
             title: 'Connection Accepted',
-            message: `${profiles[user.uid]?.fullName || 'Someone'} accepted your connection request.`,
+            message: 'A member accepted your connection request.',
             targetId: conn.id,
             targetType: 'user'
           });
@@ -387,7 +520,7 @@ function ConnectionsList({ items, profiles, onAction, isIncoming, loadingAction,
     <div className="grid gap-6 md:grid-cols-2">
       {items.map((c: any) => {
         const otherUid = c.initiatorUid === currentUserId ? c.recipientUid : c.initiatorUid;
-        const profile = profiles[otherUid];
+        const profile = c.status === "accepted" ? profiles[c.id] : undefined;
         return (
           <ConnectionCard 
             key={c.id} 
@@ -407,12 +540,17 @@ function ConnectionsList({ items, profiles, onAction, isIncoming, loadingAction,
 function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, currentUserId }: any) {
   const router = useRouter();
   const name = profile?.fullName || "Ecosystem Member";
-  const headline = profile?.investorHeadline || profile?.headline || "Active Participant";
-  const avatarUrl = profile?.imageUrl || `https://picsum.photos/seed/${profile?.uid || conn.id}/200/200`;
+  const headline = profile?.headline || "Profile unavailable";
+  const avatarUrl = profile?.imageUrl || undefined;
   const otherUid = conn.initiatorUid === currentUserId ? conn.recipientUid : conn.initiatorUid;
   
-  const roles = profile?.roles || (profile?.role ? [profile.role] : []) || [];
-  const profileLink = roles.includes('investor') ? `/investors/${otherUid}` : `/founders/${otherUid}`;
+  const profileLink = profile?.isPubliclyAvailable && profile.availability === 'published'
+    ? profile.role === 'investor'
+      ? `/investors/${otherUid}`
+      : profile.role === 'founder'
+        ? `/founders/${otherUid}`
+        : null
+    : null;
 
   const typeIcons = {
     investor: ShieldCheck,
@@ -427,19 +565,21 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
     <Card className="border-none shadow-sm hover:shadow-xl transition-all duration-300 rounded-[2.5rem] overflow-hidden bg-background ring-1 ring-slate-100 group">
       <CardContent className="p-8">
         <div className="flex items-start gap-6">
-          <Link href={profileLink} className="shrink-0 hover:opacity-80 transition-opacity">
+          <div className="shrink-0">
             <Avatar className="h-20 w-20 rounded-3xl border-4 border-slate-50 shadow-lg">
               <AvatarImage src={avatarUrl} className="object-cover" />
               <AvatarFallback className="font-black text-xl bg-slate-100 text-slate-400">{name.charAt(0)}</AvatarFallback>
             </Avatar>
-          </Link>
+          </div>
           
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <Link href={profileLink}>
-                  <h4 className="text-xl font-black text-slate-900 truncate hover:text-primary transition-colors">{name}</h4>
-                </Link>
+                {profileLink ? (
+                  <Link href={profileLink}><h4 className="text-xl font-black text-slate-900 truncate hover:text-primary transition-colors">{name}</h4></Link>
+                ) : (
+                  <h4 className="text-xl font-black text-slate-900 truncate">{name}</h4>
+                )}
                 <div className="flex items-center gap-1.5 text-[10px] font-black text-primary uppercase tracking-[0.15em] mt-1">
                   <Icon className="h-3.5 w-3.5" /> {conn.type} request
                 </div>
@@ -520,7 +660,7 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
                         <h2 className="text-3xl font-black text-slate-900 tracking-tight">{name}</h2>
                         <p className="text-lg font-bold text-primary">{headline}</p>
                         <div className="flex items-center gap-2 text-sm text-slate-400 font-medium">
-                          <MapPin className="h-4 w-4" /> {profile?.location || 'Remote Member'}
+                          <MapPin className="h-4 w-4" /> {profile ? "Published profile" : "Profile unavailable"}
                         </div>
                       </div>
                       
@@ -533,13 +673,13 @@ function ConnectionCard({ conn, profile, onAction, isIncoming, isLoading, curren
                          </div>
                       </div>
 
-                      <div className="pt-2">
+                      {profileLink && <div className="pt-2">
                         <Button className="w-full h-14 rounded-2xl font-black text-base shadow-xl" asChild>
                           <Link href={profileLink}>
                             View Full Public Profile <ArrowRight className="ml-2 h-5 w-5" />
                           </Link>
                         </Button>
-                      </div>
+                      </div>}
                     </div>
                   </ScrollArea>
                 </DialogContent>
