@@ -24,13 +24,30 @@ import {
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
+import type { RelationshipIdentity } from '@/lib/relationship-identity';
 
 export default function MyDealsPage() {
   const { user } = useUser();
   const firestore = useFirestore();
 
-  const [profiles, setProfiles] = useState<Record<string, any>>({});
-  const [startups, setStartups] = useState<Record<string, any>>({});
+  const [identityState, setIdentityState] = useState<{
+    ownerUid: string;
+    dealKey: string;
+    profiles: Record<string, RelationshipIdentity>;
+  }>({
+    ownerUid: '',
+    dealKey: '',
+    profiles: {},
+  });
+  const [startupState, setStartupState] = useState<{
+    ownerUid: string;
+    dealKey: string;
+    data: Record<string, any>;
+  }>({
+    ownerUid: '',
+    dealKey: '',
+    data: {},
+  });
 
   const founderQuery = useMemoFirebase(() => {
     if (!firestore || !user?.uid) return null;
@@ -66,54 +83,127 @@ export default function MyDealsPage() {
 
   const isLoading = founderLoading || investorLoading;
 
+  const dealKey = useMemo(
+    () => JSON.stringify(
+      deals.map(d => [
+        d.id,
+        d.founderUid,
+        d.investorUid,
+        d.startupId,
+        d.connectionId ?? null,
+      ]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+    ),
+    [deals]
+  );
+
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
+    const ownerUid = user?.uid ?? '';
+
+    setIdentityState({ ownerUid: '', dealKey: '', profiles: {} });
+    setStartupState({ ownerUid: '', dealKey: '', data: {} });
 
     async function hydrate() {
-      if (!firestore || !user?.uid || deals.length === 0) return;
+      if (!firestore || !user || isLoading || !deals.length) return;
 
-      const newProfiles: Record<string, any> = {};
+      const newProfiles: Record<string, RelationshipIdentity> = {};
       const newStartups: Record<string, any> = {};
 
       try {
-        for (const d of deals) {
+        const token = await user.getIdToken();
+        if (cancelled) return;
+
+        for (let i = 0; i < deals.length; i += 5) {
           if (cancelled) return;
+          const batch = deals.slice(i, i + 5);
+          try {
+            const response = await fetch('/api/profile/relationship-identities', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contexts: batch.map(d => ({
+                  contextType: 'dealRoom',
+                  contextId: d.id,
+                })),
+              }),
+              cache: 'no-store',
+              signal: controller.signal,
+            });
 
-          const otherUid =
-            d.founderUid === user.uid
-              ? d.investorUid
-              : d.founderUid;
+            if (cancelled) return;
+            if (response.status === 401 || response.status === 403) return;
+            if (!response.ok) continue;
 
-          if (otherUid && !newProfiles[otherUid]) {
-            const snap = await getDoc(doc(firestore, 'publicProfiles', otherUid));
-            if (snap.exists()) newProfiles[otherUid] = snap.data();
+            const payload = await response.json();
+            if (!Array.isArray(payload.results)) continue;
+
+            for (const result of payload.results) {
+              const deal = batch.find(d =>
+                d.id === result?.context?.contextId &&
+                result?.context?.contextType === 'dealRoom'
+              );
+              if (
+                !deal ||
+                result.status !== 'ok' ||
+                !Array.isArray(result.participants) ||
+                !deal.founderUid ||
+                !deal.investorUid ||
+                deal.founderUid === deal.investorUid ||
+                (deal.founderUid !== ownerUid &&
+                  deal.investorUid !== ownerUid)
+              ) continue;
+
+              const otherUid = deal.founderUid === ownerUid
+                ? deal.investorUid : deal.founderUid;
+
+              const identity = result.participants.find(
+                (p: RelationshipIdentity) =>
+                  p.uid === otherUid &&
+                  p.isPubliclyAvailable === true &&
+                  p.availability === 'published'
+              );
+              if (identity) newProfiles[deal.id] = identity;
+            }
+          } catch (error) {
+            if (cancelled || controller.signal.aborted) return;
+            console.error('Deal identity batch failed:', error);
           }
+        }
 
-          if (d.startupId && !newStartups[d.startupId]) {
+        for (const deal of deals) {
+          if (cancelled) return;
+          if (!deal.startupId || newStartups[deal.startupId]) continue;
+          try {
             const snap = await getDoc(
-              doc(firestore, 'startups', d.startupId)
+              doc(firestore, 'startups', deal.startupId)
             );
-            if (snap.exists()) newStartups[d.startupId] = snap.data();
+            if (snap.exists()) newStartups[deal.startupId] = snap.data();
+          } catch {
+            // Unavailable venture details remain hidden.
           }
         }
 
         if (!cancelled) {
-          setProfiles(newProfiles);
-          setStartups(newStartups);
+          setIdentityState({ ownerUid, dealKey, profiles: newProfiles });
+          setStartupState({ ownerUid, dealKey, data: newStartups });
         }
       } catch (error) {
-        if (!cancelled) {
-          console.error('Deal Room profile loading failed:', error);
+        if (!cancelled && !controller.signal.aborted) {
+          console.error('Deal Room identity loading failed:', error);
         }
       }
     }
 
     hydrate();
-
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [deals, firestore, user?.uid]);
+  }, [deals, dealKey, firestore, user, isLoading]);
 
   if (isLoading) {
     return (
@@ -140,8 +230,18 @@ export default function MyDealsPage() {
         {deals && deals.length > 0 ? (
           deals.map((deal) => {
             const otherUid = deal.founderUid === user?.uid ? deal.investorUid : deal.founderUid;
-            const otherUser = profiles[otherUid];
-            const startup = startups[deal.startupId];
+            const otherUser =
+              !isLoading &&
+              identityState.ownerUid === user?.uid &&
+              identityState.dealKey === dealKey
+                ? identityState.profiles[deal.id]
+                : undefined;
+            const startup =
+              !isLoading &&
+              startupState.ownerUid === user?.uid &&
+              startupState.dealKey === dealKey
+                ? startupState.data[deal.startupId]
+                : undefined;
             const name = otherUser?.fullName || "Ecosystem Partner";
             const startupName = startup?.name || "Target Venture";
             const lastUpdate = deal.updatedAt?.toDate() || new Date();
