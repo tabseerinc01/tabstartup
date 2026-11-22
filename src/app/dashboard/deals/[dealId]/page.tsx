@@ -61,12 +61,13 @@ import { useToast } from '@/hooks/use-toast';
 import { createNotification } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import type { RelationshipIdentity } from '@/lib/relationship-identity';
 
 const STAGES = ["Discovery", "Due Diligence", "Negotiation", "Committed", "Closed", "Cancelled"];
 
 export default function DealRoomPage() {
   const { dealId } = useParams();
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
@@ -81,30 +82,178 @@ export default function DealRoomPage() {
   }, [firestore, dealId]);
   const { data: deal, isLoading: isDLoading } = useDoc(dealRef);
 
-  // 2. Load Profiles
-  const [profiles, setProfiles] = useState<any>(null);
+  // 2. Resolve published relationship identities.
+  const [profileState, setProfileState] = useState<{
+    ownerUid: string;
+    dealId: string;
+    dealKey: string;
+    founder: RelationshipIdentity | null;
+    investor: RelationshipIdentity | null;
+    startup: any;
+    loaded: boolean;
+    accessDenied: boolean;
+  }>({
+    ownerUid: '',
+    dealId: '',
+    dealKey: '',
+    founder: null,
+    investor: null,
+    startup: null,
+    loaded: false,
+    accessDenied: false,
+  });
+
+  const currentDealId = typeof dealId === 'string' ? dealId : '';
+  const ownerUid = user?.uid ?? '';
+  const dealMatches = !!currentDealId && deal?.id === currentDealId;
+  const dealKey = dealMatches
+    ? JSON.stringify([
+        deal.id,
+        deal.founderUid,
+        deal.investorUid,
+        deal.startupId,
+        deal.connectionId ?? null,
+      ])
+    : '';
+  const authorized =
+    dealMatches &&
+    !!ownerUid &&
+    (deal.founderUid === ownerUid || deal.investorUid === ownerUid);
+
   useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
     async function loadProfiles() {
-      if (!firestore || !deal) return;
-      const [fSnap, iSnap, sSnap] = await Promise.all([
-        getDoc(doc(firestore, 'publicProfiles', deal.founderUid)),
-        getDoc(doc(firestore, 'publicProfiles', deal.investorUid)),
-        getDoc(doc(firestore, 'startups', deal.startupId))
-      ]);
-      setProfiles({
-        founder: fSnap.data(),
-        investor: iSnap.data(),
-        startup: sSnap.data()
-      });
+      if (!firestore || !user || !deal || !authorized || !currentDealId) return;
+
+      let founder: RelationshipIdentity | null = null;
+      let investor: RelationshipIdentity | null = null;
+      let startup: any = null;
+
+      try {
+        const token = await user.getIdToken();
+        if (cancelled) return;
+
+        const response = await fetch('/api/profile/relationship-identities', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contexts: [{ contextType: 'dealRoom', contextId: currentDealId }],
+          }),
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+
+        if (cancelled) return;
+
+        if (response.ok) {
+          const payload = await response.json();
+          const result = Array.isArray(payload.results)
+            ? payload.results.find((item: any) =>
+                item?.context?.contextType === 'dealRoom' &&
+                item?.context?.contextId === currentDealId &&
+                item?.status === 'ok'
+              )
+            : null;
+
+          if (Array.isArray(result?.participants)) {
+            const published = (uid: string) =>
+              result.participants.find((p: RelationshipIdentity) =>
+                p.uid === uid &&
+                p.isPubliclyAvailable === true &&
+                p.availability === 'published'
+              ) ?? null;
+
+            founder = published(deal.founderUid);
+            investor = published(deal.investorUid);
+          }
+        }
+
+        if (response.status === 401 || response.status === 403) {
+          if (!cancelled) {
+            setProfileState({
+              ownerUid,
+              dealId: currentDealId,
+              dealKey,
+              founder: null,
+              investor: null,
+              startup: null,
+              loaded: true,
+              accessDenied: true,
+            });
+          }
+          return;
+        }
+      } catch (error) {
+        if (cancelled || controller.signal.aborted) return;
+        console.error('Deal identity loading failed:', error);
+      }
+
+      if (!cancelled && deal.startupId) {
+        try {
+          const snap = await getDoc(doc(firestore, 'startups', deal.startupId));
+          if (snap.exists()) startup = snap.data();
+        } catch {
+          // Unavailable startup details remain hidden.
+        }
+      }
+
+      if (!cancelled) {
+        setProfileState({
+          ownerUid,
+          dealId: currentDealId,
+          dealKey,
+          founder,
+          investor,
+          startup,
+          loaded: true,
+          accessDenied: false,
+        });
+      }
     }
+
     loadProfiles();
-  }, [firestore, deal]);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [firestore, user, deal, authorized, currentDealId, ownerUid, dealKey]);
+
+  const profiles =
+    authorized &&
+    profileState.ownerUid === ownerUid &&
+    profileState.dealId === currentDealId &&
+    profileState.dealKey === dealKey &&
+    profileState.loaded
+      ? profileState
+      : null;
 
   const isFounder = user?.uid === deal?.founderUid;
   const isInvestor = user?.uid === deal?.investorUid;
+  const canWrite =
+    dealMatches &&
+    authorized &&
+    !!profiles &&
+    !profiles.accessDenied &&
+    (isFounder || isInvestor);
 
   const handleUpdateStatus = async (status: string) => {
-    if (!firestore || !dealId || isUpdating) return;
+    if (
+      !firestore ||
+      !user ||
+      !dealMatches ||
+      !authorized ||
+      !profiles ||
+      profiles.accessDenied ||
+      (!isFounder && !isInvestor) ||
+      !STAGES.includes(status) ||
+      isUpdating
+    ) return;
     setIsUpdating(true);
     try {
       await updateDoc(doc(firestore, 'dealRooms', dealId as string), {
@@ -137,7 +286,11 @@ export default function DealRoomPage() {
     }
   };
 
-  if (isDLoading || !profiles) {
+  const startupName = profiles?.startup?.name || 'Target Venture';
+  const founderName = profiles?.founder?.fullName || 'Founder Lead';
+  const investorName = profiles?.investor?.fullName || 'Capital Partner';
+
+  if (isUserLoading || isDLoading || (deal && !dealMatches) || (authorized && !profiles)) {
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
@@ -146,7 +299,7 @@ export default function DealRoomPage() {
     );
   }
 
-  if (!isFounder && !isInvestor) {
+  if (!dealMatches || !authorized || profiles?.accessDenied || (!isFounder && !isInvestor)) {
     return (
       <div className="flex flex-col items-center justify-center p-20 text-center space-y-6">
         <Lock className="h-12 w-12 text-destructive opacity-20" />
@@ -168,7 +321,7 @@ export default function DealRoomPage() {
              <div className="h-12 w-12 rounded-2xl bg-primary flex items-center justify-center text-white shadow-xl">
                 <Briefcase className="h-7 w-7" />
              </div>
-             <h1 className="text-4xl font-black tracking-tight text-slate-900">{profiles.startup.name} Deal Room</h1>
+             <h1 className="text-4xl font-black tracking-tight text-slate-900">{startupName} Deal Room</h1>
           </div>
         </div>
 
@@ -208,13 +361,13 @@ export default function DealRoomPage() {
              </TabsList>
 
              <TabsContent value="notes">
-                <DealNotes dealId={deal.id} user={user} />
+                <DealNotes dealId={deal.id} user={user} canWrite={canWrite} />
              </TabsContent>
              <TabsContent value="documents">
-                <DealDocuments dealId={deal.id} user={user} isFounder={isFounder} />
+                <DealDocuments dealId={deal.id} user={user} isFounder={isFounder} canWrite={canWrite} />
              </TabsContent>
              <TabsContent value="checklist">
-                <DealChecklist dealId={deal.id} deal={deal} user={user} isFounder={isFounder} isInvestor={isInvestor} />
+                <DealChecklist dealId={deal.id} deal={deal} user={user} isFounder={isFounder} isInvestor={isInvestor} canWrite={canWrite} />
              </TabsContent>
              <TabsContent value="timeline">
                 <DealTimeline dealId={deal.id} />
@@ -228,25 +381,25 @@ export default function DealRoomPage() {
                  <div className="space-y-1">
                     <p className="text-[10px] font-black text-primary uppercase tracking-widest">Active Deal Room</p>
                     <p className="text-xl font-black flex items-center gap-2">
-                       <Rocket className="h-5 w-5 text-primary" /> {profiles.startup.name}
+                       <Rocket className="h-5 w-5 text-primary" /> {startupName}
                     </p>
                  </div>
                  <div className="space-y-4">
                     <div className="flex items-center gap-4 p-3 rounded-2xl bg-white/5 border border-white/10">
                        <div className="h-10 w-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-500 font-bold">
-                          {profiles.investor.fullName[0]}
+                          {investorName.charAt(0)}
                        </div>
                        <div>
-                          <p className="text-xs font-black">{profiles.investor.fullName}</p>
+                          <p className="text-xs font-black">{investorName}</p>
                           <p className="text-[8px] font-bold text-slate-500 uppercase">Capital Partner</p>
                        </div>
                     </div>
                     <div className="flex items-center gap-4 p-3 rounded-2xl bg-white/5 border border-white/10">
                        <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary font-bold">
-                          {profiles.founder.fullName[0]}
+                          {founderName.charAt(0)}
                        </div>
                        <div>
-                          <p className="text-xs font-black">{profiles.founder.fullName}</p>
+                          <p className="text-xs font-black">{founderName}</p>
                           <p className="text-[8px] font-bold text-slate-500 uppercase">Founder Lead</p>
                        </div>
                     </div>
@@ -271,7 +424,7 @@ export default function DealRoomPage() {
   );
 }
 
-function DealNotes({ dealId, user }: any) {
+function DealNotes({ dealId, user, canWrite }: any) {
   const firestore = useFirestore();
   const [newNote, setNewNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -281,7 +434,7 @@ function DealNotes({ dealId, user }: any) {
 
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newNote.trim() || isSaving) return;
+    if (!canWrite || !user || !newNote.trim() || isSaving) return;
     setIsSaving(true);
     try {
       await addDoc(collection(firestore, 'dealRooms', dealId, 'notes'), {
@@ -328,7 +481,7 @@ function DealNotes({ dealId, user }: any) {
   );
 }
 
-function DealDocuments({ dealId, user, isFounder }: any) {
+function DealDocuments({ dealId, user, isFounder, canWrite }: any) {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isAdding, setIsAdding] = useState(false);
@@ -339,6 +492,7 @@ function DealDocuments({ dealId, user, isFounder }: any) {
 
   const handleAddDoc = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canWrite || !user) return;
     try {
       await addDoc(collection(firestore, 'dealRooms', dealId, 'documents'), {
         ...docData,
@@ -413,7 +567,7 @@ function DealDocuments({ dealId, user, isFounder }: any) {
   );
 }
 
-function DealChecklist({ dealId, deal, user, isFounder, isInvestor }: any) {
+function DealChecklist({ dealId, deal, user, isFounder, isInvestor, canWrite }: any) {
   const firestore = useFirestore();
   const [newItem, setNewItem] = useState('');
 
@@ -422,7 +576,7 @@ function DealChecklist({ dealId, deal, user, isFounder, isInvestor }: any) {
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newItem.trim() || !isFounder) return;
+    if (!canWrite || !user || !newItem.trim() || !isFounder) return;
     try {
       await addDoc(collection(firestore, 'dealRooms', dealId, 'checklist'), {
         title: newItem.trim(),
@@ -434,6 +588,7 @@ function DealChecklist({ dealId, deal, user, isFounder, isInvestor }: any) {
   };
 
   const toggleStatus = async (item: any) => {
+    if (!canWrite || !user || (!isFounder && !isInvestor)) return;
     const newStatus = item.status === 'Completed' ? 'Pending' : 'Completed';
     try {
       await updateDoc(doc(firestore, 'dealRooms', dealId, 'checklist', item.id), { status: newStatus });
