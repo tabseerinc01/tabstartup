@@ -29,6 +29,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createNotification } from '@/lib/notifications';
+import type { RelationshipIdentity } from '@/lib/relationship-identity';
 
 export default function MentorshipRequestsPage() {
   const { user, isUserLoading } = useUser();
@@ -254,24 +255,87 @@ export default function MentorshipRequestsPage() {
 }
 
 function RequestCard({ req, mode, onAction, isLoading }: any) {
+  const { user } = useUser();
   const firestore = useFirestore();
-  const [otherUser, setOtherUser] = useState<any>(null);
+  const [otherUser, setOtherUser] = useState<RelationshipIdentity | null>(null);
   const [startup, setStartup] = useState<any>(null);
 
   const otherUid = mode === 'incoming' ? req.founderUid : req.mentorUid;
 
   useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
+    setOtherUser(null);
+    setStartup(null);
+
     async function loadData() {
-      if (!firestore || !otherUid) return;
-      const [uSnap, sSnap] = await Promise.all([
-        getDoc(doc(firestore, 'publicProfiles', otherUid)),
-        req.startupId ? getDoc(doc(firestore, 'startups', req.startupId)) : Promise.resolve(null)
-      ]);
-      if (uSnap.exists()) setOtherUser(uSnap.data());
-      if (sSnap && sSnap.exists()) setStartup(sSnap.data());
+      if (!firestore || !user || !otherUid || !req.id) return;
+
+      if (req.status === 'Accepted') {
+        try {
+          const token = await user.getIdToken();
+          if (cancelled) return;
+
+          const response = await fetch('/api/profile/relationship-identities', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contexts: [{
+                contextType: 'mentorshipRequest',
+                contextId: req.id,
+              }],
+            }),
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+
+          if (response.ok && !cancelled) {
+            const payload = await response.json();
+            const result = Array.isArray(payload.results)
+              ? payload.results.find((item: any) =>
+                  item?.context?.contextType === 'mentorshipRequest' &&
+                  item?.context?.contextId === req.id &&
+                  item?.status === 'ok'
+                )
+              : null;
+
+            const identity = result?.participants?.find(
+              (p: RelationshipIdentity) =>
+                p.uid === otherUid &&
+                p.isPubliclyAvailable === true &&
+                p.availability === 'published'
+            );
+
+            if (!cancelled) setOtherUser(identity ?? null);
+          }
+        } catch (error) {
+          if (!cancelled && !controller.signal.aborted) {
+            console.error('Mentorship identity loading failed:', error);
+          }
+        }
+      }
+
+      if (!cancelled && req.startupId) {
+        try {
+          const snap = await getDoc(doc(firestore, 'startups', req.startupId));
+          if (!cancelled && snap.exists()) setStartup(snap.data());
+        } catch {
+          // Startup details unavailable.
+        }
+      }
     }
+
     loadData();
-  }, [firestore, otherUid, req.startupId]);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [firestore, user, otherUid, req.id, req.status, req.startupId]);
 
   const createdAt = req.createdAt?.toDate ? req.createdAt.toDate() : new Date();
 
@@ -283,12 +347,12 @@ function RequestCard({ req, mode, onAction, isLoading }: any) {
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4">
                 <Avatar className="h-14 w-14 rounded-2xl border-4 border-slate-50 shadow-md">
-                  <AvatarImage src={otherUser?.imageUrl} className="object-cover" />
-                  <AvatarFallback className="font-black bg-primary/5 text-primary">{(otherUser?.fullName || 'U')[0]}</AvatarFallback>
+                  <AvatarImage src={otherUser?.imageUrl ?? undefined} className="object-cover" />
+                  <AvatarFallback className="font-black bg-primary/5 text-primary">{(otherUser?.fullName || (mode === 'incoming' ? 'Founder' : 'Mentor'))[0]}</AvatarFallback>
                 </Avatar>
                 <div>
                   <h3 className="text-xl font-black text-slate-900 truncate">
-                    {mode === 'incoming' ? otherUser?.fullName : `Mentor: ${otherUser?.fullName || 'Loading...'}`}
+                    {mode === 'incoming' ? (otherUser?.fullName || 'Founder') : `Mentor: ${otherUser?.fullName || 'Mentor'}`}
                   </h3>
                   <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
                     <Clock className="h-3 w-3" />
