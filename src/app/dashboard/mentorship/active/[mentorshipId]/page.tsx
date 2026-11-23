@@ -20,6 +20,7 @@ import { createNotification } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { CreateSessionDialog } from '@/components/dashboard/mentorship/create-session-dialog';
+import type { RelationshipIdentity } from '@/lib/relationship-identity';
 
 const PROGRESS_STAGES = ["Onboarding", "Discovery", "Growth Planning", "Execution", "Completed"];
 
@@ -42,48 +43,181 @@ export default function MentorshipWorkspacePage() {
   }, [firestore, mentorshipId]);
   const { data: mentorship, isLoading: isMLoading } = useDoc(mentorshipRef);
 
-  // 2. Fetch Profiles
-  const [profiles, setProfiles] = useState<any>(null);
+  // 2. Resolve published relationship identities and startup data.
+  const identityContextKey = [user?.uid, mentorshipId, mentorship?.mentorUid, mentorship?.founderUid].join('|');
+  const [loadedProfiles, setLoadedProfiles] = useState<{ contextKey: string;
+    mentor: { fullName: string; imageUrl: string | null };
+    founder: { fullName: string; imageUrl: string | null };
+    startup: any;
+  } | null>(null);
+  const profiles = loadedProfiles?.contextKey === identityContextKey
+    ? loadedProfiles
+    : null;
+
   useEffect(() => {
-    async function loadProfiles() {
-      if (!firestore || !mentorship) return;
-      const [mSnap, fSnap, sSnap] = await Promise.all([
-        getDoc(doc(firestore, 'publicProfiles', mentorship.mentorUid)),
-        getDoc(doc(firestore, 'publicProfiles', mentorship.founderUid)),
-        getDoc(doc(firestore, 'startups', mentorship.startupId))
-      ]);
-      setProfiles({
-        mentor: mSnap.data(),
-        founder: fSnap.data(),
-        startup: sSnap.data()
-      });
+    const controller = new AbortController();
+    let cancelled = false;
+    const requestContextKey = identityContextKey;
+
+    setLoadedProfiles(null);
+
+    if (!firestore || !user || !mentorship || !mentorshipId) {
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
     }
+
+    if (
+      user.uid !== mentorship.mentorUid &&
+      user.uid !== mentorship.founderUid
+    ) {
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
+    }
+
+    async function loadProfiles() {
+      const resolved = {
+        mentor: { fullName: 'Mentor', imageUrl: null as string | null },
+        founder: { fullName: 'Founder', imageUrl: null as string | null },
+        startup: null as any,
+      };
+
+      try {
+        const token = await user!.getIdToken();
+        if (cancelled) return;
+
+        const response = await fetch('/api/profile/relationship-identities', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contexts: [{
+              contextType: 'activeMentorship',
+              contextId: mentorshipId as string,
+            }],
+          }),
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+
+        if (response.ok && !cancelled) {
+          const payload = await response.json();
+          const result = Array.isArray(payload.results)
+            ? payload.results.find((item: any) =>
+                item?.context?.contextType === 'activeMentorship' &&
+                item?.context?.contextId === mentorshipId &&
+                item?.status === 'ok'
+              )
+            : null;
+
+          for (const participant of (result?.participants ?? []) as RelationshipIdentity[]) {
+            if (
+              participant.isPubliclyAvailable !== true ||
+              participant.availability !== 'published'
+            ) continue;
+
+            const identity = {
+              fullName: participant.fullName || (
+                participant.uid === mentorship!.mentorUid ? 'Mentor' : 'Founder'
+              ),
+              imageUrl: participant.imageUrl ?? null,
+            };
+
+            if (participant.uid === mentorship!.mentorUid) {
+              resolved.mentor = identity;
+            } else if (participant.uid === mentorship!.founderUid) {
+              resolved.founder = identity;
+            }
+          }
+        }
+      } catch (error) {
+        if (!cancelled && !controller.signal.aborted) {
+          console.error('Active mentorship identity loading failed:', error);
+        }
+      }
+
+      if (!cancelled && mentorship!.startupId) {
+        try {
+          const snap = await getDoc(
+            doc(firestore!, 'startups', mentorship!.startupId)
+          );
+          if (!cancelled && snap.exists()) {
+            resolved.startup = snap.data();
+          }
+        } catch {
+          // Startup details unavailable.
+        }
+      }
+
+      if (!cancelled) setLoadedProfiles({ ...resolved, contextKey: requestContextKey });
+    }
+
     loadProfiles();
-  }, [firestore, mentorship]);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [identityContextKey,
+    firestore,
+    user,
+    mentorshipId,
+    mentorship?.mentorUid,
+    mentorship?.founderUid,
+    mentorship?.startupId,
+  ]);
 
   // 3. Fetch Notes & Timeline
   const notesQ = useMemoFirebase(() => {
-    if (!firestore || !mentorshipId) return null;
-    return query(collection(firestore, 'activeMentorships', mentorshipId as string, 'notes'), orderBy('createdAt', 'desc'));
-  }, [firestore, mentorshipId]);
+    if (!firestore || !mentorshipId || !user || !mentorship) return null;
+
+    const isMentorParticipant = user.uid === mentorship.mentorUid;
+    const isFounderParticipant = user.uid === mentorship.founderUid;
+
+    if (!isMentorParticipant && !isFounderParticipant) return null;
+
+    const notesRef = collection(
+      firestore,
+      'activeMentorships',
+      mentorshipId as string,
+      'notes'
+    );
+
+    return isMentorParticipant
+      ? query(notesRef, orderBy('createdAt', 'desc'))
+      : query(notesRef, where('type', '==', 'shared'), orderBy('createdAt', 'desc'));
+  }, [firestore, mentorshipId, user?.uid, mentorship?.mentorUid, mentorship?.founderUid]);
   const { data: notes } = useCollection(notesQ);
 
   const timelineQ = useMemoFirebase(() => {
-    if (!firestore || !mentorshipId) return null;
+    if (
+      !firestore || !mentorshipId || !user || !mentorship ||
+      (user.uid !== mentorship.mentorUid &&
+       user.uid !== mentorship.founderUid)
+    ) return null;
     return query(collection(firestore, 'activeMentorships', mentorshipId as string, 'timeline'), orderBy('createdAt', 'desc'));
-  }, [firestore, mentorshipId]);
+  }, [firestore, mentorshipId, user?.uid, mentorship?.mentorUid, mentorship?.founderUid]);
   const { data: timeline } = useCollection(timelineQ);
 
   // 4. Fetch Sessions for the hub view
   const sessionsQ = useMemoFirebase(() => {
-    if (!firestore || !mentorshipId) return null;
+    if (
+      !firestore || !mentorshipId || !user || !mentorship ||
+      (user.uid !== mentorship.mentorUid &&
+       user.uid !== mentorship.founderUid)
+    ) return null;
     return query(
       collection(firestore, 'mentorshipSessions'),
       where('mentorshipId', '==', mentorshipId),
       orderBy('scheduledAt', 'desc'),
       limit(3)
     );
-  }, [firestore, mentorshipId]);
+  }, [firestore, mentorshipId, user?.uid, mentorship?.mentorUid, mentorship?.founderUid]);
   const { data: recentSessions } = useCollection(sessionsQ);
 
   const isMentor = user?.uid === mentorship?.mentorUid;
@@ -131,7 +265,16 @@ export default function MentorshipWorkspacePage() {
 
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firestore || !mentorshipId || !newNote.trim() || isNoteSaving) return;
+    if (
+      !firestore ||
+      !user ||
+      !mentorship ||
+      !mentorshipId ||
+      (!isMentor && !isFounder) ||
+      (noteType === 'private' && !isMentor) ||
+      !newNote.trim() ||
+      isNoteSaving
+    ) return;
 
     setIsNoteSaving(true);
     const noteData = {
@@ -184,7 +327,7 @@ export default function MentorshipWorkspacePage() {
     }
   };
 
-  if (isMLoading || !profiles) {
+  if (isMLoading || (mentorship && (isMentor || isFounder) && !profiles)) {
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
@@ -193,7 +336,7 @@ export default function MentorshipWorkspacePage() {
     );
   }
 
-  if (!isMentor && !isFounder) {
+  if (!mentorship || !isMentor && !isFounder) {
     return (
       <div className="flex flex-col items-center justify-center p-20 text-center space-y-6">
         <Lock className="h-12 w-12 text-destructive opacity-20" />
@@ -202,6 +345,10 @@ export default function MentorshipWorkspacePage() {
         <Button onClick={() => router.back()}>Return Back</Button>
       </div>
     );
+  }
+
+  if (!profiles) {
+    return null;
   }
 
   return (
@@ -471,7 +618,7 @@ export default function MentorshipWorkspacePage() {
               <Card className="border-none shadow-sm rounded-[2rem] bg-white ring-1 ring-slate-100 p-6 space-y-4">
                  <div className="flex items-center gap-4 p-3 rounded-2xl bg-slate-50 ring-1 ring-slate-100 group">
                     <Avatar className="h-10 w-10 border-2 border-white shadow-sm">
-                       <AvatarImage src={isMentor ? profiles.founder.imageUrl : profiles.mentor.imageUrl} />
+                       <AvatarImage src={(isMentor ? profiles.founder.imageUrl : profiles.mentor.imageUrl) ?? undefined} />
                        <AvatarFallback className="font-bold">C</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">

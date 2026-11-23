@@ -25,30 +25,123 @@ export default function ActiveFoundersPage() {
   }, [firestore, user?.uid]);
 
   const { data: mentorships, isLoading } = useCollection(mentorshipsQuery);
-  const [profiles, setProfiles] = useState<Record<string, any>>({});
+  const [profiles, setProfiles] = useState<Record<string, {
+    fullName: string | null;
+    imageUrl: string | null;
+  }>>({});
   const [startups, setStartups] = useState<Record<string, any>>({});
 
   useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
+    setProfiles({});
+    setStartups({});
+
+    if (!firestore || !user || !mentorships) {
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
+    }
+
     async function loadMetadata() {
-      if (!firestore || !mentorships) return;
-      const newProfiles = { ...profiles };
-      const newStartups = { ...startups };
-      
-      for (const m of mentorships) {
-        if (!newProfiles[m.founderUid]) {
-          const uSnap = await getDoc(doc(firestore, 'publicProfiles', m.founderUid));
-          if (uSnap.exists()) newProfiles[m.founderUid] = uSnap.data();
-        }
-        if (m.startupId && !newStartups[m.startupId]) {
-          const sSnap = await getDoc(doc(firestore, 'startups', m.startupId));
-          if (sSnap.exists()) newStartups[m.startupId] = sSnap.data();
+      const nextProfiles: Record<string, {
+        fullName: string | null;
+        imageUrl: string | null;
+      }> = {};
+      const nextStartups: Record<string, any> = {};
+
+      const validMentorships = (mentorships ?? []).filter(
+        m => m.mentorUid === user!.uid && m.id && m.founderUid
+      );
+
+      for (let i = 0; i < validMentorships.length; i += 5) {
+        if (cancelled) return;
+
+        const batch = validMentorships.slice(i, i + 5);
+
+        try {
+          const token = await user!.getIdToken();
+          if (cancelled) return;
+
+          const response = await fetch('/api/profile/relationship-identities', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contexts: batch.map(m => ({
+                contextType: 'activeMentorship',
+                contextId: m.id,
+              })),
+            }),
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+
+          if (response.ok && !cancelled) {
+            const payload = await response.json();
+
+            for (const m of batch) {
+              const result = Array.isArray(payload.results)
+                ? payload.results.find((r: any) =>
+                    r?.context?.contextType === 'activeMentorship' &&
+                    r?.context?.contextId === m.id &&
+                    r?.status === 'ok'
+                  )
+                : null;
+
+              const founder = result?.participants?.find(
+                (p: import('@/lib/relationship-identity').RelationshipIdentity) =>
+                  p.uid === m.founderUid &&
+                  p.isPubliclyAvailable === true &&
+                  p.availability === 'published'
+              );
+
+              if (founder) {
+                nextProfiles[m.founderUid] = {
+                  fullName: founder.fullName,
+                  imageUrl: founder.imageUrl,
+                };
+              }
+            }
+          }
+        } catch (error) {
+          if (!cancelled && !controller.signal.aborted) {
+            console.error('Founder identity loading failed:', error);
+          }
         }
       }
-      setProfiles(newProfiles);
-      setStartups(newStartups);
+
+      for (const m of validMentorships) {
+        if (cancelled) return;
+        if (!m.startupId || nextStartups[m.startupId]) continue;
+
+        try {
+          const snap = await getDoc(doc(firestore!, 'startups', m.startupId));
+          if (!cancelled && snap.exists()) {
+            nextStartups[m.startupId] = snap.data();
+          }
+        } catch {
+          // Startup details unavailable.
+        }
+      }
+
+      if (!cancelled) {
+        setProfiles(nextProfiles);
+        setStartups(nextStartups);
+      }
     }
+
     loadMetadata();
-  }, [firestore, mentorships]);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [firestore, user, mentorships]);
 
   if (isLoading) {
     return (
@@ -83,7 +176,7 @@ export default function ActiveFoundersPage() {
                 <CardContent className="p-8">
                   <div className="flex items-start gap-5">
                     <Avatar className="h-16 w-16 rounded-2xl border-4 border-slate-50 shadow-md">
-                      <AvatarImage src={founder?.imageUrl} className="object-cover" />
+                      <AvatarImage src={founder?.imageUrl ?? undefined} className="object-cover" />
                       <AvatarFallback className="font-black bg-primary/5 text-primary">{name[0]}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">

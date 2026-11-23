@@ -65,24 +65,122 @@ export default function MentorshipSessionDetailsPage() {
   }, [firestore, sessionId]);
   const { data: session, isLoading: isSLoading } = useDoc(sessionRef);
 
-  // 2. Load Profiles
-  const [profiles, setProfiles] = useState<any>(null);
+  // 2. Resolve published identities for this session.
+  const identityContextKey = [user?.uid, mentorshipId, sessionId, session?.mentorshipId, session?.mentorUid, session?.founderUid].join('|');
+  const [loadedProfiles, setLoadedProfiles] = useState<{ contextKey: string;
+    mentor: { fullName: string; imageUrl: string | null };
+    founder: { fullName: string; imageUrl: string | null };
+    startup: any;
+  } | null>(null);
+  const profiles = loadedProfiles?.contextKey === identityContextKey
+    ? loadedProfiles
+    : null;
+
   useEffect(() => {
-    async function loadProfiles() {
-      if (!firestore || !session) return;
-      const [mSnap, fSnap, sSnap] = await Promise.all([
-        getDoc(doc(firestore, 'publicProfiles', session.mentorUid)),
-        getDoc(doc(firestore, 'publicProfiles', session.founderUid)),
-        getDoc(doc(firestore, 'startups', session.startupId))
-      ]);
-      setProfiles({
-        mentor: mSnap.data(),
-        founder: fSnap.data(),
-        startup: sSnap.data()
-      });
+    const controller = new AbortController();
+    let cancelled = false;
+    const requestContextKey = identityContextKey;
+    setLoadedProfiles(null);
+
+    if (
+      !firestore || !user || !session ||
+      !sessionId || !mentorshipId ||
+      session.mentorshipId !== mentorshipId ||
+      (user.uid !== session.mentorUid && user.uid !== session.founderUid)
+    ) {
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
     }
+
+    async function loadProfiles() {
+      const resolved = {
+        mentor: { fullName: 'Mentor', imageUrl: null as string | null },
+        founder: { fullName: 'Founder', imageUrl: null as string | null },
+        startup: null as any,
+      };
+
+      try {
+        const token = await user!.getIdToken();
+        if (cancelled) return;
+
+        const response = await fetch('/api/profile/relationship-identities', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contexts: [{
+              contextType: 'mentorshipSession',
+              contextId: sessionId as string,
+            }],
+          }),
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+
+        if (response.ok && !cancelled) {
+          const payload = await response.json();
+          const result = Array.isArray(payload.results)
+            ? payload.results.find((item: any) =>
+                item?.context?.contextType === 'mentorshipSession' &&
+                item?.context?.contextId === sessionId &&
+                item?.status === 'ok'
+              )
+            : null;
+
+          for (const participant of (result?.participants ?? []) as import('@/lib/relationship-identity').RelationshipIdentity[]) {
+            if (
+              participant.isPubliclyAvailable !== true ||
+              participant.availability !== 'published'
+            ) continue;
+
+            if (participant.uid === session!.mentorUid) {
+              resolved.mentor = {
+                fullName: participant.fullName || 'Mentor',
+                imageUrl: participant.imageUrl ?? null,
+              };
+            } else if (participant.uid === session!.founderUid) {
+              resolved.founder = {
+                fullName: participant.fullName || 'Founder',
+                imageUrl: participant.imageUrl ?? null,
+              };
+            }
+          }
+        }
+      } catch (error) {
+        if (!cancelled && !controller.signal.aborted) {
+          console.error('Mentorship session identity loading failed:', error);
+        }
+      }
+
+      if (!cancelled && session!.startupId) {
+        try {
+          const snap = await getDoc(
+            doc(firestore!, 'startups', session!.startupId)
+          );
+          if (!cancelled && snap.exists()) resolved.startup = snap.data();
+        } catch {
+          // Startup details unavailable.
+        }
+      }
+
+      if (!cancelled) setLoadedProfiles({ ...resolved, contextKey: requestContextKey });
+    }
+
     loadProfiles();
-  }, [firestore, session]);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [identityContextKey,
+    firestore, user, sessionId, mentorshipId,
+    session?.mentorshipId, session?.mentorUid,
+    session?.founderUid, session?.startupId,
+  ]);
 
   const isMentor = user?.uid === session?.mentorUid;
   const isFounder = user?.uid === session?.founderUid;
@@ -116,7 +214,7 @@ export default function MentorshipSessionDetailsPage() {
     }
   };
 
-  if (isSLoading || !profiles) {
+  if (isSLoading || (session && (isMentor || isFounder) && session.mentorshipId === mentorshipId && !profiles)) {
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary opacity-20" />
@@ -124,6 +222,22 @@ export default function MentorshipSessionDetailsPage() {
       </div>
     );
   }
+
+  if (
+    !session ||
+    session.mentorshipId !== mentorshipId ||
+    (!isMentor && !isFounder)
+  ) {
+    return (
+      <div className="p-12 text-center space-y-4">
+        <h2 className="text-xl font-bold">Private Session</h2>
+        <p>You do not have permission to view this session.</p>
+        <Button onClick={() => router.back()}>Return Back</Button>
+      </div>
+    );
+  }
+
+  if (!profiles) return null;
 
   const scheduledAt = session.scheduledAt?.toDate() || new Date();
   const isCompleted = session.status === 'Completed';

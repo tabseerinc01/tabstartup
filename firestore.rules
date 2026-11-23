@@ -494,7 +494,9 @@ service cloud.firestore {
           (resource.data.type == 'shared' && (get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.founderUid == request.auth.uid)) ||
           (resource.data.type == 'private' && get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid)
         ));
-        allow create: if hasStartupAccess() && (
+        allow create: if hasStartupAccess()
+          && request.resource.data.authorUid == request.auth.uid
+          && (
           (request.resource.data.type == 'shared' && (get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid || get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.founderUid == request.auth.uid)) ||
           (request.resource.data.type == 'private' && get(/databases/$(database)/documents/activeMentorships/$(mentorshipId)).data.mentorUid == request.auth.uid)
         );
