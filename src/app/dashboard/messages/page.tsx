@@ -9,8 +9,6 @@ import {
   where, 
   onSnapshot, 
   orderBy, 
-  getDoc, 
-  doc,
   getDocs,
   writeBatch,
   addDoc,
@@ -31,7 +29,22 @@ function MessagesInboxContent() {
   const startWith = searchParams.get('startWith');
 
   const [chats, setChats] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<Record<string, any>>({});
+  const [identityState, setIdentityState] = useState<{
+    ownerUid: string;
+    chatKey: string;
+    profiles: Record<string, { fullName: string | null; imageUrl: string | null }>;
+  }>({ ownerUid: '', chatKey: '', profiles: {} });
+
+  const chatKey = chats
+    .map(chat => `${chat.id}:${chat.participants?.join(',') ?? ''}`)
+    .sort()
+    .join('|');
+
+  const profiles =
+    identityState.ownerUid === user?.uid &&
+    identityState.chatKey === chatKey
+      ? identityState.profiles
+      : {};
   const [isLoading, setIsLoading] = useState(true);
   const [isInitiating, setIsInitiating] = useState(!!startWith);
 
@@ -121,41 +134,114 @@ function MessagesInboxContent() {
       orderBy('updatedAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(chatsQ, async (snapshot) => {
-      const chatList = snapshot.docs.map(d => ({
+    const unsubscribe = onSnapshot(chatsQ, (snapshot) => {
+      setChats(snapshot.docs.map(d => ({
         id: d.id,
         ...d.data()
-      }));
-
-      setChats(chatList);
+      })));
       setIsLoading(false);
-
-      // Fetch profiles for participants we don't have yet
-      const uidsToFetch = new Set<string>();
-      chatList.forEach((chat: any) => {
-        const otherUid = chat.participants.find((id: string) => id !== user.uid);
-        if (otherUid && !profiles[otherUid]) {
-          uidsToFetch.add(otherUid);
-        }
-      });
-
-      if (uidsToFetch.size > 0) {
-        const newProfiles = { ...profiles };
-        for (const uid of Array.from(uidsToFetch)) {
-          const userSnap = await getDoc(doc(firestore!, 'publicProfiles', uid));
-          if (userSnap.exists()) {
-            newProfiles[uid] = userSnap.data();
-          }
-        }
-        setProfiles(newProfiles);
-      }
     }, (error) => {
       console.error("Error fetching chats:", error);
       setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [firestore, user?.uid, profiles]);
+  }, [firestore, user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid || !chats.length) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const ownerUid = user.uid;
+    const currentChatKey = chatKey;
+
+    async function loadIdentities() {
+      const resolved: Record<string, {
+        fullName: string | null;
+        imageUrl: string | null;
+      }> = {};
+
+      try {
+        const token = await user!.getIdToken();
+
+        for (let i = 0; i < chats.length; i += 5) {
+          if (cancelled) return;
+          const batch = chats.slice(i, i + 5);
+
+          const response = await fetch(
+            '/api/profile/relationship-identities',
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contexts: batch.map(chat => ({
+                  contextType: 'chat',
+                  contextId: chat.id,
+                })),
+              }),
+              cache: 'no-store',
+              signal: controller.signal,
+            }
+          );
+
+          if (cancelled || controller.signal.aborted) return;
+          if (response.status === 401 || response.status === 403) break;
+          if (!response.ok) continue;
+
+          const payload = await response.json();
+          if (!Array.isArray(payload?.results)) continue;
+
+          for (const result of payload.results) {
+            if (
+              result?.status !== 'ok' ||
+              result.context?.contextType !== 'chat' ||
+              !Array.isArray(result.participants)
+            ) continue;
+
+            const chat = batch.find(c => c.id === result.context.contextId);
+            const otherUid = chat?.participants?.find(
+              (uid: string) => uid !== ownerUid
+            );
+            if (!otherUid) continue;
+
+            const identity = result.participants.find(
+              (p: any) =>
+                p?.uid === otherUid &&
+                p.availability === 'published' &&
+                p.isPubliclyAvailable === true
+            );
+
+            if (identity) {
+              resolved[otherUid] = {
+                fullName: identity.fullName,
+                imageUrl: identity.imageUrl,
+              };
+            }
+          }
+        }
+      } catch {
+        // Fail closed: never read legacy publicProfiles.
+      }
+
+      if (!cancelled) {
+        setIdentityState({
+          ownerUid,
+          chatKey: currentChatKey,
+          profiles: resolved,
+        });
+      }
+    }
+
+    loadIdentities();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [user?.uid, chatKey]);
 
   if (isUserLoading || isLoading || isInitiating) {
     return (

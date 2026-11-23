@@ -285,21 +285,120 @@ function ReceivedPitchCard({ pitch, onAction, isLoading }: any) {
 
 function SentInterestCard({ interest, onWithdraw, isLoading }: any) {
   const firestore = useFirestore();
+  const { user } = useUser();
   const [startup, setStartup] = useState<any>(null);
-  const [founder, setFounder] = useState<any>(null);
+  const [identityState, setIdentityState] = useState<{
+    ownerUid: string;
+    connectionId: string;
+    recipientUid: string;
+    founder: { fullName: string | null } | null;
+  }>({
+    ownerUid: '',
+    connectionId: '',
+    recipientUid: '',
+    founder: null,
+  });
+
+  const founder =
+    identityState.ownerUid === user?.uid &&
+    identityState.connectionId === interest.id &&
+    identityState.recipientUid === interest.recipientUid
+      ? identityState.founder
+      : null;
 
   useEffect(() => {
-    async function loadData() {
-      if (!firestore || !interest.recipientUid) return;
-      const [sSnap, fSnap] = await Promise.all([
-        getDoc(doc(firestore, 'startups', interest.recipientUid)),
-        getDoc(doc(firestore, 'publicProfiles', interest.recipientUid))
-      ]);
-      if (sSnap.exists()) setStartup(sSnap.data());
-      if (fSnap.exists()) setFounder(fSnap.data());
+    if (!firestore || !user?.uid || !interest.id || !interest.recipientUid) {
+      return;
     }
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const ownerUid = user.uid;
+    const connectionId = interest.id;
+    const recipientUid = interest.recipientUid;
+
+    async function loadData() {
+      try {
+        const startupSnap = await getDoc(
+          doc(firestore!, 'startups', recipientUid)
+        );
+        if (!cancelled) {
+          setStartup(startupSnap.exists() ? startupSnap.data() : null);
+        }
+      } catch {
+        if (!cancelled) setStartup(null);
+      }
+
+      let resolvedFounder: { fullName: string | null } | null = null;
+
+      try {
+        const token = await user!.getIdToken();
+        if (cancelled) return;
+
+        const response = await fetch(
+          '/api/profile/relationship-identities',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contexts: [{
+                contextType: 'connection',
+                contextId: connectionId,
+              }],
+            }),
+            cache: 'no-store',
+            signal: controller.signal,
+          }
+        );
+
+        if (response.ok) {
+          const payload = await response.json();
+          const result = payload?.results?.[0];
+
+          if (
+            result?.status === 'ok' &&
+            result.context?.contextType === 'connection' &&
+            result.context?.contextId === connectionId &&
+            Array.isArray(result.participants)
+          ) {
+            const identity = result.participants.find(
+              (p: any) =>
+                p?.uid === recipientUid &&
+                p.availability === 'published' &&
+                p.isPubliclyAvailable === true
+            );
+
+            if (identity) {
+              resolvedFounder = {
+                fullName: identity.fullName,
+              };
+            }
+          }
+        }
+      } catch {
+        // Fail closed: no legacy publicProfiles fallback.
+      }
+
+      if (!cancelled) {
+        setIdentityState({
+          ownerUid,
+          connectionId,
+          recipientUid,
+          founder: resolvedFounder,
+        });
+      }
+    }
+
     loadData();
-  }, [firestore, interest.recipientUid]);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [firestore, user?.uid, interest.id, interest.recipientUid]);
 
   const createdAt = interest.createdAt?.toDate ? interest.createdAt.toDate() : new Date();
 
