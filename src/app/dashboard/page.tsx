@@ -511,8 +511,8 @@ export default function DashboardOverviewPage() {
       
       {/* Hero Section */}
       <section className="relative overflow-hidden rounded-[3rem] bg-slate-900 text-white p-8 md:p-12 shadow-2xl">
-        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-          <div className="lg:col-span-7 space-y-6">
+        <div className="relative z-10 min-w-0">
+          <div className="min-w-0 space-y-6">
             <div className="space-y-4 text-center md:text-left">
               <div className="flex flex-wrap justify-center md:justify-start gap-2">
                 {roles.map(role => (
@@ -549,14 +549,17 @@ export default function DashboardOverviewPage() {
             </div>
           </div>
 
-          <div className="lg:col-span-5">
-            <ProfessionalPublicationCard
-              publication={publication}
-              emailVerified={effectiveEmailVerified}
-            />
-          </div>
+
         </div>
         <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none" />
+      </section>
+
+      {/* Professional Profile Readiness */}
+      <section className="w-full min-w-0">
+        <ProfessionalPublicationCard
+          publication={publication}
+          emailVerified={effectiveEmailVerified}
+        />
       </section>
 
       {/* Primary Layout Grid */}
