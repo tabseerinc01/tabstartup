@@ -38,8 +38,18 @@ export default function MentorPublicProfilePage() {
       if (!firestore || !uid) return;
       setIsLoading(true);
       try {
-        const snap = await getDoc(doc(firestore, 'publicProfiles', uid));
-        if (snap.exists()) {
+        const snap = await getDoc(doc(firestore, 'professionalProfiles', `mentor_${uid}`));
+
+        const profileData = snap.data();
+        const validPublication =
+          snap.exists() &&
+          profileData?.uid === uid &&
+          profileData?.role === 'mentor' &&
+          profileData?.schemaVersion === 1 &&
+          profileData?.status === 'published' &&
+          profileData?.visibility === 'public';
+
+        if (validPublication) {
           setMentor({ id: snap.id, ...snap.data() });
         }
 

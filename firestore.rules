@@ -58,6 +58,15 @@ service cloud.firestore {
         && hasStartupProfile();
     }
 
+    function hasFounderAccess() {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return hasStartupAccess()
+        && get(path).data.get(
+          'roles',
+          [get(path).data.get('role', '')]
+        ).hasAny(['founder']);
+    }
+
     function isHardcodedAdmin() {
       return isAccountActive() && (
         request.auth.uid == 'T2JnkPYdsoZGO8krUqcP3T5bvg62' ||
@@ -87,6 +96,25 @@ service cloud.firestore {
 
     // Public professional profiles.
     // Writes are managed by trusted server-side code.
+    // Server-published professional profiles.
+    match /professionalProfiles/{profileId} {
+      allow get: if
+        resource.data.get('schemaVersion', 0) == 1
+        && resource.data.get('visibility', '') == 'public'
+        && resource.data.get('status', '') == 'published'
+        && resource.data.get('role', '') in ['founder', 'investor', 'mentor']
+        && resource.data.get('uid', '') is string;
+
+      allow list: if
+        resource.data.schemaVersion == 1
+        && resource.data.visibility == 'public'
+        && resource.data.status == 'published'
+        && resource.data.role in ['founder', 'investor', 'mentor']
+        && request.query.limit <= 100;
+
+      allow create, update, delete: if false;
+    }
+
     match /publicProfiles/{userId} {
       allow get, list: if true;
       allow create, update, delete: if false;
@@ -839,11 +867,30 @@ service cloud.firestore {
           && resource.data.ownerUid == request.auth.uid
         );
       allow list: if isHardcodedAdmin() || resource.data.get('status', '') == 'active' || (hasStartupAccess() && resource.data.get('ownerUid', '') == request.auth.uid);
-      allow create: if hasStartupAccess() && request.resource.data.ownerUid == request.auth.uid;
-      allow update: if isAdmin() || (
+      allow create: if hasFounderAccess()
+        && startupId == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.get('status', '') == 'draft'
+        && !request.resource.data.keys().hasAny(['publishedAt', 'startupVerified', 'featured']);
+
+      allow update: if (
+        isAdmin()
+        && (
+          request.resource.data.get('status', '') == resource.data.get('status', '')
+          || (
+            resource.data.get('status', '') in ['active', 'hidden']
+            && request.resource.data.get('status', '') in ['active', 'hidden']
+          )
+        )
+        && !request.resource.data.diff(resource.data)
+          .affectedKeys().hasAny(['publishedAt', 'ownerUid'])
+      ) || (
         hasStartupAccess()
         && resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.get('status', '') == resource.data.get('status', '')
+        && !request.resource.data.diff(resource.data)
+          .affectedKeys().hasAny(['publishedAt', 'startupVerified', 'featured'])
       );
       match /views/{viewId} {
         allow read: if isAdmin() || (

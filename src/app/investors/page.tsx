@@ -44,31 +44,23 @@ export default function InvestorsPage() {
       if (!firestore) return;
       setIsLoading(true);
       try {
-        const multiRoleQuery = query(
-          collection(firestore, 'publicProfiles'),
-          where('roles', 'array-contains', 'investor'),
-          limit(100)
-        );
-        const legacyRoleQuery = query(
-          collection(firestore, 'publicProfiles'),
+        const q = query(
+          collection(firestore, 'professionalProfiles'),
           where('role', '==', 'investor'),
+          where('status', '==', 'published'),
+          where('visibility', '==', 'public'),
+          where('schemaVersion', '==', 1),
           limit(100)
         );
 
-        const [multiSnap, legacySnap] = await Promise.all([
-          getDocs(multiRoleQuery),
-          getDocs(legacyRoleQuery)
-        ]);
-
-        const userMap = new Map();
-        multiSnap.docs.forEach(d => userMap.set(d.id, { id: d.id, ...d.data() }));
-        legacySnap.docs.forEach(d => {
-          if (!userMap.has(d.id)) {
-            userMap.set(d.id, { id: d.id, ...d.data() });
-          }
-        });
-
-        setInvestors(Array.from(userMap.values()));
+        const snap = await getDocs(q);
+        setInvestors(snap.docs
+          .map(d => ({ ...d.data(), id: d.id }))
+          .filter((profile: any) =>
+            profile.schemaVersion === 1 &&
+            typeof profile.uid === 'string' &&
+            profile.uid.length > 0
+          ));
       } catch (error) {
         console.error("Error loading investors:", error);
       } finally {
@@ -261,7 +253,7 @@ function InvestorCard({ investor }: { investor: any }) {
         </div>
 
         <Button className="w-full rounded-2xl h-12 gap-2 mt-auto group-hover:bg-primary group-hover:text-primary-foreground transition-all" variant="outline" asChild>
-          <Link href={`/investors/${investor.id}`}>
+          <Link href={`/investors/${investor.uid}`}>
             Review Portfolio <ArrowRight className="h-4 w-4" />
           </Link>
         </Button>

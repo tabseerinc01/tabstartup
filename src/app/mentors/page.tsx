@@ -44,12 +44,21 @@ export default function MentorsPage() {
       setIsLoading(true);
       try {
         const q = query(
-          collection(firestore, 'publicProfiles'),
-          where('roles', 'array-contains', 'mentor'),
+          collection(firestore, 'professionalProfiles'),
+          where('role', '==', 'mentor'),
+          where('status', '==', 'published'),
+          where('visibility', '==', 'public'),
+          where('schemaVersion', '==', 1),
           limit(100)
         );
         const snap = await getDocs(q);
-        setMentors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setMentors(snap.docs
+          .map(d => ({ ...d.data(), id: d.id }))
+          .filter((profile: any) =>
+            profile.schemaVersion === 1 &&
+            typeof profile.uid === 'string' &&
+            profile.uid.length > 0
+          ));
       } catch (error) {
         console.error("Error loading mentors:", error);
       } finally {
@@ -230,7 +239,7 @@ function MentorCard({ mentor }: { mentor: any }) {
         </div>
 
         <Button className="w-full rounded-2xl h-12 gap-2 mt-auto group-hover:bg-primary group-hover:text-primary-foreground transition-all" variant="outline" asChild>
-          <Link href={`/mentors/${mentor.id}`}>
+          <Link href={`/mentors/${mentor.uid}`}>
             View Expertise <ArrowRight className="h-4 w-4" />
           </Link>
         </Button>

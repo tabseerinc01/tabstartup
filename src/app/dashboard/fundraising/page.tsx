@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore } from '@/firebase';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { Loader2, HandCoins, FileText, PieChart, TrendingUp, Link as LinkIcon } from 'lucide-react';
 
 export default function FundraisingPage() {
@@ -57,10 +57,10 @@ export default function FundraisingPage() {
 
     setIsSaving(true);
     try {
-      await setDoc(doc(firestore, 'startups', user.uid), {
+      await updateDoc(doc(firestore, 'startups', user.uid), {
         ...formData,
         updatedAt: serverTimestamp(),
-      }, { merge: true });
+      });
 
       toast({
         title: "Fundraising Info Updated",

@@ -100,6 +100,25 @@ export function profileApiError(error: unknown) {
         status: 'not_eligible',
       }, 403);
 
+    case 'INVALID_STARTUP_OWNER':
+    case 'STARTUP_OWNER_MISMATCH':
+      return profileApiResponse({
+        success: false,
+        status: 'not_eligible',
+      }, 403);
+
+    case 'STARTUP_NOT_FOUND':
+      return profileApiResponse({
+        success: false,
+        status: 'startup_not_found',
+      }, 404);
+
+    case 'INVALID_STARTUP_STATUS':
+      return profileApiResponse({
+        success: false,
+        status: 'invalid_startup_status',
+      }, 409);
+
     case 'USER_NOT_FOUND':
       return profileApiResponse({
         success: false,

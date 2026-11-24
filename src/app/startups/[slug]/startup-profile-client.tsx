@@ -112,7 +112,9 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
           }
         }
 
-        if (!startupDoc) {
+        if (!startupDoc || startupDoc.status !== 'active') {
+          setStartup(null);
+          setFounder(null);
           setIsLoading(false);
           return;
         }
@@ -120,10 +122,21 @@ export default function StartupProfileClient({ slugOrId }: { slugOrId: string })
         const ownerUid = startupDoc.ownerUid;
         setStartup(startupDoc);
 
-        const founderSnap = await getDoc(doc(firestore, 'publicProfiles', ownerUid));
+        const founderSnap = await getDoc(
+          doc(firestore, 'professionalProfiles', `founder_${ownerUid}`)
+        );
         if (cancelled) return;
-        if (founderSnap.exists()) {
-          setFounder(founderSnap.data());
+
+        const founderData = founderSnap.data();
+        if (
+          founderSnap.exists() &&
+          founderData?.uid === ownerUid &&
+          founderData?.role === 'founder' &&
+          founderData?.schemaVersion === 1 &&
+          founderData?.status === 'published' &&
+          founderData?.visibility === 'public'
+        ) {
+          setFounder(founderData);
         }
 
         if (user?.uid) {

@@ -42,6 +42,7 @@ export default function StartupPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [startupData, setStartupData] = useState<any>(null);
   const [userPlan, setUserPlan] = useState('basic');
 
@@ -150,7 +151,7 @@ export default function StartupPage() {
         ...startup,
         tags: tagsArray,
         slug,
-        status: 'active',
+        status: startupData?.status || 'draft',
         ownerUid: user.uid,
         updatedAt: serverTimestamp(),
         ...(startupData ? {} : { createdAt: serverTimestamp() })
@@ -158,13 +159,66 @@ export default function StartupPage() {
 
       await setDoc(doc(firestore, 'startups', user.uid), updateData, { merge: true });
 
-      toast({ title: "Startup Saved", description: "Your venture profile is now updated and public." });
+      toast({ title: "Startup Saved", description: "Your venture profile has been saved." });
       setIsEditing(false);
       setStartupData(updateData);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: "Failed to save startup data." });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!user || !startupData || isPublishing) return;
+
+    setIsPublishing(true);
+    try {
+      const token = await user.getIdToken(true);
+      const response = await fetch('/api/startup/publish', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + token,
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+        credentials: 'same-origin',
+        redirect: 'error',
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.success !== true) {
+        const missing = Array.isArray(result.missingStartupFields)
+          ? result.missingStartupFields.join(', ')
+          : Array.isArray(result.readiness?.missingFields)
+            ? result.readiness.missingFields.join(', ')
+            : '';
+
+        throw new Error(
+          missing || result.status || 'Publication failed'
+        );
+      }
+
+      setStartupData((previous: any) => ({
+        ...previous,
+        status: 'active',
+      }));
+
+      toast({
+        title: 'Startup Published',
+        description: 'Your startup is now publicly listed.',
+      });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Unable to publish startup',
+        description: error instanceof Error
+          ? error.message
+          : 'Please try again.',
+      });
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -202,9 +256,23 @@ export default function StartupPage() {
         <div className="flex gap-2">
           {!isEditing && startupData && (
             <>
+              {startupData.status === 'active' && (
               <Button variant="outline" className="rounded-xl h-10 gap-2 font-bold border-slate-200" onClick={copyListingLink}>
                 <Share2 className="h-4 w-4" /> Share Listing
               </Button>
+              )}
+              {startupData.status === 'draft' && (
+                <Button
+                  className="rounded-xl h-10 gap-2 font-bold"
+                  onClick={handlePublish}
+                  disabled={isPublishing}
+                >
+                  {isPublishing
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <Rocket className="h-4 w-4" />}
+                  Publish Startup
+                </Button>
+              )}
               <Button className="rounded-xl h-10 font-bold shadow-lg shadow-primary/20" onClick={() => setIsEditing(true)}>
                 Edit Profile
               </Button>

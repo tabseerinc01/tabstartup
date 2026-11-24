@@ -50,8 +50,18 @@ export default function InvestorPublicProfilePage() {
       if (!firestore || !uid) return;
       setIsLoading(true);
       try {
-        const snap = await getDoc(doc(firestore, 'publicProfiles', uid));
-        if (snap.exists()) {
+        const snap = await getDoc(doc(firestore, 'professionalProfiles', `investor_${uid}`));
+
+        const profileData = snap.data();
+        const validPublication =
+          snap.exists() &&
+          profileData?.uid === uid &&
+          profileData?.role === 'investor' &&
+          profileData?.schemaVersion === 1 &&
+          profileData?.status === 'published' &&
+          profileData?.visibility === 'public';
+
+        if (validPublication) {
           setInvestor({ id: snap.id, ...snap.data() });
         }
 

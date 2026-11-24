@@ -74,10 +74,20 @@ export default function FounderPublicProfilePage() {
         setStartup(null);
 
         const founderSnap = await getDoc(
-          doc(firestore, 'publicProfiles', uid as string)
+          doc(firestore, 'professionalProfiles', `founder_${uid}` as string)
         );
 
-        if (!founderSnap.exists()) return;
+
+        const profileData = founderSnap.data();
+        const validPublication =
+          founderSnap.exists() &&
+          profileData?.uid === uid &&
+          profileData?.role === 'founder' &&
+          profileData?.schemaVersion === 1 &&
+          profileData?.status === 'published' &&
+          profileData?.visibility === 'public';
+
+        if (!validPublication) return;
 
         setFounder({ id: founderSnap.id, ...founderSnap.data() });
 
@@ -118,7 +128,7 @@ export default function FounderPublicProfilePage() {
         console.error("Error loading founder profile:", error);
         if (error.code === 'permission-denied') {
           errorEmitter.emit('permission-error', new FirestorePermissionError({
-            path: `publicProfiles/${uid}`,
+            path: `professionalProfiles/founder_${uid}`,
             operation: 'get',
           }));
         }

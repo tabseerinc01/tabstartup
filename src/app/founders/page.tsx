@@ -30,35 +30,24 @@ export default function FoundersPage() {
       if (!firestore) return;
       setIsLoading(true);
       try {
-        // 1. Fetch using multi-role support
-        const multiRoleQuery = query(
-          collection(firestore, 'publicProfiles'),
-          where('roles', 'array-contains', 'founder'),
-          limit(100)
-        );
-        
-        // 2. Fetch using legacy role structure
-        const legacyRoleQuery = query(
-          collection(firestore, 'publicProfiles'),
+        // Fetch only server-published founder profiles.
+        const foundersQuery = query(
+          collection(firestore, 'professionalProfiles'),
           where('role', '==', 'founder'),
+          where('status', '==', 'published'),
+          where('visibility', '==', 'public'),
+          where('schemaVersion', '==', 1),
           limit(100)
         );
 
-        const [multiSnap, legacySnap] = await Promise.all([
-          getDocs(multiRoleQuery),
-          getDocs(legacyRoleQuery)
-        ]);
-
-        // Merge and deduplicate
-        const userMap = new Map();
-        multiSnap.docs.forEach(d => userMap.set(d.id, { id: d.id, ...d.data() }));
-        legacySnap.docs.forEach(d => {
-          if (!userMap.has(d.id)) {
-            userMap.set(d.id, { id: d.id, ...d.data() });
-          }
-        });
-
-        const foundersItems = Array.from(userMap.values());
+        const foundersSnap = await getDocs(foundersQuery);
+        const foundersItems = foundersSnap.docs
+          .map(d => ({ ...d.data(), id: d.id } as { id: string; uid?: string; schemaVersion?: number }))
+          .filter((profile: any) =>
+            profile.schemaVersion === 1 &&
+            typeof profile.uid === 'string' &&
+            profile.uid.length > 0
+          );
 
         // 3. Load Active Startups only
         const startupsQ = query(
@@ -75,7 +64,7 @@ export default function FoundersPage() {
         });
 
         // 4. Merge
-        const mergedFounders = (foundersItems.length > 0 ? foundersItems : mockFounders).map(founder => ({
+        const mergedFounders = foundersItems.map(founder => ({
           ...founder,
           startup: startupsMap.get(founder.uid || founder.id) || null
         }));
@@ -83,7 +72,7 @@ export default function FoundersPage() {
         setFounders(mergedFounders);
       } catch (error) {
         console.error("Error loading founders and startups:", error);
-        setFounders(mockFounders);
+        setFounders([]);
       } finally {
         setIsLoading(false);
       }
