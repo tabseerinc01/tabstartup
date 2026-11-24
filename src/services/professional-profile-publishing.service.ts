@@ -1,6 +1,10 @@
 import 'server-only';
 
 import {
+  writeProfessionalEligibility,
+} from '@/services/professional-eligibility.service';
+
+import {
   evaluateVerifiedProfileReadiness,
 } from '@/services/professional-profile-image-readiness.service';
 
@@ -145,6 +149,28 @@ function isValidExistingPublication(
  * Release integration must additionally enforce the
  * trusted profile photo storage policy.
  */
+async function readOtherPublishedRoles(
+  transaction: Transaction,
+  db: Firestore,
+  uid: string,
+  role: ProfessionalProfileRole
+): Promise<ProfessionalProfileRole[]> {
+  const roles = PROFESSIONAL_ROLES.filter(r => r !== role);
+  const refs = roles.map(r =>
+    db.collection(PROFESSIONAL_PROFILES_COLLECTION)
+      .doc(getProfessionalProfileId(uid, r))
+  );
+  const snapshots = await transaction.getAll(...refs);
+
+  return roles.filter((r, index) =>
+    isValidExistingPublication(
+      snapshots[index].data(),
+      uid,
+      r
+    )
+  );
+}
+
 export async function publishOwnProfessionalProfile(
   idToken: string,
   role: ProfessionalProfileRole
@@ -186,6 +212,10 @@ export async function publishOwnProfessionalProfile(
       const publicSnap =
         await transaction.get(publicRef);
 
+      const otherRoles = await readOtherPublishedRoles(
+        transaction, adminDb, uid, role
+      );
+
       if (!userSnap.exists) {
         throw new Error('USER_NOT_FOUND');
       }
@@ -221,6 +251,10 @@ export async function publishOwnProfessionalProfile(
         );
 
       if (!readiness.ready) {
+        writeProfessionalEligibility(
+          transaction, adminDb, uid, otherRoles
+        );
+
         if (publicSnap.exists) {
           transaction.delete(publicRef);
         }
@@ -260,6 +294,10 @@ export async function publishOwnProfessionalProfile(
           throw error;
         }
 
+        writeProfessionalEligibility(
+          transaction, adminDb, uid, otherRoles
+        );
+
         if (publicSnap.exists) {
           transaction.delete(publicRef);
         }
@@ -272,6 +310,10 @@ export async function publishOwnProfessionalProfile(
           publicationRemoved: publicSnap.exists,
         };
       }
+
+      writeProfessionalEligibility(
+        transaction, adminDb, uid, [...otherRoles, role]
+      );
 
       transaction.set(publicRef, {
         ...projection,
@@ -343,6 +385,10 @@ export async function unpublishOwnProfessionalProfile(
       const publicSnap =
         await transaction.get(publicRef);
 
+      const otherRoles = await readOtherPublishedRoles(
+        transaction, adminDb, uid, role
+      );
+
       if (!userSnap.exists) {
         throw new Error('USER_NOT_FOUND');
       }
@@ -372,6 +418,10 @@ export async function unpublishOwnProfessionalProfile(
           'PROFESSIONAL_ROLE_NOT_ELIGIBLE'
         );
       }
+
+      writeProfessionalEligibility(
+        transaction, adminDb, uid, otherRoles
+      );
 
       if (!publicSnap.exists) {
         return {
@@ -760,6 +810,34 @@ export function applyProfessionalPublicationSync(
   transaction: Transaction,
   actions: PublicationSyncAction[]
 ) {
+  if (actions.length > 0) {
+    const uid = actions[0].ref.id.slice(
+      actions[0].role.length + 1
+    );
+
+    if (
+      actions.length !== PROFESSIONAL_ROLES.length ||
+      new Set(actions.map(action => action.role)).size !==
+        PROFESSIONAL_ROLES.length ||
+      actions.some(action =>
+        action.ref.path !==
+          PROFESSIONAL_PROFILES_COLLECTION + '/' +
+          getProfessionalProfileId(uid, action.role)
+      )
+    ) {
+      throw new Error('INVALID_ELIGIBILITY_SYNC_ACTIONS');
+    }
+
+    writeProfessionalEligibility(
+      transaction,
+      actions[0].ref.firestore,
+      uid,
+      actions
+        .filter(action => action.kind === 'update')
+        .map(action => action.role)
+    );
+  }
+
   const result = {
     updated: 0,
     removed: 0,

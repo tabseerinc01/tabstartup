@@ -49,6 +49,29 @@ async function main() {
           roles: [role],
           status: 'active'
         });
+
+        await setDoc(doc(db, 'accountIdentities', uid), {
+          uid,
+          schemaVersion: 1,
+          status: 'active'
+        });
+
+        await setDoc(doc(db, 'professionalEligibility', uid), {
+          uid,
+          schemaVersion: 1,
+          publishedRoles: [role]
+        });
+
+        await setDoc(
+          doc(db, 'professionalProfiles', role + '_' + uid),
+          {
+            uid,
+            role,
+            schemaVersion: 1,
+            status: 'published',
+            visibility: 'public'
+          }
+        );
       }
 
       await setDoc(doc(db, 'connections', connectionId), {

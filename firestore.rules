@@ -67,52 +67,48 @@ service cloud.firestore {
         ).hasAny(['founder']);
     }
 
-    function hasEligibleProfessionalAccount(uid) {
+    function eligibleProfessionalRoles(uid) {
       let user = get(/databases/$(database)/documents/users/$(uid)).data;
-      let identityPath = /databases/$(database)/documents/accountIdentities/$(uid);
+      let path = /databases/$(database)/documents/accountIdentities/$(uid);
+      let roles = user.get('roles', [user.get('role', '')]);
 
       return user.get('uid', uid) == uid
         && user.get('status', 'active') == 'active'
-        && (
-          !exists(identityPath)
-          || (
-            get(identityPath).data.get('uid', '') == uid
-            && get(identityPath).data.get('schemaVersion', 0) == 1
-            && get(identityPath).data.get('status', '') == 'active'
-          )
-        );
+        && roles is list
+        && (!exists(path) || validProfessionalIdentity(get(path).data, uid))
+        ? roles : [];
     }
 
-    function hasValidPublishedRole(uid, role) {
-      let user = get(/databases/$(database)/documents/users/$(uid)).data;
-      let path = /databases/$(database)/documents/professionalProfiles/$(role + '_' + uid);
+    function validProfessionalIdentity(identity, uid) {
+      return identity.get('uid', '') == uid
+        && identity.get('schemaVersion', 0) == 1
+        && identity.get('status', '') == 'active';
+    }
 
-      return user.get('roles', [user.get('role', '')]).hasAny([role])
-        && exists(path)
-        && get(path).data.get('uid', '') == uid
-        && get(path).data.get('role', '') == role
-        && get(path).data.get('schemaVersion', 0) == 1
-        && get(path).data.get('status', '') == 'published'
-        && get(path).data.get('visibility', '') == 'public';
+    function indexedPublishedRoles(uid) {
+      let index = get(/databases/$(database)/documents/professionalEligibility/$(uid)).data;
+
+      return index.uid == uid
+        && index.schemaVersion == 1
+        && index.publishedRoles is list
+        && index.publishedRoles.hasOnly(['founder', 'investor', 'mentor'])
+        ? index.publishedRoles : [];
     }
 
     function hasPublishedProfessionalRole(uid, role) {
       return uid is string
         && uid.size() > 0
         && role in ['founder', 'investor', 'mentor']
-        && hasEligibleProfessionalAccount(uid)
-        && hasValidPublishedRole(uid, role);
+        && role in eligibleProfessionalRoles(uid)
+        && role in indexedPublishedRoles(uid);
     }
 
     function hasAnyPublishedProfessionalRole(uid) {
       return uid is string
         && uid.size() > 0
-        && hasEligibleProfessionalAccount(uid)
-        && (
-          hasValidPublishedRole(uid, 'founder')
-          || hasValidPublishedRole(uid, 'investor')
-          || hasValidPublishedRole(uid, 'mentor')
-        );
+        && eligibleProfessionalRoles(uid).toSet()
+          .intersection(indexedPublishedRoles(uid).toSet())
+          .size() > 0;
     }
 
     function isHardcodedAdmin() {
@@ -145,6 +141,10 @@ service cloud.firestore {
     // Public professional profiles.
     // Writes are managed by trusted server-side code.
     // Server-published professional profiles.
+    match /professionalEligibility/{uid} {
+      allow read, write: if false;
+    }
+
     match /professionalProfiles/{profileId} {
       allow get: if
         resource.data.get('schemaVersion', 0) == 1
@@ -846,7 +846,7 @@ service cloud.firestore {
           || resource.data.get('recipientUid', '') == request.auth.uid
         ));
 
-      allow create: if hasStartupAccess()
+      allow create: if isSignedIn()
         && (
           request.resource.data.get('type', '') == 'investor'
           || (
@@ -1067,7 +1067,7 @@ service cloud.firestore {
         && request.auth.uid in resource.data.get('participants', [])
       );
 
-      allow create: if hasStartupAccess()
+      allow create: if isSignedIn()
         && hasAnyPublishedProfessionalRole(
           request.resource.data.participants[0]
         )

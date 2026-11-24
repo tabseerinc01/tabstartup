@@ -1,6 +1,10 @@
 import 'server-only';
 
 import {
+  PROFESSIONAL_ELIGIBILITY_COLLECTION,
+} from '@/services/professional-eligibility.service';
+
+import {
   hasActiveStartupProfile,
 } from '@/lib/legacy-startup-profile';
 
@@ -44,6 +48,10 @@ export async function createSignupProfile(
     .collection(ACCOUNT_IDENTITIES_COLLECTION)
     .doc(uid);
 
+  const eligibilityRef = adminDb
+    .collection(PROFESSIONAL_ELIGIBILITY_COLLECTION)
+    .doc(uid);
+
   const userRef = adminDb.collection('users').doc(uid);
   // Legacy public document is read only for
   // signup recovery protection.
@@ -69,6 +77,8 @@ export async function createSignupProfile(
       return await adminDb.runTransaction(async transaction => {
         const identitySnap = await transaction.get(identityRef);
         const userSnap = await transaction.get(userRef);
+        const eligibilitySnap =
+          await transaction.get(eligibilityRef);
         const publicSnap = await transaction.get(publicRef);
 
         const professionalSnaps =
@@ -84,6 +94,7 @@ export async function createSignupProfile(
           identitySnap.exists ||
           publicSnap.exists ||
           professionalSnaps.some(snapshot => snapshot.exists) ||
+          eligibilitySnap.exists ||
           existingReferral.exists
         ) {
           throw new Error('RECOVERY_VERIFICATION_REQUIRED');

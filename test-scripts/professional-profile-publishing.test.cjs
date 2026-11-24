@@ -171,6 +171,7 @@ function createHarness(options = {}) {
     return {
       path,
       id: path.split('/').at(-1),
+      firestore: adminDb,
     };
   }
 
@@ -360,6 +361,16 @@ function createHarness(options = {}) {
               };
         },
       },
+
+      '@/services/professional-eligibility.service': loadTS(
+        'src/services/professional-eligibility.service.ts',
+        {
+          'server-only': {},
+          'firebase-admin/firestore': { FieldValue },
+          '@/lib/profile-readiness': readiness,
+          '@/lib/professional-profile-validation': validation,
+        }
+      ),
 
       '@/lib/profile-readiness': readiness,
 
@@ -641,7 +652,12 @@ for (const role of ROLES) {
       false
     );
 
-    assert.equal(h.calls.sets, 1);
+    assert.equal(h.calls.sets, 2);
+
+    const index = h.documents.get('professionalEligibility/' + UID);
+    assert.equal(index.uid, UID);
+    assert.equal(index.schemaVersion, 1);
+    assert.deepEqual(index.publishedRoles, [role]);
 
     for (const other of ROLES) {
       if (other !== role) {
@@ -808,6 +824,11 @@ test('unpublish removes only selected role', async () => {
     true
   );
 
+  assert.deepEqual(
+    h.documents.get('professionalEligibility/' + UID).publishedRoles,
+    ['investor', 'mentor']
+  );
+
   assert.equal(
     h.documents.get('users/' + UID),
     original
@@ -824,7 +845,8 @@ test('repeated unpublish is idempotent', async () => {
     );
 
   assert.equal(result.changed, false);
-  assert.equal(h.calls.deletes, 0);
+  assert.equal(h.documents.has(profilePath('founder')), false);
+  assert.equal(h.documents.has('professionalEligibility/' + UID), false);
 });
 
 test('owner can remove malformed publication', async () => {
@@ -973,7 +995,11 @@ test('sync updates only published role', async () => {
     'Updated Founder Headline'
   );
 
-  assert.equal(h.calls.sets, 1);
+  assert.equal(h.calls.sets, 2);
+  const index = h.documents.get('professionalEligibility/' + UID);
+  assert.equal(index.uid, UID);
+  assert.equal(index.schemaVersion, 1);
+  assert.deepEqual(index.publishedRoles, ['founder']);
 });
 
 test('readiness loss removes only affected role', async () => {
