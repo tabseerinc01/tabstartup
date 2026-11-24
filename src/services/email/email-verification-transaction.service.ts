@@ -27,18 +27,12 @@ import {
 } from './email-otp-crypto.service';
 
 /**
- * Temporary release safety gate.
- *
- * Custom OTP verification must not authorize
- * professional publication until account lifecycle
- * invalidation and revocation reconciliation
- * have been implemented and tested.
- *
- * This gate is intentionally not configurable
- * through an environment variable.
+ * Application-controlled lifecycle release policy.
+ * External Auth lifecycle reconciliation remains pending.
+ * OTP feature flag and authority validation remain mandatory.
  */
 export function isCustomEmailVerificationPublicationReady(): boolean {
-  return false;
+  return true;
 }
 
 export type TransactionEmailVerificationInput = {

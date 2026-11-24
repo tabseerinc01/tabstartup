@@ -122,7 +122,7 @@ function loadSource(relativeFile) {
       )
     ) {
       return {
-        isEmailOtpEnabled: () => true,
+        isEmailOtpEnabled: () => process.env.EMAIL_OTP_ENABLED === 'true',
       };
     }
 
@@ -360,26 +360,38 @@ test('valid custom authority is recognized by actual evaluator', () => {
   assert.equal(result.source, 'tabstartup_otp');
 });
 
-test('custom authority cannot bypass publication gate', async () => {
+test('valid custom authority permits publication when OTP is enabled', async () => {
   assert.equal(
     isCustomEmailVerificationPublicationReady(),
-    false
+    true
   );
 
-  const h = harness({
-    record: authority(),
-  });
+  const previous = process.env.EMAIL_OTP_ENABLED;
 
-  const result = await h.resolve();
+  try {
+    process.env.EMAIL_OTP_ENABLED = 'true';
 
-  assert.equal(result.emailVerified, false);
+    const h = harness({ record: authority() });
+    const result = await h.resolve();
 
-  assert.equal(
-    result.reason,
-    'publication_authority_disabled'
-  );
+    assert.equal(result.emailVerified, true);
+    assert.equal(result.source, 'tabstartup_otp');
+    assert.equal(h.reads, 1);
 
-  assert.equal(h.reads, 1);
+    process.env.EMAIL_OTP_ENABLED = 'false';
+
+    const disabled = harness({ record: authority() });
+    const blocked = await disabled.resolve();
+
+    assert.equal(blocked.emailVerified, false);
+    assert.equal(blocked.reason, 'publication_authority_disabled');
+  } finally {
+    if (previous === undefined) {
+      delete process.env.EMAIL_OTP_ENABLED;
+    } else {
+      process.env.EMAIL_OTP_ENABLED = previous;
+    }
+  }
 });
 
 test('revoked authority is rejected', () => {

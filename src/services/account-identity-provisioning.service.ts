@@ -1,6 +1,10 @@
 import 'server-only';
 
 import {
+  revokeTransactionalEmailVerification,
+} from '@/services/email/email-verification-revocation.service';
+
+import {
   resolveLegacyStartupStatus,
 } from '@/lib/legacy-startup-profile';
 
@@ -121,6 +125,13 @@ export async function provisionLegacyAccountIdentity(
     if (legacyStatus === 'suspended') {
       throw new Error('LEGACY_ACCOUNT_SUSPENDED');
     }
+
+    await revokeTransactionalEmailVerification({
+      transaction,
+      db: adminDb,
+      uid,
+      publicationPolicy: 'remove',
+    });
 
     transaction.create(identityRef, {
       uid,

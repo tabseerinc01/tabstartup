@@ -1,6 +1,11 @@
 import 'server-only';
 
 import {
+  ACCOUNT_EMAIL_VERIFICATIONS_COLLECTION,
+  EMAIL_VERIFICATION_CHALLENGES_COLLECTION,
+} from '@/lib/email-verification';
+
+import {
   PROFESSIONAL_ELIGIBILITY_COLLECTION,
 } from '@/services/professional-eligibility.service';
 
@@ -48,6 +53,14 @@ export async function createSignupProfile(
     .collection(ACCOUNT_IDENTITIES_COLLECTION)
     .doc(uid);
 
+  const authorityRef = adminDb
+    .collection(ACCOUNT_EMAIL_VERIFICATIONS_COLLECTION)
+    .doc(uid);
+
+  const challengeRef = adminDb
+    .collection(EMAIL_VERIFICATION_CHALLENGES_COLLECTION)
+    .doc(uid);
+
   const eligibilityRef = adminDb
     .collection(PROFESSIONAL_ELIGIBILITY_COLLECTION)
     .doc(uid);
@@ -77,6 +90,8 @@ export async function createSignupProfile(
       return await adminDb.runTransaction(async transaction => {
         const identitySnap = await transaction.get(identityRef);
         const userSnap = await transaction.get(userRef);
+        const [authoritySnap, challengeSnap] =
+          await transaction.getAll(authorityRef, challengeRef);
         const eligibilitySnap =
           await transaction.get(eligibilityRef);
         const publicSnap = await transaction.get(publicRef);
@@ -92,6 +107,8 @@ export async function createSignupProfile(
 
         if (
           identitySnap.exists ||
+          authoritySnap.exists ||
+          challengeSnap.exists ||
           publicSnap.exists ||
           professionalSnaps.some(snapshot => snapshot.exists) ||
           eligibilitySnap.exists ||

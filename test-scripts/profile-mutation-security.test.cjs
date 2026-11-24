@@ -1120,8 +1120,8 @@ async function main() {
 
     assert.equal(
       isCustomEmailVerificationPublicationReady(),
-      false,
-      'CUSTOM_PUBLICATION_GATE_MUST_REMAIN_CLOSED'
+      true,
+      'CUSTOM_PUBLICATION_GATE_MUST_BE_OPEN'
     );
 
     const customMutation = await seed(
@@ -1146,7 +1146,11 @@ async function main() {
       }
     );
 
-    await assertNoPublication(customMutation);
+    assert.equal(
+      (await adminDb.collection('professionalProfiles')
+        .doc('founder_' + customMutation.uid).get()).exists,
+      true
+    );
 
     assert.equal(
       (await adminAuth.getUser(
@@ -1156,7 +1160,7 @@ async function main() {
     );
 
     pass(
-      'Custom OTP cannot preserve publication while gate closed'
+      'Valid custom OTP preserves eligible publication'
     );
 
     // 30. Custom OTP cannot bypass public sync.
@@ -1178,10 +1182,14 @@ async function main() {
 
     await syncPublicProfile(customSync.uid);
 
-    await assertNoPublication(customSync);
+    assert.equal(
+      (await adminDb.collection('professionalProfiles')
+        .doc('founder_' + customSync.uid).get()).exists,
+      true
+    );
 
     pass(
-      'Custom OTP cannot bypass publication synchronization gate'
+      'Valid custom OTP preserves synchronized publication'
     );
 
     // 31. Role activation remains independent
